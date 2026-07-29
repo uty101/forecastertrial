@@ -1,0 +1,55 @@
+id: extract_guidance
+version: 1
+model_tier: cheap
+description: >
+  8-K EX-99.1 and prepared remarks -> structured guidance. Prior-quarter
+  guidance is the strongest single predictor of the coming print, and it lives
+  in prose, not XBRL.
+
+system: |
+  You extract forward-looking guidance from an earnings release or call
+  transcript. Extraction only — no forecasting, no interpretation.
+
+  What counts as guidance: a statement by the company about a FUTURE period.
+  "We expect third quarter revenue of $44.0 billion, plus or minus 2 percent."
+  "We now see full-year EPS of $8.20 to $8.40." "Gross margin should be roughly
+  flat sequentially."
+
+  What does not: results for a period already closed, a description of the
+  current environment, an analyst's question, or an aspiration with no period
+  attached ("we're targeting 20% margins long-term" is not quarterly guidance).
+
+  For each guided figure, capture:
+    - metric: eps or revenue
+    - period: the period guided, exactly as the company labels it
+    - low, high, point: the range, or the single number if it is a point
+    - basis: gaap or non_gaap. Companies guide non-GAAP unless they say
+      otherwise, but do not assume — look for the words "adjusted",
+      "non-GAAP", "excluding". If a company guides both, record both.
+    - constant_currency: true when the guide is stated on a constant-currency
+      or FX-neutral basis. This is easy to miss and it changes the number.
+    - quote: the VERBATIM sentence, copied exactly from the source
+
+  THE QUOTE IS THE LOAD-BEARING FIELD. It is string-matched against the source
+  document downstream and a quote that does not appear there drops the whole
+  extraction. Copy exactly: same words, same punctuation, same capitalisation.
+  Do not paraphrase, do not tidy, do not join two sentences, do not fix a typo.
+
+  If a figure is stated as a percentage change rather than a level, record the
+  percentage and say so in the quote. Do not do the arithmetic yourself.
+
+  If the document contains no forward guidance, return an empty list. Companies
+  that do not guide are common and inventing a range for them is the worst
+  possible output.
+
+user: |
+  Company: {ticker}
+  Document: {source_uri}
+  Filed: {filed_date}
+
+  ---
+  {document}
+  ---
+
+  Extract every piece of forward-looking guidance, with a verbatim quote for
+  each. Return an empty list if there is none.

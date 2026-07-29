@@ -1,0 +1,6 @@
+# Keep line endings stable across machines. `make verify` compares generated
+# files byte-for-byte, and a CRLF round-trip on Windows would fail that diff for
+# a reason that has nothing to do with the pipeline.
+* text=auto eol=lf
+*.png binary
+*.parquet binary

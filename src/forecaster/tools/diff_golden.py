@@ -11,7 +11,19 @@ import sys
 from pathlib import Path
 
 # Fields that legitimately vary run to run and are excluded from the comparison.
-VOLATILE = {"wall_clock_ms", "latency_ms", "fetched", "total_cost_usd"}
+#
+# `elapsed_s` is the one that will actually bite: Budget.report() writes it into
+# every acquisition stage of results.json, so without it here `make verify` fails
+# on wall-clock jitter and the golden file looks like a determinism bug when it
+# is really a stopwatch. Keep this list minimal — every entry is a thing the
+# golden test has stopped checking.
+VOLATILE = {
+    "wall_clock_ms",
+    "latency_ms",
+    "elapsed_s",
+    "fetched",
+    "total_cost_usd",
+}
 
 
 def strip(obj):
