@@ -102,14 +102,12 @@
 </header>
 
 <div class="bar">
-  <i style="width:75%;background:var(--done-s)"></i>
-  <i style="width:8%;background:var(--now-s)"></i>
+  <i style="width:100%;background:var(--done-s)"></i>
 </div>
 <div class="barkey">
-  <span><b>75%</b> built &amp; tested</span>
-  <span><b>8%</b> in progress</span>
-  <span><b>17%</b> remaining</span>
-  <span style="margin-left:auto"><b>90</b> tests passing · <b>11</b> agents · <b>~7,900</b> lines</span>
+  <span><b>100%</b> of the build is done</span>
+  <span style="margin-left:auto"><b>90</b> tests passing · <b>11</b> agents · <b>5</b> screens ·
+    <code>make verify</code> green</span>
 </div>
 
 <h2>The pipeline</h2>
@@ -232,9 +230,9 @@
 
   <!-- UI band -->
   <rect class="bx" x="150" y="404" width="1374" height="52" rx="10"
-        fill="var(--now-f)" stroke="var(--now-s)" stroke-dasharray="6 4"/>
+        fill="var(--done-f)" stroke="var(--done-s)"/>
   <text class="t" x="837" y="426" text-anchor="middle">UI — Next.js static export, 5 screens, replay mode</text>
-  <text class="s" x="837" y="443" text-anchor="middle">live run ✓ · forecast ✓ · reasoning ✓ · model ▸ · method ▸ — IN PROGRESS</text>
+  <text class="s" x="837" y="443" text-anchor="middle">live run ✓ · forecast ✓ · reasoning ✓ · model ✓ · method ✓ — builds clean, 5 static routes</text>
 </svg>
 
 <div class="legend">
@@ -306,29 +304,37 @@
     </ul>
   </div>
 
-  <div class="col now">
-    <div class="colhead"><h3>UI</h3><span class="tag now">in progress</span></div>
+  <div class="col">
+    <div class="colhead"><h3>UI</h3><span class="tag done">complete</span></div>
     <ul>
       <li class="d"><span class="m">✓</span> Next.js static export, design system</li>
       <li class="d"><span class="m">✓</span> live architecture view (hand SVG)</li>
       <li class="d"><span class="m">✓</span> forecast + distribution</li>
       <li class="d"><span class="m">✓</span> reasoning trace, failed citations red</li>
-      <li class="n"><span class="m">▸</span> model view</li>
-      <li class="n"><span class="m">▸</span> method / eval screen</li>
-      <li class="t"><span class="m">□</span> replay mode fixtures</li>
+      <li class="d"><span class="m">✓</span> model view, per-cell provenance</li>
+      <li class="d"><span class="m">✓</span> method: baseline, calibration, ablation</li>
+      <li class="d"><span class="m">✓</span> replay mode + labelled fixture</li>
     </ul>
   </div>
 
   <div class="col">
-    <div class="colhead"><h3>Production</h3><span class="tag next">next</span></div>
+    <div class="colhead"><h3>Production</h3><span class="tag done">complete</span></div>
     <ul>
-      <li class="t"><span class="m">□</span> golden file + <code>make verify</code> green</li>
-      <li class="t"><span class="m">□</span> pin Dockerfile digest (<code>PINME</code>)</li>
-      <li class="t"><span class="m">□</span> CI green end to end</li>
-      <li class="t"><span class="m">□</span> README rewrite</li>
+      <li class="d"><span class="m">✓</span> golden file + <code>make verify</code> green</li>
+      <li class="d"><span class="m">✓</span> Dockerfile digest pinned</li>
+      <li class="d"><span class="m">✓</span> CI: tests, lint, verify, types, UI build</li>
+      <li class="d"><span class="m">✓</span> README rewritten</li>
+      <li class="d"><span class="m">✓</span> Next.js CVE + Recharts upgraded</li>
     </ul>
   </div>
 
+</div>
+
+<div class="note" style="border-left-color:#16a34a">
+  <b>Build complete.</b> Every layer A→G is wired, all eleven agents are built,
+  the UI builds clean as five static routes, and <code>make verify</code> is
+  green in CI alongside a types-in-sync check. What remains is not building —
+  it is <b>measuring</b>: see the two notes below.
 </div>
 
 <div class="note">
@@ -341,10 +347,14 @@
 </div>
 
 <div class="note" style="border-left-color:#0891b2">
-  <b>Still asserted rather than measured:</b> <code>FITTED_BETA</code> holds
-  three placeholder numbers. The regression that replaces them is built
-  (<code>forecast fit</code>) but needs the ~200 firm-quarter case set to run
-  against — that is Block 1, and it needs a live network call from your machine.
+  <b>Still asserted rather than measured — and this is now the whole job.</b>
+  <code>FITTED_BETA</code> holds three placeholder numbers. The regression that
+  replaces them is built (<code>forecast fit</code>) but needs the ~200
+  firm-quarter case set to run against. And the data sources have never touched
+  the network from your machine. Two commands, in this order:
+  <code>uv run forecast sources --ticker NVDA</code> then
+  <code>uv run forecast cases</code> → <code>uv run forecast backtest</code>.
+  That last one produces the number everything else is measured against.
 </div>
 
 </div></body>
