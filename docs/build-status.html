@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Build status — Agents vs Wall Street</title>
+<style>
+  :root{
+    --done-f:#dcfce7; --done-s:#16a34a;
+    --unv-f:#fef9c3;  --unv-s:#ca8a04;
+    --stub-f:#ffedd5; --stub-s:#ea580c;
+    --todo-f:#f8fafc; --todo-s:#cbd5e1;
+    --ink:#0f172a; --ink2:#64748b; --ink3:#94a3b8; --line:#e2e8f0;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#fbfcfd;color:var(--ink);
+    font:14px/1.55 ui-sans-serif,-apple-system,"Segoe UI",Inter,system-ui,sans-serif}
+  .wrap{max-width:1620px;margin:0 auto;padding:34px 20px 70px}
+
+  header{border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:12px}
+  h1{font-size:21px;font-weight:650;letter-spacing:-.02em}
+  .meta{color:var(--ink2);font-size:13.5px;margin-top:5px}
+  .rev{color:var(--ink3);font-size:12px;margin-top:9px;font-variant-numeric:tabular-nums}
+
+  .bar{display:flex;height:9px;border-radius:5px;overflow:hidden;margin:18px 0 8px;background:var(--todo-f)}
+  .bar i{display:block}
+  .barkey{display:flex;gap:20px;font-size:12.5px;color:var(--ink2);
+    font-variant-numeric:tabular-nums;margin-bottom:26px}
+  .barkey b{color:var(--ink);font-weight:600}
+
+  h2{font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;
+     color:var(--ink3);margin:40px 0 4px}
+  .h2sub{color:var(--ink2);font-size:13.5px;margin-bottom:20px}
+
+  svg{width:100%;height:auto;display:block}
+
+  .legend{display:flex;flex-wrap:wrap;gap:20px;margin-top:18px;padding:13px 16px;
+    background:#fff;border:1px solid var(--line);border-radius:10px}
+  .leg{display:flex;align-items:center;gap:8px;font-size:12.5px;color:#475569}
+  .sw{width:20px;height:12px;border-radius:3px;border-width:1.5px;border-style:solid;flex:none}
+
+  .board{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:8px}
+  .col{background:#fff;border:1px solid var(--line);border-radius:11px;padding:0;overflow:hidden}
+  .col.now{border-color:var(--stub-s);box-shadow:0 0 0 3px #ffedd5}
+  .colhead{padding:13px 15px 11px;border-bottom:1px solid var(--line);background:#fcfdfe}
+  .colhead h3{font-size:13px;font-weight:640}
+  .colhead .when{font-size:11.5px;color:var(--ink3);margin-top:2px;
+    font-variant-numeric:tabular-nums}
+  .colhead .tag{display:inline-block;margin-top:7px;font-size:10px;letter-spacing:.08em;
+    text-transform:uppercase;padding:2px 8px;border-radius:20px;font-weight:650}
+  .tag.done{background:var(--done-f);color:#15803d}
+  .tag.now{background:var(--stub-f);color:#c2410c}
+  .tag.next{background:var(--todo-f);color:var(--ink2);border:1px solid var(--line)}
+  ul{list-style:none;padding:8px 6px 12px}
+  li{display:flex;gap:9px;padding:5px 9px;font-size:12.9px;line-height:1.45;
+    color:#475569;border-radius:6px}
+  li .m{flex:none;width:13px;font-weight:700;font-size:12px;padding-top:1px}
+  li.d .m{color:var(--done-s)}
+  li.u .m{color:var(--unv-s)}
+  li.s .m{color:var(--stub-s)}
+  li.t .m{color:var(--todo-s)}
+  li.d{color:var(--ink2)}
+  li.crit{background:#fff7ed;font-weight:560;color:#9a3412}
+
+  .note{margin-top:30px;padding:15px 18px;background:#fff;border:1px solid var(--line);
+    border-left:3px solid var(--stub-s);border-radius:9px;font-size:13.5px;
+    color:var(--ink2);line-height:1.6}
+  .note b{color:var(--ink)}
+  .note+.note{margin-top:12px;border-left-color:#0891b2}
+
+  @media(max-width:1100px){.board{grid-template-columns:1fr 1fr}}
+  @media(max-width:640px){.board{grid-template-columns:1fr}}
+</style>
+</head>
+<body><div class="wrap">
+
+<header>
+  <h1>Build status — Agents vs Wall Street</h1>
+  <p class="meta">Sunday 16 August, 10:00–19:30 · central London · 18 days out</p>
+  <p class="rev">rev 1 · Stage 1 complete · 50 tests passing · ~3,300 lines</p>
+</header>
+
+<div class="bar">
+  <i style="width:31%;background:#16a34a"></i>
+  <i style="width:9%;background:#ca8a04"></i>
+  <i style="width:6%;background:#ea580c"></i>
+</div>
+<div class="barkey">
+  <span><b>31%</b> built &amp; tested</span>
+  <span><b>9%</b> written, unverified</span>
+  <span><b>6%</b> stubbed</span>
+  <span><b>54%</b> not started</span>
+</div>
+
+<h2>The pipeline</h2>
+<p class="h2sub">Green is done and tested. Amber outline is written but never run against live data. Orange is a stub with the right shape and no logic. Grey dashed is not started.</p>
+
+<svg viewBox="0 0 1560 620" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif,-apple-system,Segoe UI,Inter,system-ui,sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/></marker>
+  </defs>
+  <style>
+    .bx{stroke-width:1.6}
+    .todo{stroke-dasharray:5 4}
+    .t{font-size:12.2px;font-weight:650;fill:#0f172a}
+    .s{font-size:10px;fill:#64748b}
+    .ph{font-size:9.6px;font-weight:700;fill:#94a3b8;letter-spacing:.12em}
+    .ln{stroke:#94a3b8;stroke-width:1.3;fill:none}
+    .badge{font-size:9.5px;font-weight:700}
+  </style>
+
+  <text class="ph" x="222" y="40" text-anchor="middle">1 · ACQUIRE</text>
+  <text class="ph" x="392" y="40" text-anchor="middle">2 · STRUCTURE</text>
+  <text class="ph" x="566" y="40" text-anchor="middle">3 · ANALYSE</text>
+  <text class="ph" x="720" y="40" text-anchor="middle">CHECK</text>
+  <text class="ph" x="862" y="40" text-anchor="middle">4 · CHALLENGE</text>
+  <text class="ph" x="1018" y="40" text-anchor="middle">5 · JUDGE</text>
+  <text class="ph" x="1172" y="40" text-anchor="middle">6 · POSITION</text>
+  <text class="ph" x="1320" y="40" text-anchor="middle">CHECK</text>
+
+  <!-- INPUT -->
+  <rect class="bx" x="20" y="252" width="100" height="60" rx="9" fill="#f1f5f9" stroke="#64748b"/>
+  <text class="t" x="70" y="278" text-anchor="middle">Company</text>
+  <text class="s" x="70" y="294" text-anchor="middle">+ data, 10am</text>
+  <path class="ln" d="M120,282 L160,282" marker-end="url(#a)"/>
+
+  <!-- ACQUIRE -->
+  <rect class="bx" x="160" y="150" width="124" height="46" rx="8" fill="var(--unv-f)" stroke="var(--unv-s)"/>
+  <text class="t" x="222" y="169" text-anchor="middle">Numbers</text>
+  <text class="s" x="222" y="184" text-anchor="middle">XBRL · consensus</text>
+  <text class="badge" x="272" y="164" text-anchor="end" fill="var(--unv-s)">◐</text>
+
+  <rect class="bx" x="160" y="204" width="124" height="46" rx="8" fill="var(--unv-f)" stroke="var(--unv-s)"/>
+  <text class="t" x="222" y="223" text-anchor="middle">Filings</text>
+  <text class="s" x="222" y="238" text-anchor="middle">8-K · 10-Q</text>
+  <text class="badge" x="272" y="218" text-anchor="end" fill="var(--unv-s)">◐</text>
+
+  <rect class="bx todo" x="160" y="258" width="124" height="46" rx="8" fill="var(--stub-f)" stroke="var(--stub-s)"/>
+  <text class="t" x="222" y="277" text-anchor="middle">Industry</text>
+  <text class="s" x="222" y="292" text-anchor="middle">peers · chain</text>
+
+  <rect class="bx todo" x="160" y="312" width="124" height="46" rx="8" fill="var(--todo-f)" stroke="var(--todo-s)"/>
+  <text class="t" x="222" y="331" text-anchor="middle">Macro</text>
+  <text class="s" x="222" y="346" text-anchor="middle">FRED</text>
+
+  <rect class="bx todo" x="160" y="366" width="124" height="40" rx="8" fill="var(--todo-f)" stroke="var(--todo-s)"/>
+  <text class="t" x="222" y="384" text-anchor="middle">Transcripts</text>
+  <text class="s" x="222" y="398" text-anchor="middle">Kaggle dump</text>
+
+  <path class="ln" d="M284,254 L328,254" marker-end="url(#a)"/>
+
+  <!-- STRUCTURE -->
+  <rect class="bx todo" x="328" y="200" width="128" height="52" rx="8" fill="var(--todo-f)" stroke="var(--todo-s)"/>
+  <text class="t" x="392" y="221" text-anchor="middle">3-statement</text>
+  <text class="s" x="392" y="236" text-anchor="middle">graph engine ✓, IS/BS/CF ✗</text>
+
+  <rect class="bx todo" x="328" y="264" width="128" height="52" rx="8" fill="var(--todo-f)" stroke="var(--todo-s)"/>
+  <text class="t" x="392" y="285" text-anchor="middle">Evidence store</text>
+  <text class="s" x="392" y="300" text-anchor="middle">Claim ✓, assembly ✗</text>
+
+  <path class="ln" d="M456,258 L474,258"/><path class="ln" d="M474,190 L474,470"/>
+  <path class="ln" d="M474,190 L496,190" marker-end="url(#a)"/>
+  <path class="ln" d="M474,246 L496,246" marker-end="url(#a)"/>
+  <path class="ln" d="M474,302 L496,302" marker-end="url(#a)"/>
+  <path class="ln" d="M474,358 L496,358" marker-end="url(#a)"/>
+  <path class="ln" d="M474,414 L496,414" marker-end="url(#a)"/>
+  <path class="ln" d="M474,470 L496,470" marker-end="url(#a)"/>
+
+  <!-- LENSES -->
+  <rect class="bx" x="496" y="168" width="140" height="44" rx="8" fill="var(--done-f)" stroke="var(--done-s)"/>
+  <text class="t" x="566" y="187" text-anchor="middle">Mechanical</text>
+  <text class="s" x="566" y="202" text-anchor="middle">FX · shares · interest</text>
+  <text class="badge" x="626" y="182" text-anchor="end" fill="var(--done-s)">✓</text>
+
+  <rect class="bx todo" x="496" y="224" width="140" height="44" rx="8" fill="var(--todo-f)" stroke="var(--todo-s)"/>
+  <text class="t" x="566" y="243" text-anchor="middle">Guidance</text>
+  <text class="s" x="566" y="258" text-anchor="middle">prompt ✓, code ✗</text>
+
+  <rect class="bx todo" x="496" y="280" width="140" height="44" rx="8" fill="var(--todo-f)" stroke="var(--todo-s)"/>
+  <text class="t" x="566" y="304" text-anchor="middle">Drivers</text>
+
+  <rect class="bx todo" x="496" y="336" width="140" height="44" rx="8" fill="var(--todo-f)" stroke="var(--todo-s)"/>
+  <text class="t" x="566" y="360" text-anchor="middle">Margins</text>
+
+  <rect class="bx todo" x="496" y="392" width="140" height="44" rx="8" fill="var(--todo-f)" stroke="var(--todo-s)"/>
+  <text class="t" x="566" y="416" text-anchor="middle">Forensics</text>
+
+  <rect class="bx todo" x="496" y="448" width="140" height="44" rx="8" fill="var(--todo-f)" stroke="var(--todo-s)"/>
+  <text class="t" x="566" y="466" text-anchor="middle">Peer read · Macro</text>
+  <text class="s" x="566" y="481" text-anchor="middle">2 lenses</text>
+
+  <path class="ln" d="M636,190 L676,190" marker-end="url(#a)"/>
+  <path class="ln" d="M636,246 L676,246" marker-end="url(#a)"/>
+  <path class="ln" d="M636,302 L676,302" marker-end="url(#a)"/>
+  <path class="ln" d="M636,358 L676,358" marker-end="url(#a)"/>
+  <path class="ln" d="M636,414 L676,414" marker-end="url(#a)"/>
+  <path class="ln" d="M636,470 L676,470" marker-end="url(#a)"/>
+
+  <!-- RECONCILE -->
+  <rect class="bx" x="676" y="168" width="88" height="324" rx="9" fill="var(--done-f)" stroke="var(--done-s)"/>
+  <text class="t" x="720" y="316" text-anchor="middle">Reconcile</text>
+  <text class="s" x="720" y="333" text-anchor="middle">arithmetic</text>
+  <text class="s" x="720" y="347" text-anchor="middle">+ citations</text>
+  <text class="badge" x="752" y="186" text-anchor="end" fill="var(--done-s)">✓</text>
+
+  <path class="ln" d="M764,330 L802,330" marker-end="url(#a)"/>
+
+  <!-- CHAMPION -->
+  <rect class="bx todo" x="802" y="168" width="120" height="324" rx="9" fill="var(--todo-f)" stroke="var(--todo-s)"/>
+  <text class="t" x="862" y="322" text-anchor="middle">Devil's advocate</text>
+  <text class="s" x="862" y="340" text-anchor="middle">not started</text>
+
+  <path class="ln" d="M922,330 L960,330" marker-end="url(#a)"/>
+
+  <!-- JUDGE -->
+  <rect class="bx todo" x="960" y="286" width="116" height="88" rx="9" fill="var(--todo-f)" stroke="var(--todo-s)"/>
+  <text class="t" x="1018" y="322" text-anchor="middle">Judge</text>
+  <text class="s" x="1018" y="340" text-anchor="middle">not started</text>
+
+  <path class="ln" d="M1076,330 L1114,330" marker-end="url(#a)"/>
+
+  <!-- CONSENSUS -->
+  <rect class="bx" x="1114" y="160" width="116" height="56" rx="8" fill="var(--unv-f)" stroke="var(--unv-s)"/>
+  <text class="t" x="1172" y="182" text-anchor="middle">Consensus</text>
+  <text class="s" x="1172" y="198" text-anchor="middle">yfinance ◐</text>
+  <path class="ln" d="M1172,216 L1172,286" marker-end="url(#a)"/>
+
+  <!-- LAMBDA -->
+  <rect class="bx" x="1114" y="286" width="116" height="88" rx="9" fill="var(--done-f)" stroke="var(--done-s)"/>
+  <text class="t" x="1172" y="316" text-anchor="middle">λ Positioning</text>
+  <text class="s" x="1172" y="334" text-anchor="middle">logic ✓</text>
+  <text class="s" x="1172" y="350" text-anchor="middle" fill="#c2410c">β unfitted</text>
+  <text class="badge" x="1220" y="304" text-anchor="end" fill="var(--done-s)">✓</text>
+
+  <!-- COMPARABILITY -->
+  <rect class="bx todo" x="1114" y="410" width="116" height="60" rx="8" fill="var(--todo-f)" stroke="var(--todo-s)"/>
+  <text class="t" x="1172" y="434" text-anchor="middle">Comparability</text>
+  <text class="s" x="1172" y="450" text-anchor="middle">not started</text>
+  <path class="ln" d="M1172,410 L1172,374" marker-end="url(#a)"/>
+
+  <path class="ln" d="M1230,330 L1268,330" marker-end="url(#a)"/>
+
+  <!-- CALIBRATE -->
+  <rect class="bx todo" x="1268" y="296" width="104" height="70" rx="9" fill="var(--todo-f)" stroke="var(--todo-s)"/>
+  <text class="t" x="1320" y="326" text-anchor="middle">Calibrate</text>
+  <text class="s" x="1320" y="342" text-anchor="middle">not started</text>
+
+  <path class="ln" d="M1372,330 L1410,330" marker-end="url(#a)"/>
+  <rect class="bx todo" x="1410" y="296" width="124" height="70" rx="9" fill="var(--todo-f)" stroke="var(--todo-s)"/>
+  <text class="t" x="1472" y="326" text-anchor="middle">Forecast</text>
+  <text class="s" x="1472" y="342" text-anchor="middle">schema ✓, wiring ✗</text>
+
+  <!-- EVAL BAND -->
+  <rect class="bx" x="160" y="530" width="1374" height="58" rx="10" fill="var(--done-f)" stroke="var(--done-s)"/>
+  <text class="t" x="847" y="554" text-anchor="middle">Eval harness ✓ — backtest · baseline · shrinkage · ablation · Wilson CI · point-in-time</text>
+  <text class="s" x="847" y="572" text-anchor="middle">50 tests passing. Missing: the 200-quarter case builder that feeds it, and the golden file for make verify.</text>
+</svg>
+
+<div class="legend">
+  <div class="leg"><span class="sw" style="background:var(--done-f);border-color:var(--done-s)"></span> Built &amp; tested</div>
+  <div class="leg"><span class="sw" style="background:var(--unv-f);border-color:var(--unv-s)"></span> Written, never run against live data</div>
+  <div class="leg"><span class="sw" style="background:var(--stub-f);border-color:var(--stub-s)"></span> Stubbed — right shape, no logic</div>
+  <div class="leg"><span class="sw" style="background:var(--todo-f);border-color:var(--todo-s);border-style:dashed"></span> Not started</div>
+</div>
+
+<h2>Task board</h2>
+<p class="h2sub">Highlighted rows are the ones that block something else. Block 1 is the gate — nothing downstream means anything until the baseline number exists.</p>
+
+<div class="board">
+
+  <div class="col">
+    <div class="colhead">
+      <h3>Stage 1 · Foundations</h3>
+      <div class="when">done</div>
+      <span class="tag done">14 / 16 complete</span>
+    </div>
+    <ul>
+      <li class="d"><span class="m">✓</span> Schemas — the contract</li>
+      <li class="d"><span class="m">✓</span> DataSource protocol</li>
+      <li class="d"><span class="m">✓</span> Cache, as_of-keyed</li>
+      <li class="d"><span class="m">✓</span> Loader + fallback + breaker</li>
+      <li class="u"><span class="m">◐</span> SEC source — untested live</li>
+      <li class="u"><span class="m">◐</span> yfinance source — untested live</li>
+      <li class="d"><span class="m">✓</span> Model graph engine</li>
+      <li class="d"><span class="m">✓</span> Mechanical lens</li>
+      <li class="d"><span class="m">✓</span> Reconciler</li>
+      <li class="d"><span class="m">✓</span> λ presets + logic</li>
+      <li class="d"><span class="m">✓</span> Shrinkage (James-Stein)</li>
+      <li class="d"><span class="m">✓</span> Baseline</li>
+      <li class="d"><span class="m">✓</span> Backtest + ablation</li>
+      <li class="d"><span class="m">✓</span> Events / replay log</li>
+      <li class="d"><span class="m">✓</span> CLI, Docker, CI, README</li>
+      <li class="d"><span class="m">✓</span> 50 tests</li>
+    </ul>
+  </div>
+
+  <div class="col now">
+    <div class="colhead">
+      <h3>Block 1 · The gate</h3>
+      <div class="when">Sat 1 – Sun 2 Aug</div>
+      <span class="tag now">up next</span>
+    </div>
+    <ul>
+      <li class="t crit"><span class="m">▸</span> Run <code>forecast sources</code> from your machine</li>
+      <li class="t crit"><span class="m">▸</span> GAAP↔non-GAAP bridge, by hand, 10 companies</li>
+      <li class="t crit"><span class="m">▸</span> Build ~200 firm-quarter cases</li>
+      <li class="t crit"><span class="m">▸</span> Score <code>consensus × 1.02</code> — the number</li>
+      <li class="t"><span class="m">□</span> Fit β, replace FITTED_BETA placeholders</li>
+      <li class="t"><span class="m">□</span> Guide-landing distributions, 8 qtrs × 20 names</li>
+      <li class="t"><span class="m">□</span> Golden file + <code>make verify</code> green</li>
+      <li class="t"><span class="m">□</span> Pin the Dockerfile digest (currently PINME)</li>
+    </ul>
+  </div>
+
+  <div class="col">
+    <div class="colhead">
+      <h3>Block 2–3 · The pipeline</h3>
+      <div class="when">Mon 3 – Sun 9 Aug</div>
+      <span class="tag next">0 / 12</span>
+    </div>
+    <ul>
+      <li class="t"><span class="m">□</span> LLM client — cache, cost ceiling, tokens</li>
+      <li class="t"><span class="m">□</span> Evidence store assembly</li>
+      <li class="t"><span class="m">□</span> Guidance extractor (8-K EX-99.1)</li>
+      <li class="t"><span class="m">□</span> 3-statement model, IS/BS/CF linked</li>
+      <li class="t"><span class="m">□</span> Lens: Guidance</li>
+      <li class="t"><span class="m">□</span> Lens: Drivers</li>
+      <li class="t"><span class="m">□</span> Lens: Margins</li>
+      <li class="t"><span class="m">□</span> Lens: Forensics</li>
+      <li class="t"><span class="m">□</span> Lens: Peer read</li>
+      <li class="t"><span class="m">□</span> Lens: Macro + FRED source</li>
+      <li class="t"><span class="m">□</span> Champion development</li>
+      <li class="t crit"><span class="m">▸</span> Judge — impact-weighted, never votes</li>
+    </ul>
+  </div>
+
+  <div class="col">
+    <div class="colhead">
+      <h3>Block 4–6 · Ship</h3>
+      <div class="when">Mon 10 – Sat 15 Aug</div>
+      <span class="tag next">0 / 13</span>
+    </div>
+    <ul>
+      <li class="t"><span class="m">□</span> Comparability check</li>
+      <li class="t"><span class="m">□</span> Calibration (bootstrap residuals)</li>
+      <li class="t"><span class="m">□</span> Statistics: lens combination weights</li>
+      <li class="t crit"><span class="m">▸</span> UI: live architecture view</li>
+      <li class="t"><span class="m">□</span> UI: forecast + distribution</li>
+      <li class="t"><span class="m">□</span> UI: reasoning trace + citations</li>
+      <li class="t"><span class="m">□</span> UI: model view</li>
+      <li class="t"><span class="m">□</span> UI: eval + calibration + ablation</li>
+      <li class="t"><span class="m">□</span> Replay mode (<code>?replay=</code>)</li>
+      <li class="t"><span class="m">□</span> Fresh-clone test, other machine</li>
+      <li class="t"><span class="m">□</span> Pre-cache everything to parquet</li>
+      <li class="t"><span class="m">□</span> Rehearsal 1 — Micron</li>
+      <li class="t"><span class="m">□</span> Rehearsal 2 — FedEx, then stop</li>
+    </ul>
+  </div>
+
+</div>
+
+<div class="note">
+  <b>Two amber items are the real risk right now.</b> The SEC and yfinance sources are written but have never touched the network — every line below them assumes data arrives in a shape I inferred from documentation rather than observed. Run <code>forecast sources --ticker NVDA</code> from the machine you'll demo on before building anything else. Datacentre IPs get rate-limited far harder than laptops, and the whole plan rests on free consensus data actually arriving.
+</div>
+
+<div class="note">
+  <b>λ is green but β is a placeholder.</b> The logic, presets and regime conditioning all work and are tested. But <code>FITTED_BETA</code> holds three guessed numbers, and those are meant to be the output of the Block 1 regression. Until that runs, the thesis is asserted rather than measured — which is precisely the distinction this judge writes about.
+</div>
+
+</div></body>
+</html>

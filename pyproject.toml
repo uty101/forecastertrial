@@ -1,0 +1,49 @@
+[project]
+name = "forecaster"
+version = "0.1.0"
+description = "An earnings-forecasting agent that knows when to shrink to consensus"
+requires-python = ">=3.12"
+dependencies = [
+  "anthropic>=0.40",
+  "pydantic>=2.9",
+  "pydantic-settings>=2.5",
+  "typer>=0.12",
+  "structlog>=24.4",
+  "tenacity>=9.0",
+  "httpx>=0.27",
+  "pyyaml>=6.0",
+  "edgartools>=5.0",
+  "yfinance>=1.5.2",
+  "pandas>=2.2",
+  "pyarrow>=17.0",
+  "duckdb>=1.1",
+  "numpy>=2.0",
+  "scipy>=1.14",
+  "statsmodels>=0.14",
+  "openpyxl>=3.1",
+  "diskcache>=5.6",
+]
+
+[project.scripts]
+forecast = "forecaster.cli:app"
+
+[dependency-groups]
+dev = ["pytest>=8.3", "pytest-asyncio>=0.24", "ruff>=0.7"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/forecaster"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 90
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]

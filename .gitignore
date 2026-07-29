@@ -1,0 +1,9 @@
+out/*.json
+out/*.ndjson
+data/cache/
+.env
+__pycache__/
+.venv/
+ui/node_modules/
+ui/out/
+.pytest_cache/

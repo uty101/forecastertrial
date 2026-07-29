@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Forecasting agent — architecture v2</title>
+<style>
+  body{margin:0;background:#fbfcfd;color:#0f172a;
+    font:14px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Inter,system-ui,sans-serif}
+  .wrap{max-width:1620px;margin:0 auto;padding:36px 20px 60px}
+  h1{font-size:22px;font-weight:650;letter-spacing:-.02em;margin:0 0 6px}
+  .sub{color:#64748b;font-size:14px;margin:0 0 24px}
+  svg{width:100%;height:auto;display:block}
+  .legend{display:flex;flex-wrap:wrap;gap:22px;margin-top:24px;padding:14px 18px;
+    background:#fff;border:1px solid #e2e8f0;border-radius:10px}
+  .leg{display:flex;align-items:center;gap:8px;font-size:12.5px;color:#475569}
+  .sw{width:22px;height:13px;border-radius:3px;border-width:1.5px;border-style:solid;flex:none}
+  .notes{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:18px}
+  .n{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px}
+  .n b{display:block;font-size:12.5px;margin-bottom:5px}
+  .n span{font-size:12.5px;color:#64748b;line-height:1.5}
+  @media(max-width:900px){.notes{grid-template-columns:1fr 1fr}}
+  @media(max-width:600px){.notes{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Forecasting agent — architecture</h1>
+  <p class="sub">Company and data arrive at 10am on the left. A forecast, with every number traceable, leaves on the right.</p>
+
+<svg viewBox="0 0 1560 730" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif,-apple-system,Segoe UI,Inter,system-ui,sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/></marker>
+    <marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#cbd5e1"/></marker>
+  </defs>
+  <style>
+    .bx{stroke-width:1.6}
+    .t{font-size:12.4px;font-weight:650;fill:#0f172a}
+    .s{font-size:10.2px;fill:#64748b}
+    .ph{font-size:9.8px;font-weight:700;fill:#94a3b8;letter-spacing:.12em}
+    .ln{stroke:#94a3b8;stroke-width:1.4;fill:none}
+    .lnd{stroke:#cbd5e1;stroke-width:1.3;fill:none;stroke-dasharray:4 4}
+  </style>
+
+  <!-- phase labels -->
+  <text class="ph" x="226" y="122" text-anchor="middle">1 · ACQUIRE</text>
+  <text class="ph" x="394" y="122" text-anchor="middle">2 · STRUCTURE</text>
+  <text class="ph" x="569" y="122" text-anchor="middle">3 · ANALYSE</text>
+  <text class="ph" x="722" y="122" text-anchor="middle">CHECK</text>
+  <text class="ph" x="864" y="122" text-anchor="middle">4 · CHALLENGE</text>
+  <text class="ph" x="1020" y="122" text-anchor="middle">5 · JUDGE</text>
+  <text class="ph" x="1174" y="122" text-anchor="middle">6 · POSITION</text>
+  <text class="ph" x="1322" y="122" text-anchor="middle">CHECK</text>
+
+  <!-- INPUT -->
+  <rect class="bx" x="20" y="306" width="104" height="68" rx="9" fill="#f1f5f9" stroke="#64748b"/>
+  <text class="t" x="72" y="332" text-anchor="middle">Company</text>
+  <text class="s" x="72" y="348" text-anchor="middle">+ sponsor data</text>
+  <text class="s" x="72" y="362" text-anchor="middle">given at 10am</text>
+
+  <path class="ln" d="M124,340 C144,340 144,244 162,244" marker-end="url(#a)"/>
+  <path class="ln" d="M124,340 C144,340 144,308 162,308" marker-end="url(#a)"/>
+  <path class="ln" d="M124,340 C144,340 144,372 162,372" marker-end="url(#a)"/>
+  <path class="ln" d="M124,340 C144,340 144,436 162,436" marker-end="url(#a)"/>
+
+  <!-- ACQUIRE -->
+  <rect class="bx" x="162" y="219" width="128" height="50" rx="9" fill="#e0f2fe" stroke="#0284c7"/>
+  <text class="t" x="226" y="240" text-anchor="middle">Numbers</text>
+  <text class="s" x="226" y="255" text-anchor="middle">XBRL · sponsor feed</text>
+  <rect class="bx" x="162" y="283" width="128" height="50" rx="9" fill="#e0f2fe" stroke="#0284c7"/>
+  <text class="t" x="226" y="304" text-anchor="middle">Filings &amp; calls</text>
+  <text class="s" x="226" y="319" text-anchor="middle">8-K · transcript · 10-Q</text>
+  <rect class="bx" x="162" y="347" width="128" height="50" rx="9" fill="#e0f2fe" stroke="#0284c7"/>
+  <text class="t" x="226" y="368" text-anchor="middle">Industry</text>
+  <text class="s" x="226" y="383" text-anchor="middle">peers · value chain</text>
+  <rect class="bx" x="162" y="411" width="128" height="50" rx="9" fill="#e0f2fe" stroke="#0284c7"/>
+  <text class="t" x="226" y="432" text-anchor="middle">Macro</text>
+  <text class="s" x="226" y="447" text-anchor="middle">FRED · sector series</text>
+  <text class="s" x="226" y="483" text-anchor="middle" fill="#94a3b8">ranked list · hard budget · stops when spent</text>
+
+  <path class="ln" d="M290,244 C310,244 310,302 328,302" marker-end="url(#a)"/>
+  <path class="ln" d="M290,308 C310,308 310,360 328,360" marker-end="url(#a)"/>
+  <path class="ln" d="M290,372 C310,372 310,360 328,360" marker-end="url(#a)"/>
+  <path class="ln" d="M290,436 C310,436 310,360 328,360" marker-end="url(#a)"/>
+
+  <!-- STRUCTURE -->
+  <rect class="bx" x="328" y="273" width="132" height="58" rx="9" fill="#ccfbf1" stroke="#0d9488"/>
+  <text class="t" x="394" y="296" text-anchor="middle">3-statement model</text>
+  <text class="s" x="394" y="312" text-anchor="middle">IS · BS · CF, linked</text>
+  <rect class="bx" x="328" y="349" width="132" height="58" rx="9" fill="#ccfbf1" stroke="#0d9488"/>
+  <text class="t" x="394" y="372" text-anchor="middle">Evidence store</text>
+  <text class="s" x="394" y="388" text-anchor="middle">claims + verified quotes</text>
+  <text class="s" x="394" y="428" text-anchor="middle" fill="#0d9488">no number without a source</text>
+
+  <path class="ln" d="M460,302 L476,302"/>
+  <path class="ln" d="M460,378 L476,378"/>
+  <path class="ln" d="M476,302 L476,378"/>
+  <path class="ln" d="M476,340 C488,340 488,178 498,178" marker-end="url(#a)"/>
+  <path class="ln" d="M476,340 C488,340 488,232 498,232" marker-end="url(#a)"/>
+  <path class="ln" d="M476,340 C488,340 488,286 498,286" marker-end="url(#a)"/>
+  <path class="ln" d="M476,340 L498,340" marker-end="url(#a)"/>
+  <path class="ln" d="M476,340 C488,340 488,394 498,394" marker-end="url(#a)"/>
+  <path class="ln" d="M476,340 C488,340 488,448 498,448" marker-end="url(#a)"/>
+  <path class="ln" d="M476,340 C488,340 488,502 498,502" marker-end="url(#a)"/>
+
+  <!-- LENSES -->
+  <rect class="bx" x="498" y="156" width="142" height="44" rx="8" fill="#cffafe" stroke="#0891b2"/>
+  <text class="t" x="569" y="175" text-anchor="middle">Mechanical</text>
+  <text class="s" x="569" y="190" text-anchor="middle">FX · shares · interest</text>
+  <rect class="bx" x="498" y="210" width="142" height="44" rx="8" fill="#ede9fe" stroke="#7c3aed"/>
+  <text class="t" x="569" y="229" text-anchor="middle">Guidance</text>
+  <text class="s" x="569" y="244" text-anchor="middle">guide + landing CDF</text>
+  <rect class="bx" x="498" y="264" width="142" height="44" rx="8" fill="#ede9fe" stroke="#7c3aed"/>
+  <text class="t" x="569" y="283" text-anchor="middle">Drivers</text>
+  <text class="s" x="569" y="298" text-anchor="middle">units × price · ARPU</text>
+  <rect class="bx" x="498" y="318" width="142" height="44" rx="8" fill="#ede9fe" stroke="#7c3aed"/>
+  <text class="t" x="569" y="337" text-anchor="middle">Margins</text>
+  <text class="s" x="569" y="352" text-anchor="middle">GM mix · opex · tax</text>
+  <rect class="bx" x="498" y="372" width="142" height="44" rx="8" fill="#ede9fe" stroke="#7c3aed"/>
+  <text class="t" x="569" y="391" text-anchor="middle">Forensics</text>
+  <text class="s" x="569" y="406" text-anchor="middle">accruals · cash quality</text>
+  <rect class="bx" x="498" y="426" width="142" height="44" rx="8" fill="#ede9fe" stroke="#7c3aed"/>
+  <text class="t" x="569" y="445" text-anchor="middle">Peer read</text>
+  <text class="s" x="569" y="460" text-anchor="middle">who already reported</text>
+  <rect class="bx" x="498" y="480" width="142" height="44" rx="8" fill="#ede9fe" stroke="#7c3aed"/>
+  <text class="t" x="569" y="499" text-anchor="middle">Macro</text>
+  <text class="s" x="569" y="514" text-anchor="middle">sector · rates · FX regime</text>
+  <text class="s" x="569" y="550" text-anchor="middle" fill="#7c3aed">blind to each other — if they talk, they converge</text>
+
+  <path class="ln" d="M640,178 L678,178" marker-end="url(#a)"/>
+  <path class="ln" d="M640,232 L678,232" marker-end="url(#a)"/>
+  <path class="ln" d="M640,286 L678,286" marker-end="url(#a)"/>
+  <path class="ln" d="M640,340 L678,340" marker-end="url(#a)"/>
+  <path class="ln" d="M640,394 L678,394" marker-end="url(#a)"/>
+  <path class="ln" d="M640,448 L678,448" marker-end="url(#a)"/>
+  <path class="ln" d="M640,502 L678,502" marker-end="url(#a)"/>
+
+  <!-- RECONCILE -->
+  <rect class="bx" x="678" y="156" width="88" height="368" rx="10" fill="#cffafe" stroke="#0891b2"/>
+  <text class="t" x="722" y="320" text-anchor="middle">Reconcile</text>
+  <text class="s" x="722" y="338" text-anchor="middle">arithmetic</text>
+  <text class="s" x="722" y="352" text-anchor="middle">+ citations</text>
+  <text class="s" x="722" y="374" text-anchor="middle" fill="#0891b2">fail → drop</text>
+  <text class="s" x="722" y="388" text-anchor="middle" fill="#0891b2">the lens</text>
+
+  <path class="ln" d="M766,340 L804,340" marker-end="url(#a)"/>
+  <text class="s" x="785" y="330" text-anchor="middle" fill="#94a3b8">×7</text>
+
+  <!-- CHAMPION -->
+  <rect class="bx" x="804" y="156" width="120" height="368" rx="10" fill="#fef3c7" stroke="#d97706"/>
+  <text class="t" x="864" y="320" text-anchor="middle">Devil's advocate</text>
+  <text class="s" x="864" y="338" text-anchor="middle">argue the case,</text>
+  <text class="s" x="864" y="352" text-anchor="middle">then argue against it</text>
+  <text class="s" x="864" y="374" text-anchor="middle" fill="#d97706">×7 in parallel</text>
+  <text class="s" x="864" y="556" text-anchor="middle" fill="#d97706">runs before anything is compared</text>
+
+  <path class="ln" d="M924,340 L962,340" marker-end="url(#a)"/>
+
+  <!-- JUDGE -->
+  <rect class="bx" x="962" y="292" width="116" height="96" rx="10" fill="#ffe4e6" stroke="#e11d48"/>
+  <text class="t" x="1020" y="322" text-anchor="middle">Judge</text>
+  <text class="s" x="1020" y="340" text-anchor="middle">materiality,</text>
+  <text class="s" x="1020" y="354" text-anchor="middle">never votes</text>
+  <text class="s" x="1020" y="374" text-anchor="middle" fill="#e11d48">→ a range</text>
+
+  <path class="ln" d="M1078,340 L1116,340" marker-end="url(#a)"/>
+
+  <!-- CONSENSUS -->
+  <rect class="bx" x="1116" y="146" width="116" height="62" rx="9" fill="#f1f5f9" stroke="#64748b"/>
+  <text class="t" x="1174" y="169" text-anchor="middle">Wall St consensus</text>
+  <text class="s" x="1174" y="185" text-anchor="middle">coverage · dispersion</text>
+  <text class="s" x="1174" y="199" text-anchor="middle">revision momentum</text>
+  <path class="ln" d="M1174,208 L1174,292" marker-end="url(#a)"/>
+
+  <!-- LAMBDA -->
+  <rect class="bx" x="1116" y="292" width="116" height="96" rx="10" fill="#d1fae5" stroke="#059669"/>
+  <text class="t" x="1174" y="322" text-anchor="middle">λ · Positioning</text>
+  <text class="s" x="1174" y="340" text-anchor="middle">how far off</text>
+  <text class="s" x="1174" y="354" text-anchor="middle">the Street?</text>
+  <text class="s" x="1174" y="374" text-anchor="middle" fill="#059669">fitted, not guessed</text>
+
+  <!-- COMPARABILITY -->
+  <rect class="bx" x="1116" y="440" width="116" height="72" rx="9" fill="#ede9fe" stroke="#7c3aed"/>
+  <text class="t" x="1174" y="464" text-anchor="middle">Comparability</text>
+  <text class="s" x="1174" y="480" text-anchor="middle">M&amp;A · accounting</text>
+  <text class="s" x="1174" y="494" text-anchor="middle">53rd week · restated</text>
+  <path class="ln" d="M1174,440 L1174,388" marker-end="url(#a)"/>
+  <text class="s" x="1174" y="530" text-anchor="middle" fill="#7c3aed">fires → λ collapses</text>
+
+  <path class="ln" d="M1232,340 L1270,340" marker-end="url(#a)"/>
+
+  <!-- CALIBRATE -->
+  <rect class="bx" x="1270" y="300" width="104" height="80" rx="10" fill="#cffafe" stroke="#0891b2"/>
+  <text class="t" x="1322" y="330" text-anchor="middle">Calibrate</text>
+  <text class="s" x="1322" y="348" text-anchor="middle">bootstrap our</text>
+  <text class="s" x="1322" y="362" text-anchor="middle">own residuals</text>
+
+  <path class="ln" d="M1374,340 L1412,340" marker-end="url(#a)"/>
+
+  <!-- OUTPUT -->
+  <rect class="bx" x="1412" y="300" width="124" height="80" rx="10" fill="#0f172a" stroke="#0f172a"/>
+  <text class="t" x="1474" y="328" text-anchor="middle" fill="#f8fafc">Forecast</text>
+  <text class="s" x="1474" y="346" text-anchor="middle" fill="#94a3b8">revenue · EPS</text>
+  <text class="s" x="1474" y="360" text-anchor="middle" fill="#94a3b8">as a distribution</text>
+
+  <!-- EVAL BAND -->
+  <rect class="bx" x="162" y="612" width="1374" height="62" rx="10" fill="#fff" stroke="#cbd5e1" stroke-dasharray="5 4"/>
+  <text class="t" x="849" y="637" text-anchor="middle">Eval harness — wraps everything</text>
+  <text class="s" x="849" y="656" text-anchor="middle">point-in-time enforced · baseline on every chart · 5 runs per config, variance reported · leave-one-lens-out ablation · make verify in CI</text>
+  <path class="lnd" d="M1474,380 C1474,560 1474,590 1300,612" marker-end="url(#ad)"/>
+  <path class="lnd" d="M226,495 L226,612" marker-end="url(#ad)"/>
+</svg>
+
+  <div class="legend">
+    <div class="leg"><span class="sw" style="background:#cffafe;border-color:#0891b2"></span> Plain code — no model, can't hallucinate</div>
+    <div class="leg"><span class="sw" style="background:#e0f2fe;border-color:#0284c7"></span> Cheap model — retrieval &amp; extraction</div>
+    <div class="leg"><span class="sw" style="background:#ede9fe;border-color:#7c3aed"></span> Mid model — reasoning, ×7</div>
+    <div class="leg"><span class="sw" style="background:#fef3c7;border-color:#d97706"></span> Mid model — challenge, ×7</div>
+    <div class="leg"><span class="sw" style="background:#ffe4e6;border-color:#e11d48"></span> Expensive — one call, highest leverage</div>
+    <div class="leg"><span class="sw" style="background:#d1fae5;border-color:#059669"></span> Statistics — fitted on backtest</div>
+  </div>
+
+  <div class="notes">
+    <div class="n"><b>The lenses are blind to each other</b>
+      <span>Diversity is the point. Let them see each other's work and they converge — and converging is how you rebuild consensus, which scores zero.</span></div>
+    <div class="n"><b>Reconcile before challenge</b>
+      <span>A lens that can't make its own arithmetic add up, or that cites a quote not in the source, is dropped and logged — never silently averaged in.</span></div>
+    <div class="n"><b>The advocate is a column, not a step</b>
+      <span>Each case argued properly and then argued against, before anything is compared. This is what took Alistair's own system from 0 to 92%.</span></div>
+    <div class="n"><b>λ sits outside the forecast path</b>
+      <span>Everything left of it produces an estimate. λ decides how much to trust it against sixty-one analysts. That separation is the thesis.</span></div>
+  </div>
+</div>
+</body>
+</html>
