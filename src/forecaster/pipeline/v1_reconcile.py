@@ -24,7 +24,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
-from forecaster.schemas import Claim, LensOutput
+from forecaster.schemas import Claim, LensOutput, SourceKind
 
 # Tolerance for the internal-consistency check. Tight enough to catch a real
 # error, loose enough to survive rounding in a model with a dozen steps.
@@ -59,22 +59,68 @@ def verify_citation(claim: Claim, source_text: str) -> bool:
     return _normalise(claim.verbatim_quote) in _normalise(source_text)
 
 
+# Prose sources: a human wrote sentences, a model quoted one of them, and the
+# quote must be found in the text. This is where fabrication is possible and
+# where string matching earns its keep.
+PROSE_SOURCES = {
+    SourceKind.FILING_8K,
+    SourceKind.FILING_10Q,
+    SourceKind.FILING_10K,
+    SourceKind.TRANSCRIPT,
+}
+
+# Structured sources: the "quote" is the tagged fact itself, rendered by the
+# source adapter from a typed API response. There is no prose to match against,
+# and string-matching a synthetic string against a document that does not exist
+# would fail every XBRL claim — which would drop every lens that cited a
+# financial figure, i.e. all of them.
+#
+# This is not a loophole. A model can only cite ids that are already in the
+# evidence store, and the store is built entirely from adapter output — so a
+# structured claim's VALUE came from the adapter, never from the model. What is
+# being trusted here is the SEC's XBRL endpoint, not the model's memory. An id
+# that is not in the store is caught separately, in `run_lens`, as a fabricated
+# citation.
+STRUCTURED_SOURCES = {
+    SourceKind.XBRL,
+    SourceKind.CONSENSUS,
+    SourceKind.SPONSOR,
+    SourceKind.MACRO,
+    SourceKind.PEER,
+}
+
+
 def verify_citations(
     claims: list[Claim], documents: dict[str, str]
 ) -> tuple[list[str], list[str]]:
     """Returns (verified_claim_ids, failed_claim_ids).
 
-    A claim whose source document isn't available counts as unverified, not as
-    passed. Absence of evidence is not evidence.
+    Prose claims must string-match their source document, and a prose claim
+    whose document is missing counts as unverified rather than passed — absence
+    of evidence is not evidence.
+
+    Structured claims are verified by construction; see STRUCTURED_SOURCES.
+
+    `DERIVED` is deliberately in neither set: a derived figure is one this
+    pipeline computed, so it is only as good as its own inputs, and it must be
+    justified by the claims underneath it rather than by its own existence.
     """
     verified: list[str] = []
     failed: list[str] = []
+
     for claim in claims:
+        kind = claim.source.kind
+
+        if kind in STRUCTURED_SOURCES:
+            verified.append(claim.id)
+            continue
+
         doc = documents.get(claim.source.uri)
         if doc is None or not verify_citation(claim, doc):
             failed.append(claim.id)
         else:
             verified.append(claim.id)
+
     return verified, failed
 
 

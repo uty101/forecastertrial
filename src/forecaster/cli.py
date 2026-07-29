@@ -1,8 +1,11 @@
 """CLI. One command per thing you do on the day.
 
+    forecast sources  --ticker NVDA              # smoke test before anything else
+    forecast agents                              # the roster, and what tier each runs on
     forecast run      --ticker NVDA --as-of 2026-08-16 --preset shrink
-    forecast backtest --quarters 200 --runs 5
-    forecast sources  --ticker NVDA          # smoke test before anything else
+    forecast cases    --out out/cases.json       # Block 1: build the firm-quarters
+    forecast backtest --runs 5                   # the gate
+    forecast fit      --out out/lambda.json      # replaces FITTED_BETA with measurement
 """
 
 from __future__ import annotations
@@ -18,10 +21,16 @@ from forecaster.config import settings
 from forecaster.data.cache import Cache
 from forecaster.data.loader import Loader
 from forecaster.data.sec_source import SECSource
+from forecaster.data.universe import UNIVERSE, profile
 from forecaster.data.yfinance_source import YFinanceSource
+from forecaster.eval import backtest as backtest_mod
+from forecaster.eval import cases as cases_mod
+from forecaster.eval import fit as fit_mod
 from forecaster.events import EventLog
-from forecaster.pipeline.a_acquire import acquire
-from forecaster.schemas import EventType, LambdaPreset
+from forecaster.llm.client import LLMClient
+from forecaster.llm.prompt import load_all
+from forecaster.pipeline import run as pipeline
+from forecaster.schemas import LambdaPreset
 
 app = typer.Typer(add_completion=False, help="Earnings forecasting agent")
 log = structlog.get_logger()
@@ -37,6 +46,17 @@ def build_loader(read_only: bool = False) -> Loader:
     return Loader(sources)
 
 
+def build_macro_source(read_only: bool = False):
+    if not settings.fred_api_key:
+        return None
+    from forecaster.data.fred_source import FREDSource
+
+    return FREDSource(settings.fred_api_key, Cache(settings.cache_dir, read_only))
+
+
+# --------------------------------------------------------------------------- #
+
+
 @app.command()
 def sources(ticker: str = "NVDA") -> None:
     """Smoke test every source from THIS machine. Run before anything else.
@@ -46,11 +66,79 @@ def sources(ticker: str = "NVDA") -> None:
     """
     loader = build_loader()
     today = date.today()
+
     consensus = loader.consensus(ticker, today)
-    typer.echo(f"consensus: {consensus}")
-    typer.echo(f"actuals:   {bool(loader.actuals(ticker, '2026Q1', today))}")
-    typer.echo(f"filings:   {bool(loader.filings(ticker, today, ['8-K', '10-Q']))}")
+    typer.echo(f"consensus:  {consensus}")
+    typer.echo(f"actuals:    {bool(loader.actuals(ticker, '2026Q1', today))}")
+
+    filings = loader.filings(ticker, today, ["8-K", "10-Q"])
+    typer.echo(f"filings:    {len(filings) if filings else 0}")
+
+    # The one most likely to be silently broken, and the one citation
+    # verification depends on entirely.
+    body = None
+    if filings:
+        for source in loader.sources:
+            fetch = getattr(source, "get_document", None)
+            if fetch:
+                body = fetch(filings[0].source.uri)
+                if body:
+                    break
+    typer.echo(f"doc text:   {len(body) if body else 0} chars")
+    if not body:
+        typer.secho(
+            "  ^ no document text. Every prose citation will fail verification "
+            "and every lens citing one will be dropped.",
+            fg=typer.colors.RED,
+        )
+
+    macro = build_macro_source()
+    typer.echo(f"macro:      {'FRED configured' if macro else 'FRED_API_KEY unset'}")
+    typer.echo(f"llm:        {'key set' if settings.anthropic_api_key else 'NO API KEY'}")
     typer.echo(json.dumps(loader.report(), indent=2, default=str))
+
+
+@app.command()
+def agents() -> None:
+    """The roster: every agent, the layer it sits in, and the tier it runs on.
+
+    Model tiering is a cost decision — cheap for extraction, mid for the lenses
+    and the advocate, one expensive call for the judge — and this prints it from
+    the prompts themselves rather than from a slide that can drift.
+    """
+    prompts = load_all()
+    tier_model = {
+        "cheap": settings.model_cheap,
+        "mid": settings.model_mid,
+        "deep": settings.model_deep,
+    }
+    layers = {
+        "extract_guidance": "B  structure",
+        "lens_guidance": "C  analyse",
+        "lens_drivers": "C  analyse",
+        "lens_margins": "C  analyse",
+        "lens_forensics": "C  analyse",
+        "lens_peer_read": "C  analyse",
+        "lens_macro": "C  analyse",
+        "champion": "D  challenge",
+        "judge": "E  judge",
+        "comparability": "V2 comparability",
+    }
+
+    typer.echo(f"{'agent':20} {'layer':18} {'tier':6} {'v':>3}  model")
+    typer.echo("-" * 86)
+    typer.echo(
+        f"{'mechanical':20} {'C  analyse':18} {'none':6} {'-':>3}  "
+        "pure code — cannot hallucinate"
+    )
+    for name in sorted(prompts, key=lambda n: (layers.get(n, "Z"), n)):
+        prompt = prompts[name]
+        typer.echo(
+            f"{name:20} {layers.get(name, '?'):18} {prompt.model_tier:6} "
+            f"{prompt.version:>3}  {tier_model[prompt.model_tier]}"
+        )
+    typer.echo("-" * 86)
+    typer.echo(f"{len(prompts) + 1} agents. Prepared companies: {len(UNIVERSE)}")
 
 
 @app.command()
@@ -59,44 +147,177 @@ def run(
     as_of: str = typer.Option(..., "--as-of"),
     period: str = "2026Q3",
     preset: LambdaPreset = LambdaPreset.SHRINK,
+    tiny_tilt: bool = typer.Option(False, help="pure win-rate metric: direction only"),
     from_cache: bool = typer.Option(False, help="fail rather than hit the network"),
-    seed: int = 0,
+    run_index: int = 0,
     out: Path = Path("out/results.json"),
 ) -> None:
-    """One forecast. Layers C-G are stubbed; A and B are live."""
+    """One forecast, A through G."""
     lock = date.fromisoformat(as_of)
     events = EventLog(settings.out_dir / "events.ndjson")
-    events.emit(EventType.RUN_START, payload={"ticker": ticker, "as_of": as_of})
+    cache = Cache(settings.cache_dir, read_only=from_cache)
 
-    loader = build_loader(read_only=from_cache)
-    acquired = acquire(ticker, period, lock, loader, events)
+    result = pipeline.forecast(
+        pipeline.RunConfig(
+            ticker=ticker,
+            period=period,
+            as_of=lock,
+            preset=preset,
+            tiny_tilt=tiny_tilt,
+            run_index=run_index,
+            sector=profile(ticker).sector,
+        ),
+        loader=build_loader(read_only=from_cache),
+        client=LLMClient(cache=cache, settings=settings),
+        events=events,
+    )
 
     payload = {
-        "ticker": ticker,
-        "period": period,
-        "as_of": as_of,
-        "preset": preset.value,
-        "seed": seed,
-        "n_claims": len(acquired.claims),
-        "consensus": acquired.consensus.model_dump(mode="json")
-        if acquired.consensus
-        else None,
-        "budgets": acquired.budgets,
-        "sources": loader.report(),
+        "forecast": result.forecast.model_dump(mode="json"),
+        "trace": result.trace,
     }
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(payload, indent=2, default=str, sort_keys=True))
-    events.emit(EventType.RUN_DONE, payload={"claims": len(acquired.claims)})
-    typer.echo(f"wrote {out} — {len(acquired.claims)} claims")
+
+    forecast = result.forecast
+    typer.echo(f"\n{ticker} {period}   as of {as_of}   preset={preset.value}")
+    typer.echo(f"  forecast   {forecast.eps_non_gaap:.4f}")
+    typer.echo(f"  consensus  {forecast.consensus.eps:.4f}")
+    typer.echo(f"  baseline   {forecast.baseline_eps:.4f}")
+    typer.echo(f"  lambda     {forecast.lambda_decision.value:.3f}")
+    typer.echo(f"  vs Street  {forecast.surprise_vs_consensus:+.2%}")
+    typer.echo(
+        f"  lenses     {len(forecast.lenses)} kept, "
+        f"{len(forecast.dropped_lenses)} dropped"
+    )
+    typer.echo(f"  cost       ${forecast.total_cost_usd:.4f}")
+    typer.echo(f"\nwrote {out}")
 
 
 @app.command()
-def backtest(quarters: int = 200, runs: int = 5) -> None:
-    """The gate. Everything is measured against the baseline this produces."""
-    typer.echo(
-        f"backtest over {quarters} firm-quarters, {runs} runs each — "
-        "wire the case builder in Block 1"
+def cases(
+    tickers: str = typer.Option("", help="comma-separated; defaults to the universe"),
+    quarters: int = 8,
+    out: Path = Path("out/cases.json"),
+) -> None:
+    """Block 1: build the firm-quarter cases everything else is measured against.
+
+    Nothing downstream means anything until this exists and `consensus × 1.02`
+    has been scored against it.
+    """
+    universe = [t.strip().upper() for t in tickers.split(",") if t.strip()] or list(
+        UNIVERSE
     )
+    built = cases_mod.build(universe, Cache(settings.cache_dir), quarters)
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        json.dumps(
+            {
+                "summary": built.summary(),
+                "cases": [
+                    {
+                        "ticker": c.ticker,
+                        "period": c.period,
+                        "as_of": c.as_of.isoformat(),
+                        "consensus_eps": c.consensus_eps,
+                        "actual_eps": c.actual_eps,
+                    }
+                    for c in built.cases
+                ],
+                "rejected": built.rejected,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    typer.echo(json.dumps(built.summary(), indent=2))
+    typer.echo(f"\nwrote {out}")
+
+
+@app.command()
+def backtest(
+    cases_file: Path = Path("out/cases.json"),
+    tilt: float = typer.Option(0.02, help="the baseline's flat tilt"),
+    runs: int = 1,
+) -> None:
+    """THE GATE. Score the baseline. Every later number is measured against this.
+
+    Deliberately scores `consensus` and `consensus × (1 + tilt)` only — no
+    pipeline, no model calls. If the baseline number does not exist first, a
+    pipeline result has nothing to be compared to and cannot be interpreted.
+    """
+    if not cases_file.exists():
+        typer.secho(
+            f"{cases_file} not found — run `forecast cases` first. "
+            "There is no point scoring a pipeline before the baseline exists.",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(1)
+
+    payload = json.loads(cases_file.read_text())
+    loaded = [
+        backtest_mod.Case(
+            ticker=row["ticker"],
+            period=row["period"],
+            as_of=date.fromisoformat(row["as_of"]),
+            consensus_eps=row["consensus_eps"],
+            actual_eps=row["actual_eps"],
+        )
+        for row in payload["cases"]
+    ]
+
+    result = backtest_mod.run(
+        loaded,
+        forecaster=lambda c: c.consensus_eps,
+        baseline_tilt=tilt,
+        runs_per_case=runs,
+    )
+    summary = result.summary()
+    typer.echo(json.dumps(summary, indent=2))
+    typer.echo(
+        f"\nTHE NUMBER TO BEAT: consensus x {1 + tilt:.2f} scores "
+        f"MAE {summary['mae_baseline']:.4f} on n={summary['n']}."
+    )
+    typer.echo(f"Naive consensus scores MAE {summary['mae_consensus']:.4f}.")
+    if summary["underpowered"]:
+        typer.secho(f"\n{summary['power_note']}", fg=typer.colors.YELLOW)
+
+
+@app.command()
+def fit(
+    observations_file: Path = Path("out/observations.json"),
+    out: Path = Path("out/lambda.json"),
+) -> None:
+    """Fit β on the backtest and replace the FITTED_BETA placeholders.
+
+    Until this runs, the thesis is asserted rather than measured — which is
+    precisely the distinction this repo is built around.
+    """
+    if not observations_file.exists():
+        typer.secho(
+            f"{observations_file} not found. Produce it by running the pipeline "
+            "across the case set and recording (consensus, own, actual) per "
+            "firm-quarter. Fitting β on anything less is guessing with a "
+            "regression attached.",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(1)
+
+    rows = json.loads(observations_file.read_text())
+    observations = [
+        fit_mod.Observation(
+            ticker=r["ticker"], period=r["period"], consensus=r["consensus"],
+            own=r["own"], actual=r["actual"],
+        )
+        for r in rows
+    ]
+    report = fit_mod.report(fit_mod.fit_by_regime(observations))
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(report, indent=2, sort_keys=True))
+    typer.echo(json.dumps(report, indent=2))
+    typer.echo(f"\nwrote {out} — copy these into f_lambda.FITTED_BETA")
 
 
 if __name__ == "__main__":

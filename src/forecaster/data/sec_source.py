@@ -257,6 +257,41 @@ class SECSource:
                 break
         return claims or None
 
+    def get_document(self, uri: str) -> str | None:
+        """Filing body text, stripped to plain prose.
+
+        This is what makes citation verification possible: `verify_citations`
+        string-matches every quote against its source document, so a filing
+        acquired as a bare URL means every quote from it fails and every lens
+        citing it is dropped. Cached forever — a filed document never changes.
+        """
+        if not uri.startswith("https://www.sec.gov/"):
+            return None
+
+        key = self.cache.key("sec_doc", date(2000, 1, 1), uri=uri)
+
+        def produce() -> str | None:
+            import httpx
+
+            if self._client is None:
+                self._client = httpx.Client(
+                    headers={
+                        "User-Agent": self.identity,
+                        "Accept-Encoding": "gzip, deflate",
+                    },
+                    timeout=30.0,
+                )
+            response = self._client.get(uri)
+            if response.status_code != 200:
+                return None
+            return _strip_html(response.text)
+
+        try:
+            return self.cache.fetch(key, produce)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("sec_document_failed", uri=uri, error=str(exc))
+            return None
+
     def get_transcript(self, ticker: str, as_of: date):
         return None  # Motley Fool / Kaggle dump
 
@@ -265,6 +300,27 @@ class SECSource:
 
     def get_macro(self, series_ids: list[str], as_of: date):
         return None  # FRED
+
+
+def _strip_html(html: str) -> str:
+    """HTML to plain text, preserving the sentences quotes are matched against.
+
+    Deliberately conservative: entities are decoded and tags removed, but words
+    and punctuation are left exactly as filed. `_normalise` in the reconciler
+    handles curly quotes and non-breaking spaces at match time, so anything
+    "tidied" here would be tidied twice and could break an otherwise correct
+    quote.
+    """
+    import html as html_mod
+    import re
+
+    # Script and style bodies are not prose and would pollute the match space.
+    text = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", html)
+    # Block-level tags become spaces so words either side don't fuse together.
+    text = re.sub(r"(?i)<(br|/p|/div|/tr|/td|/h[1-6])[^>]*>", " ", text)
+    text = re.sub(r"(?s)<[^>]+>", "", text)
+    text = html_mod.unescape(text)
+    return re.sub(r"[ \t\r\f\v]+", " ", text).strip()
 
 
 BASIS = Basis.GAAP  # everything this module returns
