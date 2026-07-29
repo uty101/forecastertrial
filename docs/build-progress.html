@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- Self-refreshes so an open tab tracks the build without being touched.
+     Data is inlined rather than fetched: a file:// page cannot fetch a sibling
+     JSON, and this needs to work in VS Code's Simple Browser as well as Live
+     Preview. -->
+<meta http-equiv="refresh" content="8">
+<title>Build progress — forecaster</title>
+<style>
+  :root{
+    --done-f:#dcfce7; --done-s:#16a34a;
+    --now-f:#fef3c7;  --now-s:#d97706;
+    --todo-f:#f8fafc; --todo-s:#cbd5e1;
+    --ink:#0f172a; --ink2:#475569; --ink3:#94a3b8; --line:#e2e8f0;
+    --surface:#fff; --canvas:#fbfcfd;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --done-f:#052e16; --done-s:#22c55e;
+      --now-f:#422006;  --now-s:#f59e0b;
+      --todo-f:#0f172a; --todo-s:#334155;
+      --ink:#e2e8f0; --ink2:#94a3b8; --ink3:#64748b; --line:#1e293b;
+      --surface:#0f172a; --canvas:#020617;
+    }
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--canvas);color:var(--ink);
+    font:14px/1.55 ui-sans-serif,-apple-system,"Segoe UI",Inter,system-ui,sans-serif;
+    font-variant-numeric:tabular-nums}
+  .wrap{max-width:1500px;margin:0 auto;padding:28px 20px 60px}
+
+  header{border-bottom:1px solid var(--line);padding-bottom:18px}
+  h1{font-size:20px;font-weight:650;letter-spacing:-.02em}
+  .meta{color:var(--ink2);font-size:13px;margin-top:4px}
+  .live{display:inline-flex;align-items:center;gap:6px;font-size:12px;
+    color:var(--now-s);font-weight:600;margin-left:10px}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--now-s);
+    animation:blink 1.4s ease-in-out infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+
+  .bar{display:flex;height:10px;border-radius:5px;overflow:hidden;
+    margin:18px 0 8px;background:var(--todo-f);border:1px solid var(--line)}
+  .bar i{display:block;transition:width .4s ease}
+  .barkey{display:flex;flex-wrap:wrap;gap:18px;font-size:12.5px;color:var(--ink2)}
+  .barkey b{color:var(--ink);font-weight:650}
+
+  h2{font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;
+     color:var(--ink3);margin:34px 0 4px}
+  .h2sub{color:var(--ink2);font-size:13px;margin-bottom:16px}
+
+  svg{width:100%;height:auto;display:block}
+  .bx{stroke-width:1.6}
+  .t{font-size:12px;font-weight:650;fill:var(--ink)}
+  .s{font-size:9.5px;fill:var(--ink2)}
+  .ph{font-size:9.5px;font-weight:700;fill:var(--ink3);letter-spacing:.12em}
+  .ln{stroke:var(--ink3);stroke-width:1.2;fill:none;opacity:.45}
+
+  .board{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));
+    gap:14px;margin-top:8px}
+  .col{background:var(--surface);border:1px solid var(--line);
+    border-radius:11px;overflow:hidden}
+  .col.now{border-color:var(--now-s);box-shadow:0 0 0 3px var(--now-f)}
+  .colhead{padding:12px 15px 10px;border-bottom:1px solid var(--line)}
+  .colhead h3{font-size:13px;font-weight:650}
+  .tag{display:inline-block;margin-top:6px;font-size:10px;letter-spacing:.08em;
+    text-transform:uppercase;padding:2px 8px;border-radius:20px;font-weight:650}
+  .tag.done{background:var(--done-f);color:var(--done-s)}
+  .tag.now{background:var(--now-f);color:var(--now-s)}
+  .tag.next{background:var(--todo-f);color:var(--ink2);border:1px solid var(--line)}
+  ul{list-style:none;padding:8px 6px 12px}
+  li{display:flex;gap:9px;padding:5px 9px;font-size:12.8px;line-height:1.45;
+    color:var(--ink2);border-radius:6px}
+  li .m{flex:none;width:13px;font-weight:700;font-size:12px}
+  li.d .m{color:var(--done-s)} li.d{color:var(--ink3)}
+  li.n .m{color:var(--now-s)} li.n{background:var(--now-f);color:var(--ink);font-weight:560}
+  li.t .m{color:var(--todo-s)}
+
+  .note{margin-top:26px;padding:14px 17px;background:var(--surface);
+    border:1px solid var(--line);border-left:3px solid var(--now-s);
+    border-radius:9px;font-size:13px;color:var(--ink2);line-height:1.6}
+  .note b{color:var(--ink)}
+  code{font-family:ui-monospace,"Cascadia Mono",Menlo,monospace;font-size:12px;
+    background:var(--todo-f);padding:1px 5px;border-radius:4px}
+  .legend{display:flex;flex-wrap:wrap;gap:18px;margin-top:14px;padding:11px 15px;
+    background:var(--surface);border:1px solid var(--line);border-radius:10px;
+    font-size:12.5px;color:var(--ink2)}
+  .sw{display:inline-block;width:19px;height:11px;border-radius:3px;
+    border-width:1.5px;border-style:solid;margin-right:7px;vertical-align:-1px}
+</style>
+</head>
+<body><div class="wrap">
+
+<header>
+  <h1>Build progress — forecaster
+    <span class="live"><span class="dot"></span>refreshes every 8s</span>
+  </h1>
+  <p class="meta">Agents vs Wall Street · Sunday 16 August · this page tracks what
+    Claude has built, not the pipeline's own runtime view</p>
+</header>
+
+<div class="bar">
+  <i style="width:75%;background:var(--done-s)"></i>
+  <i style="width:8%;background:var(--now-s)"></i>
+</div>
+<div class="barkey">
+  <span><b>75%</b> built &amp; tested</span>
+  <span><b>8%</b> in progress</span>
+  <span><b>17%</b> remaining</span>
+  <span style="margin-left:auto"><b>90</b> tests passing · <b>11</b> agents · <b>~7,900</b> lines</span>
+</div>
+
+<h2>The pipeline</h2>
+<p class="h2sub">Green is built and tested. Amber is in progress. Grey dashed is
+  not started.</p>
+
+<svg viewBox="0 0 1560 470" xmlns="http://www.w3.org/2000/svg"
+     font-family="ui-sans-serif,-apple-system,Segoe UI,Inter,system-ui,sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5"
+            markerHeight="5" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/></marker>
+  </defs>
+
+  <text class="ph" x="214" y="34" text-anchor="middle">1 · ACQUIRE</text>
+  <text class="ph" x="384" y="34" text-anchor="middle">2 · STRUCTURE</text>
+  <text class="ph" x="561" y="34" text-anchor="middle">3 · ANALYSE</text>
+  <text class="ph" x="714" y="34" text-anchor="middle">CHECK</text>
+  <text class="ph" x="857" y="34" text-anchor="middle">4 · CHALLENGE</text>
+  <text class="ph" x="1013" y="34" text-anchor="middle">5 · JUDGE</text>
+  <text class="ph" x="1167" y="34" text-anchor="middle">6 · POSITION</text>
+  <text class="ph" x="1400" y="34" text-anchor="middle">OUTPUT</text>
+
+  <!-- ACQUIRE -->
+  <rect class="bx" x="150" y="60"  width="128" height="44" rx="8" fill="var(--done-f)" stroke="var(--done-s)"/>
+  <text class="t" x="214" y="79" text-anchor="middle">A1 Numbers</text>
+  <text class="s" x="214" y="93" text-anchor="middle">XBRL · consensus</text>
+
+  <rect class="bx" x="150" y="112" width="128" height="44" rx="8" fill="var(--done-f)" stroke="var(--done-s)"/>
+  <text class="t" x="214" y="131" text-anchor="middle">A2 Filings</text>
+  <text class="s" x="214" y="145" text-anchor="middle">+ body text</text>
+
+  <rect class="bx" x="150" y="164" width="128" height="44" rx="8" fill="var(--done-f)" stroke="var(--done-s)"/>
+  <text class="t" x="214" y="183" text-anchor="middle">A3 Industry</text>
+  <text class="s" x="214" y="197" text-anchor="middle">peers · chain</text>
+
+  <rect class="bx" x="150" y="216" width="128" height="44" rx="8" fill="var(--done-f)" stroke="var(--done-s)"/>
+  <text class="t" x="214" y="235" text-anchor="middle">A4 Macro</text>
+  <text class="s" x="214" y="249" text-anchor="middle">FRED, point-in-time</text>
+
+  <path class="ln" d="M278,160 L318,160" marker-end="url(#a)"/>
+
+  <!-- STRUCTURE -->
+  <rect class="bx" x="318" y="132" width="132" height="56" rx="8" fill="var(--done-f)" stroke="var(--done-s)"/>
+  <text class="t" x="384" y="155" text-anchor="middle">B Evidence store</text>
+  <text class="s" x="384" y="170" text-anchor="middle">claims + quotes</text>
+
+  <path class="ln" d="M450,160 L490,160" marker-end="url(#a)"/>
+
+  <!-- LENSES -->
+  <rect class="bx" x="490" y="60"  width="142" height="40" rx="8" fill="var(--done-f)" stroke="var(--done-s)"/>
+  <text class="t" x="561" y="84" text-anchor="middle">Mechanical (no LLM)</text>
+  <rect class="bx" x="490" y="104" width="142" height="40" rx="8" fill="var(--done-f)" stroke="var(--done-s)"/>
+  <text class="t" x="561" y="128" text-anchor="middle">Guidance</text>
+  <rect class="bx" x="490" y="148" width="142" height="40" rx="8" fill="var(--done-f)" stroke="var(--done-s)"/>
+  <text class="t" x="561" y="172" text-anchor="middle">Drivers</text>
+  <rect class="bx" x="490" y="192" width="142" height="40" rx="8" fill="var(--done-f)" stroke="var(--done-s)"/>
+  <text class="t" x="561" y="216" text-anchor="middle">Margins</text>
+  <rect class="bx" x="490" y="236" width="142" height="40" rx="8" fill="var(--done-f)" stroke="var(--done-s)"/>
+  <text class="t" x="561" y="260" text-anchor="middle">Forensics</text>
+  <rect class="bx" x="490" y="280" width="142" height="40" rx="8" fill="var(--done-f)" stroke="var(--done-s)"/>
+  <text class="t" x="561" y="304" text-anchor="middle">Peer read</text>
+  <rect class="bx" x="490" y="324" width="142" height="40" rx="8" fill="var(--done-f)" stroke="var(--done-s)"/>
+  <text class="t" x="561" y="348" text-anchor="middle">Macro</text>
+  <text class="s" x="561" y="384" text-anchor="middle">blind to each other</text>
+
+  <path class="ln" d="M632,212 L668,212" marker-end="url(#a)"/>
+
+  <!-- RECONCILE -->
+  <rect class="bx" x="668" y="60" width="92" height="304" rx="9" fill="var(--done-f)" stroke="var(--done-s)"/>
+  <text class="t" x="714" y="206" text-anchor="middle">V1</text>
+  <text class="s" x="714" y="222" text-anchor="middle">arithmetic</text>
+  <text class="s" x="714" y="236" text-anchor="middle">+ citations</text>
+
+  <path class="ln" d="M760,212 L796,212" marker-end="url(#a)"/>
+
+  <!-- CHAMPION -->
+  <rect class="bx" x="796" y="60" width="122" height="304" rx="9" fill="var(--done-f)" stroke="var(--done-s)"/>
+  <text class="t" x="857" y="200" text-anchor="middle">D Champion</text>
+  <text class="s" x="857" y="218" text-anchor="middle">argue, then</text>
+  <text class="s" x="857" y="232" text-anchor="middle">argue against</text>
+
+  <path class="ln" d="M918,212 L954,212" marker-end="url(#a)"/>
+
+  <!-- JUDGE -->
+  <rect class="bx" x="954" y="168" width="118" height="88" rx="9" fill="var(--done-f)" stroke="var(--done-s)"/>
+  <text class="t" x="1013" y="200" text-anchor="middle">E Judge</text>
+  <text class="s" x="1013" y="218" text-anchor="middle">materiality,</text>
+  <text class="s" x="1013" y="232" text-anchor="middle">never votes</text>
+
+  <path class="ln" d="M1072,212 L1108,212" marker-end="url(#a)"/>
+
+  <!-- LAMBDA + V2 -->
+  <rect class="bx" x="1108" y="88" width="118" height="52" rx="8" fill="var(--done-f)" stroke="var(--done-s)"/>
+  <text class="t" x="1167" y="110" text-anchor="middle">Consensus</text>
+  <text class="s" x="1167" y="125" text-anchor="middle">coverage · dispersion</text>
+  <path class="ln" d="M1167,140 L1167,168" marker-end="url(#a)"/>
+
+  <rect class="bx" x="1108" y="168" width="118" height="88" rx="9" fill="var(--done-f)" stroke="var(--done-s)"/>
+  <text class="t" x="1167" y="200" text-anchor="middle">F λ</text>
+  <text class="s" x="1167" y="218" text-anchor="middle">logic ✓</text>
+  <text class="s" x="1167" y="232" text-anchor="middle" fill="#d97706">β unfitted</text>
+
+  <rect class="bx" x="1108" y="284" width="118" height="56" rx="8" fill="var(--done-f)" stroke="var(--done-s)"/>
+  <text class="t" x="1167" y="306" text-anchor="middle">V2 Comparability</text>
+  <text class="s" x="1167" y="321" text-anchor="middle">fires → λ collapses</text>
+  <path class="ln" d="M1167,284 L1167,256" marker-end="url(#a)"/>
+
+  <path class="ln" d="M1226,212 L1262,212" marker-end="url(#a)"/>
+
+  <!-- V3 + OUTPUT -->
+  <rect class="bx" x="1262" y="176" width="104" height="72" rx="9" fill="var(--done-f)" stroke="var(--done-s)"/>
+  <text class="t" x="1314" y="206" text-anchor="middle">V3 Calibrate</text>
+  <text class="s" x="1314" y="222" text-anchor="middle">own residuals</text>
+
+  <path class="ln" d="M1366,212 L1400,212" marker-end="url(#a)"/>
+  <rect class="bx" x="1400" y="176" width="124" height="72" rx="9" fill="var(--done-f)" stroke="var(--done-s)"/>
+  <text class="t" x="1462" y="206" text-anchor="middle">G Forecast</text>
+  <text class="s" x="1462" y="222" text-anchor="middle">a distribution</text>
+
+  <!-- UI band -->
+  <rect class="bx" x="150" y="404" width="1374" height="52" rx="10"
+        fill="var(--now-f)" stroke="var(--now-s)" stroke-dasharray="6 4"/>
+  <text class="t" x="837" y="426" text-anchor="middle">UI — Next.js static export, 5 screens, replay mode</text>
+  <text class="s" x="837" y="443" text-anchor="middle">live run ✓ · forecast ✓ · reasoning ✓ · model ▸ · method ▸ — IN PROGRESS</text>
+</svg>
+
+<div class="legend">
+  <span><span class="sw" style="background:var(--done-f);border-color:var(--done-s)"></span>built &amp; tested</span>
+  <span><span class="sw" style="background:var(--now-f);border-color:var(--now-s)"></span>in progress</span>
+  <span><span class="sw" style="background:var(--todo-f);border-color:var(--todo-s);border-style:dashed"></span>not started</span>
+  <span style="margin-left:auto">every stage emits events — the pipeline's own live view is the UI's home screen</span>
+</div>
+
+<h2>Build board</h2>
+<p class="h2sub">What has landed this session, in order.</p>
+
+<div class="board">
+
+  <div class="col">
+    <div class="colhead"><h3>Foundations</h3><span class="tag done">complete</span></div>
+    <ul>
+      <li class="d"><span class="m">✓</span> git init + timestamped commits</li>
+      <li class="d"><span class="m">✓</span> Python pinned to 3.12, uv.lock</li>
+      <li class="d"><span class="m">✓</span> <code>make types</code> emits real TS interfaces</li>
+      <li class="d"><span class="m">✓</span> golden diff ignores <code>elapsed_s</code></li>
+      <li class="d"><span class="m">✓</span> pre-existing ruff failures fixed</li>
+    </ul>
+  </div>
+
+  <div class="col">
+    <div class="colhead"><h3>LLM layer</h3><span class="tag done">complete</span></div>
+    <ul>
+      <li class="d"><span class="m">✓</span> schema-forced client, fail closed</li>
+      <li class="d"><span class="m">✓</span> content-hash cache on prompt fingerprint</li>
+      <li class="d"><span class="m">✓</span> hard cost ceiling, checked before the call</li>
+      <li class="d"><span class="m">✓</span> corpus behind a cache breakpoint</li>
+      <li class="d"><span class="m">✓</span> 10 versioned prompts + loader</li>
+    </ul>
+  </div>
+
+  <div class="col">
+    <div class="colhead"><h3>The 11 agents</h3><span class="tag done">complete</span></div>
+    <ul>
+      <li class="d"><span class="m">✓</span> Mechanical — pure code</li>
+      <li class="d"><span class="m">✓</span> Guidance · Drivers · Margins</li>
+      <li class="d"><span class="m">✓</span> Forensics · Peer read · Macro</li>
+      <li class="d"><span class="m">✓</span> Champion ×7, Judge, Comparability</li>
+      <li class="d"><span class="m">✓</span> Guidance extractor</li>
+      <li class="d"><span class="m">✓</span> blindness enforced by a test</li>
+    </ul>
+  </div>
+
+  <div class="col">
+    <div class="colhead"><h3>Data &amp; model</h3><span class="tag done">complete</span></div>
+    <ul>
+      <li class="d"><span class="m">✓</span> A1–A4 acquirers wired</li>
+      <li class="d"><span class="m">✓</span> universe: peers, chain, drivers</li>
+      <li class="d"><span class="m">✓</span> FRED, point-in-time via ALFRED</li>
+      <li class="d"><span class="m">✓</span> sponsor adapter template</li>
+      <li class="d"><span class="m">✓</span> 3-statement model, balance checked</li>
+      <li class="d"><span class="m">✓</span> GAAP↔non-GAAP bridge</li>
+    </ul>
+  </div>
+
+  <div class="col">
+    <div class="colhead"><h3>Orchestration &amp; eval</h3><span class="tag done">complete</span></div>
+    <ul>
+      <li class="d"><span class="m">✓</span> A→G orchestrator</li>
+      <li class="d"><span class="m">✓</span> CLI: run · cases · backtest · fit · agents</li>
+      <li class="d"><span class="m">✓</span> point-in-time case builder</li>
+      <li class="d"><span class="m">✓</span> constrained λ regression</li>
+      <li class="d"><span class="m">✓</span> landing distribution + shrinkage</li>
+    </ul>
+  </div>
+
+  <div class="col now">
+    <div class="colhead"><h3>UI</h3><span class="tag now">in progress</span></div>
+    <ul>
+      <li class="d"><span class="m">✓</span> Next.js static export, design system</li>
+      <li class="d"><span class="m">✓</span> live architecture view (hand SVG)</li>
+      <li class="d"><span class="m">✓</span> forecast + distribution</li>
+      <li class="d"><span class="m">✓</span> reasoning trace, failed citations red</li>
+      <li class="n"><span class="m">▸</span> model view</li>
+      <li class="n"><span class="m">▸</span> method / eval screen</li>
+      <li class="t"><span class="m">□</span> replay mode fixtures</li>
+    </ul>
+  </div>
+
+  <div class="col">
+    <div class="colhead"><h3>Production</h3><span class="tag next">next</span></div>
+    <ul>
+      <li class="t"><span class="m">□</span> golden file + <code>make verify</code> green</li>
+      <li class="t"><span class="m">□</span> pin Dockerfile digest (<code>PINME</code>)</li>
+      <li class="t"><span class="m">□</span> CI green end to end</li>
+      <li class="t"><span class="m">□</span> README rewrite</li>
+    </ul>
+  </div>
+
+</div>
+
+<div class="note">
+  <b>Two bugs found while wiring, both of which would have shown up as
+  "everything is broken" rather than as themselves.</b>
+  <code>verify_citations</code> failed every XBRL claim — a structured claim's
+  quote is a rendered fact with no prose document to match — which dropped every
+  lens citing a financial figure and aborted every run. And A2 never fetched
+  filing body text, so prose citations had nothing to verify against. Both fixed.
+</div>
+
+<div class="note" style="border-left-color:#0891b2">
+  <b>Still asserted rather than measured:</b> <code>FITTED_BETA</code> holds
+  three placeholder numbers. The regression that replaces them is built
+  (<code>forecast fit</code>) but needs the ~200 firm-quarter case set to run
+  against — that is Block 1, and it needs a live network call from your machine.
+</div>
+
+</div></body>
+</html>

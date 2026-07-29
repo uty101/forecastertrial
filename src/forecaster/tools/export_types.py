@@ -143,7 +143,14 @@ def build() -> str:
     defs: dict[str, dict] = {}
     roots: list[tuple[str, dict]] = []
     for model in MODELS:
-        schema = model.model_json_schema(ref_template="#/$defs/{model}")
+        # SERIALIZATION mode, not the default validation mode. The UI reads what
+        # `model_dump_json` wrote, and the two schemas differ: computed fields
+        # (`surprise_vs_consensus`) exist only in the serialised output, so
+        # generating from the validation schema produces types that are missing
+        # fields the JSON actually contains.
+        schema = model.model_json_schema(
+            ref_template="#/$defs/{model}", mode="serialization"
+        )
         defs.update(schema.pop("$defs", {}))
         roots.append((model.__name__, schema))
 

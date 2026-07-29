@@ -15,7 +15,7 @@ from datetime import date
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 # --------------------------------------------------------------------------- #
 # primitives
@@ -327,9 +327,17 @@ class Forecast(BaseModel):
     total_output_tokens: int = 0
     wall_clock_ms: int = 0
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def surprise_vs_consensus(self) -> float:
-        """Our deviation from the Street, as a fraction."""
+        """Our deviation from the Street, as a fraction.
+
+        A computed field rather than a plain property so it is serialised into
+        `out/results.json` and appears in the generated TypeScript. A bare
+        `@property` exists only in Python, which means the UI would have to
+        recompute it — and a number recomputed in two places is a number that
+        eventually disagrees with itself.
+        """
         if self.consensus.eps == 0:
             return 0.0
         return (self.eps_non_gaap - self.consensus.eps) / abs(self.consensus.eps)

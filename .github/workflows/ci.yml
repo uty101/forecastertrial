@@ -1,13 +1,46 @@
 name: ci
 on: [push, pull_request]
+
 jobs:
-  test:
+  python:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
       - run: uv sync --frozen
       - run: uv run ruff check .
       - run: uv run pytest -q
-      # Determinism: same inputs, byte-identical output, every commit.
-      - run: make verify
+
+      # Determinism: same inputs, byte-identical output, every commit. This is
+      # the single command that demonstrates reproducibility, point-in-time
+      # correctness and test discipline at once — a better answer to "is this
+      # production-ready?" than any diagram.
+      - name: make verify
+        run: |
+          uv run python -m forecaster.tools.make_fixture --out out
+          uv run python -m forecaster.tools.diff_golden \
+            out/results.json tests/golden/fixture.json
+
+      # The generated types must match the schemas they were generated from. If
+      # this diff is non-empty someone changed schemas.py without running
+      # `make types`, and the UI is compiling against a stale contract.
+      - name: types are in sync
+        run: |
+          uv run python -m forecaster.tools.export_types > /tmp/types.ts
+          diff -u ui/lib/types.ts /tmp/types.ts
+
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: npm ci
+        working-directory: ui
+      - run: npm run build
+        working-directory: ui

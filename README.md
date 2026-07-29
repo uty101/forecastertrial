@@ -20,66 +20,102 @@ So this system reproduces the analysis and strips the incentives, then adds the 
 
 > **Where is consensus structurally weak, and how far is it worth deviating?**
 
+`forecast = consensus + λ · (own_estimate − consensus)`
+
 Everything upstream of `f_lambda` produces an estimate. λ decides how much to trust it against sixty-one analysts with segment-level models. That separation is the point.
+
+**The corollary that matters:** shrinking hard to consensus on a well-covered mega-cap is the *correct* answer, not a failure to have a view.
 
 ---
 
 ## Quick start
 
 ```bash
-make setup
-cp .env.example .env          # ANTHROPIC_API_KEY, SEC_IDENTITY
-make test
+make setup                    # uv sync + npm install
+cp .env.example .env          # ANTHROPIC_API_KEY, SEC_IDENTITY, FRED_API_KEY
+make test                     # pytest + ruff
+
+uv run forecast sources --ticker NVDA    # smoke test every source FIRST
+uv run forecast agents                   # the roster, printed from the prompts
+
+make fixture && make serve    # the UI on a labelled synthetic run → :3000
 make run TICKER=NVDA ASOF=2026-08-16
-make ui                       # http://localhost:3000
 ```
 
 **Determinism:**
 
 ```bash
-make verify    # fixed quarter, from cache, seed 0, diffed against a golden file
+make verify    # fixed inputs, byte-identical output, diffed against a golden file
 ```
 
-Same command runs in CI on every commit. It demonstrates reproducibility, point-in-time correctness and test discipline at once — which matters because OpenStocks' verified tier means *they* execute your agent, in their environment.
+Same command runs in CI on every commit, alongside a check that `ui/lib/types.ts` still matches the pydantic schemas it was generated from. It demonstrates reproducibility, point-in-time correctness and test discipline at once — which matters because OpenStocks' verified tier means *they* execute your agent, in their environment.
 
 ---
 
 ## Architecture
 
 ```
-A  ACQUIRE     numbers · filings · industry · macro      parallel, hard budgets
-B  STRUCTURE   3-statement model · evidence store        deterministic
-C  ANALYSE     7 lenses, blind to each other             parallel, shared cached prefix
-V1 RECONCILE   arithmetic + citation verification        fail → drop the lens
-D  CHALLENGE   argue each case, then argue against it    ×7 parallel
-E  JUDGE       impact-weighted, never vote-weighted      one expensive call → a range
-V2 COMPARABLE  M&A · accounting change · 53rd week       fires → λ collapses
+A  ACQUIRE     numbers · filings+text · industry · macro   parallel, hard budgets
+B  STRUCTURE   3-statement model · evidence store          deterministic
+C  ANALYSE     7 lenses, blind to each other               parallel, shared cached prefix
+V1 RECONCILE   arithmetic + citation verification          fail → drop the lens
+D  CHALLENGE   argue each case, then argue against it      ×7 parallel
+E  JUDGE       impact-weighted, never vote-weighted        one expensive call → a range
+V2 COMPARABLE  M&A · accounting change · 53rd week         fires → λ collapses
 F  POSITION    λ vs consensus, fitted and conditioned
 V3 CALIBRATE   bootstrap our own backtest residuals
 G  OUTPUT      forecast + model + trace
 ```
 
+### The eleven agents
+
+`uv run forecast agents` prints this from the prompt files themselves, so it cannot drift from what actually runs.
+
+| Agent | Layer | Tier | What makes it different |
+|---|---|---|---|
+| **Mechanical** | C | **no model** | FX, share count, net interest, calendar. Pure arithmetic that moves *after* consensus is set. Cannot hallucinate. |
+| **Guidance** | C | mid | The guide, plus where this company historically lands *inside its own range*. Everyone reads the first; almost nobody builds the second. |
+| **Drivers** | C | mid | Units × ASP, subs × ARPU, backlog conversion. Forecasts the drivers and multiplies, rather than extrapolating revenue. |
+| **Margins** | C | mid | Revenue → EPS. Mix is the argument; a margin model that ignores mix is wrong in the same direction every quarter. |
+| **Forensics** | C | mid | Reads as an auditor. Accruals vs cash, DSO, and **changes in the non-GAAP exclusion mix** — which moves what the number *means*. |
+| **Peer read** | C | mid | Who already reported this cycle, and the specific transmission mechanism. Estimates are sticky; that gap is knowable now. |
+| **Macro** | C | mid | Sector series against what estimates appear to assume. A Fed paper puts that gap at ~50% of current-quarter analyst error. |
+| **Champion** ×7 | D | mid | Argues each case properly, then argues against it — before anything is compared. |
+| **Judge** | E | **deep** | One expensive call. Weighs by materiality, never by vote count. Outputs a distribution. |
+| **Comparability** | V2 | cheap | Is this quarter comparable at all? When it fires, λ collapses. |
+| **Guidance extractor** | B | cheap | 8-K EX-99.1 → structured guide, with every quote verified against the filing. |
+
 Three choices carry the design:
 
-**Lenses are blind to each other.** Diversity is the point. Let them see each other's work and they converge — and converging is how you accidentally rebuild consensus, which scores zero.
+**Lenses are blind to each other.** Diversity is the point. Let them see each other's work and they converge — and converging is how you accidentally rebuild consensus, which scores zero. `run_lens` has no parameter through which one lens could reach another, and [a test asserts it stays that way](tests/test_llm_layer.py).
 
-**The judge weighs by materiality, never by vote count.** Six lenses agreeing on a weak signal loses to one carrying the company's own guidance and a verbatim quote.
+**The judge weighs by materiality, never by vote count.** Six lenses agreeing on a weak signal loses to one carrying the company's own guidance and a verbatim quote. There is deliberately no averaging, plurality or majority logic anywhere in aggregation — lenses read overlapping documents, so their errors are correlated and five being wrong together is about as likely as one.
 
-**Champion development runs before any comparison.** Each lens's case is argued properly *and argued against* before anything is ranked. Comparing raw findings and taking the plurality is a known failure mode.
+**Champion development runs before any comparison.** Comparing raw findings and taking the plurality is a known failure mode; it rewards the finding that is easiest to reach, not the one that matters most.
 
 ---
 
 ## No number without a source
 
-`Claim` cannot be constructed without a `Source` and a `verbatim_quote`, and `v1_reconcile.verify_citations` string-matches every quote against its document. Model cells refuse an input with no claim.
+`Claim` cannot be constructed without a `Source` and a `verbatim_quote`, and model cells refuse an input with neither a claim nor an explicit note. So *"we don't invent figures"* is a validation error, not a code-review comment.
 
-So *"we don't invent figures"* is a validation error, not a code-review comment — and the UI gets clickable citations for free. Failed citations are shown in red, not hidden.
+Verification splits by source kind, which is the part that is easy to get wrong:
+
+- **Prose sources** (8-K, 10-Q, 10-K, transcripts) must string-match their document. A quote assembled from two sentences reads perfectly and is not what the company said.
+- **Structured sources** (XBRL, sponsor feed, FRED) are verified by construction — the "quote" is the tagged fact, rendered by the adapter from a typed response. A model can only cite ids already in the store, so the *value* came from the adapter, never from the model.
+
+Failed citations are shown in red in the UI, not hidden. "We verify every citation" only means something if the failures are visible.
 
 ---
 
 ## Point-in-time
 
-Every `DataSource` method takes `as_of` and must not return anything filed after it. `assert_point_in_time` raises loudly, and `tests/test_point_in_time.py` deliberately tries to leak — including the subtle case, a *restatement* of a historical period published after the lock date.
+Every `DataSource` method takes `as_of` and must not return anything filed after it. `assert_point_in_time` raises loudly, and [tests/test_point_in_time.py](tests/test_point_in_time.py) deliberately tries to leak — including the subtle case, a *restatement* of a historical period published after the lock date.
+
+Two places this is easy to get wrong and is handled:
+
+- **Consensus.** `yfinance.earnings_estimate` is consensus *as of now*; using it for a historical case is look-ahead bias. `earnings_history.epsEstimate` is consensus *as it stood at that quarter's report date* — the bar the company was actually scored against. That is the column the case builder uses.
+- **Macro.** FRED series are revised for months. Every request sets `realtime_start` from `as_of`, so the Macro lens sees the numbers that existed at the time rather than the restated ones.
 
 A backtest that cannot fail this way is not enforcing anything, and its numbers mean nothing.
 
@@ -97,7 +133,23 @@ The metric isn't known until the morning of the event. The judge outputs a **dis
 
 Plus `--tiny-tilt` for a pure win-rate metric, where matching consensus scores exactly zero and direction matters but magnitude doesn't.
 
-Both `eps_gaap` and `eps_non_gaap` are always carried, with the bridge between them as an explicit cited object — consensus is non-GAAP, XBRL is GAAP, and the median DJIA gap was 31% in one recent quarter.
+Both `eps_gaap` and `eps_non_gaap` are carried — consensus is non-GAAP, XBRL is GAAP, and the median DJIA gap was 31% in one recent quarter. The bridge is an explicit cited object with a `verify()` that refuses to tie if an item is missing; there is no default ratio, because assuming the sector median is how a forecast ends up confidently 31% wrong.
+
+---
+
+## The UI
+
+Five screens, static export, no backend. `make serve`.
+
+| Route | What it is |
+|---|---|
+| `/` | **The live run.** The architecture diagram *is* the UI — nodes go idle → running → done as the pipeline executes, latency ticking in place. |
+| `/forecast` | Hero number, distribution as the primary mark, consensus on the same axis, the gap stated in words. |
+| `/reasoning` | Seven lenses, expandable to thesis + counterargument. Failed citations in red. Dropped lenses shown with their reason. |
+| `/model` | The three statements, every cell showing whether it traces to a filing. |
+| `/eval` | Backtest vs baseline, reliability diagram, leave-one-out ablation, fitted β per regime. |
+
+**No API between the two processes.** Python appends to `out/events.ndjson`; the UI polls it. Nothing to crash mid-demo — and replay mode comes free: `?replay=<name>` streams a recorded log at its original pacing through the identical code path. If the live run dies on stage you change one URL.
 
 ---
 
@@ -105,24 +157,53 @@ Both `eps_gaap` and `eps_non_gaap` are always carried, with the bridge between t
 
 ```
 src/forecaster/
-  schemas.py            the contract — change this first, UI types generate from it
-  data/protocol.py      DataSource; every method takes as_of and may return None
-  model/graph.py        dependency-graph evaluator; cells carry provenance
+  schemas.py              the contract — change this first, UI types generate from it
+  config.py               model tiering, budgets, the cost ceiling
+  data/
+    protocol.py           DataSource; every method takes as_of and may return None
+    sec_source.py         XBRL + filings + document text
+    yfinance_source.py    consensus, point-in-time for history
+    fred_source.py        macro, point-in-time via ALFRED realtime_start
+    sponsor_source.py     ← the adapter written on the day
+    universe.py           prepared peers, value chain, drivers
+  llm/
+    client.py             schema-forced, cached, cost-ceilinged
+    prompt.py             versioned loading; the fingerprint keys the cache
+    prompts/*.yaml        eleven agents, never inlined in Python
+  model/
+    graph.py              dependency-graph evaluator; cells carry provenance
+    statements.py         linked IS/BS/CF; the balance check is a hard gate
+    bridge.py             GAAP ↔ non-GAAP, cited, with verify()
   pipeline/
-    c_lenses/mechanical.py   FX · share count · net interest · calendar — no LLM
-    v1_reconcile.py          arithmetic + citations
-    f_lambda.py              the thesis
-  llm/prompts/          versioned YAML, never inline
-tests/
-  test_point_in_time.py  deliberately tries to leak
-  test_reconciler.py     each test is a real failure mode
-ui/                     Next.js, static export, reads out/*.json
+    run.py                A→G in one readable function
+    a_acquire.py          ranked targets, hard budgets, logs what it skipped
+    b_structure.py        the evidence store and the cached corpus
+    c_lenses/             seven lenses, blind to each other
+    v1_reconcile.py       arithmetic + citations
+    d_champion.py         argue for, then against
+    e_judge.py            impact-weighted → a distribution
+    v2_comparability.py   fires → λ collapses
+    f_lambda.py           the thesis
+    v3_calibrate.py       our own residuals, by regime
+  eval/
+    cases.py              point-in-time firm-quarters — Block 1, the gate
+    backtest.py           MAE, skill, Wilson CI, ablation
+    fit.py                the constrained regression that replaces FITTED_BETA
+    baseline.py           consensus × shrunk company tilt
+    landing.py            where a company lands inside its own range
+tests/                    each test encodes a failure mode, not a happy path
+ui/                       Next.js, static export, reads out/*.json
 ```
-
-**No API between the two processes.** The pipeline appends to `out/events.ndjson`; the UI polls it. Nothing to crash mid-demo — and replay mode comes free, since a recorded run replays through the identical code path.
 
 ---
 
 ## Status
 
-Scaffold. Working: schemas, data protocol, model graph, mechanical lens, reconciler, λ, event log, tests. Stubbed: acquisition, LLM lenses, champion, judge, calibration, UI.
+**Pipeline complete, 90 tests passing.** Every layer A→G is wired, all eleven agents are built, the UI builds clean and `make verify` is green in CI.
+
+**Two things are still asserted rather than measured, and both need one live run to fix:**
+
+1. **`FITTED_BETA` holds three placeholder numbers.** The regression that replaces them is built (`forecast fit`) but needs the ~200 firm-quarter case set to run against. Until then the thesis is asserted, which is precisely the distinction this repo is built around.
+2. **The data sources have never been run against the network from the demo machine.** `forecast sources --ticker NVDA` is the first command to run, and it checks the thing most likely to be silently broken: whether filing body text actually arrives, because without it every prose citation fails verification.
+
+Block 1 is the gate: build the cases, verify the GAAP↔non-GAAP bridge by hand on ten companies, and score `consensus × 1.02`. That number is what everything afterwards is measured against.

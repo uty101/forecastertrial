@@ -4,6 +4,18 @@ data/cache/
 .env
 __pycache__/
 .venv/
+.pytest_cache/
+.ruff_cache/
+
 ui/node_modules/
 ui/out/
-.pytest_cache/
+ui/.next/
+ui/next-env.d.ts
+ui/tsconfig.tsbuildinfo
+
+# Staged into public/ by `make ui-build` from out/. Derived, not source —
+# regenerate with `make fixture`. Recorded replay logs under public/replays/
+# ARE committed: they are the demo fallback and must survive a fresh clone.
+ui/public/results.json
+ui/public/events.ndjson
+ui/public/eval.json
