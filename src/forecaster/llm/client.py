@@ -37,7 +37,8 @@ from typing import TypeVar
 import structlog
 from pydantic import BaseModel, ValidationError
 
-from forecaster.config import Settings, settings as default_settings
+from forecaster.config import Settings
+from forecaster.config import settings as default_settings
 from forecaster.data.cache import Cache
 from forecaster.llm.prompt import Prompt, load
 

@@ -74,7 +74,9 @@ class YFinanceSource:
                         else []
                     )
                 except Exception as exc:  # noqa: BLE001
-                    log.warning("yf_attr_failed", ticker=ticker, attr=attr, error=str(exc))
+                    log.warning(
+                        "yf_attr_failed", ticker=ticker, attr=attr, error=str(exc)
+                    )
                     out[attr] = []
             return out
 
@@ -135,8 +137,9 @@ class YFinanceSource:
             return None
 
         revenue_rows = snap.get("revenue_estimate") or []
+        period = current.get("period")
         revenue = next(
-            (r.get("avg") for r in revenue_rows if r.get("period") == current.get("period")),
+            (r.get("avg") for r in revenue_rows if r.get("period") == period),
             None,
         )
 

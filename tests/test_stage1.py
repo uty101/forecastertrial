@@ -113,7 +113,9 @@ def test_falls_through_when_higher_priority_returns_none():
 def test_disagreement_between_sources_is_recorded_not_swallowed():
     """Two sources disagreeing on consensus usually means a GAAP/non-GAAP
     basis mismatch. That is a finding, not an error."""
-    loader = Loader([FakeSource("sponsor", 1, _cons(1.10)), FakeSource("yf", 10, _cons(1.05))])
+    loader = Loader(
+        [FakeSource("sponsor", 1, _cons(1.10)), FakeSource("yf", 10, _cons(1.05))]
+    )
     loader.consensus("NVDA", AS_OF)
     assert len(loader.disagreements) == 1
 
@@ -149,14 +151,16 @@ def test_point_in_time_violation_is_never_routed_around():
 
 def test_noisy_company_is_pulled_toward_peers():
     """Three erratic quarters should not be trusted over the sector."""
-    noisy = shrink("NOISY", [0.40, -0.30, 0.35], {f"P{i}": [0.02, 0.03, 0.02] for i in range(8)})
+    peers = {f"P{i}": [0.02, 0.03, 0.02] for i in range(8)}
+    noisy = shrink("NOISY", [0.40, -0.30, 0.35], peers)
     assert noisy.weight < 0.5
     assert abs(noisy.shrunk) < abs(noisy.raw)
 
 
 def test_consistent_company_keeps_more_of_its_own_number():
-    steady = shrink("STEADY", [0.05] * 8, {f"P{i}": [0.01 * i, 0.02 * i] for i in range(1, 9)})
-    noisy = shrink("NOISY", [0.40, -0.30, 0.35], {f"P{i}": [0.01 * i, 0.02 * i] for i in range(1, 9)})
+    peers = {f"P{i}": [0.01 * i, 0.02 * i] for i in range(1, 9)}
+    steady = shrink("STEADY", [0.05] * 8, peers)
+    noisy = shrink("NOISY", [0.40, -0.30, 0.35], peers)
     assert steady.weight > noisy.weight
 
 

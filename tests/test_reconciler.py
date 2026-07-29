@@ -6,6 +6,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
+from pydantic import ValidationError
 
 from forecaster.pipeline.v1_reconcile import (
     check_arithmetic,
@@ -121,7 +122,10 @@ def test_exact_quote_verifies():
 def test_curly_quotes_and_nbsp_do_not_break_matching():
     """Filings are full of typographic junk. Naive matching fails on all of it
     and you lose an hour thinking the model hallucinated a correct quote."""
-    doc = "For the third quarter, we expect revenue to be $44.0 billion — plus or minus 2%."
+    doc = (
+        "For the third quarter, we expect revenue to be $44.0 billion "
+        "— plus or minus 2%."
+    )
     assert verify_citation(_claim("we expect revenue to be $44.0 billion - plus"), doc)
 
 
@@ -199,10 +203,13 @@ def test_lens_with_no_estimate_is_dropped():
 
 
 def test_claim_cannot_be_built_without_a_quote():
-    with pytest.raises(Exception):
+    """'We don't invent figures' as a validation error, not a code review
+    comment. Asserting on ValidationError specifically, not a blind Exception —
+    a typo in the constructor would also raise, and would pass a blind assert."""
+    with pytest.raises(ValidationError):
         Claim(id="x", label="l", value=1.0, unit="USD", source=SOURCE, verbatim_quote="")
 
 
 def test_numeric_claim_requires_a_unit():
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         Claim(id="x", label="l", value=1.0, source=SOURCE, verbatim_quote="q")

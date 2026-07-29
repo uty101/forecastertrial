@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 from string import Formatter
 from typing import Any
@@ -103,7 +103,7 @@ def _parse(path: Path) -> Prompt:
     )
 
 
-@lru_cache(maxsize=None)
+@cache
 def load(prompt_id: str) -> Prompt:
     path = PROMPT_DIR / f"{prompt_id}.yaml"
     if not path.exists():
