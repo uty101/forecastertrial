@@ -26,7 +26,6 @@ from forecaster.pipeline.v3_calibrate import (
     coverage,
 )
 from forecaster.schemas import (
-    Basis,
     Claim,
     Consensus,
     Distribution,
@@ -129,7 +128,10 @@ def test_corpus_sorts_c2_before_c10():
 def test_duplicate_claims_are_deduped_and_logged():
     """Acquisition hits the same fact from several sources. Seven copies of the
     share count is seven times the corpus cost for no extra information."""
-    same = [_claim("a", "Diluted shares", 2_500.0), _claim("b", "Diluted shares", 2_500.0)]
+    same = [
+        _claim("a", "Diluted shares", 2_500.0),
+        _claim("b", "Diluted shares", 2_500.0),
+    ]
     store = b_structure.build(same)
     assert len(store.claims) == 1
     assert len(store.dropped) == 1
