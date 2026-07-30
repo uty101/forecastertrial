@@ -428,11 +428,49 @@ function reduce(events) {
   return { nodes, claims, started, finished };
 }
 
+/*
+ * WRONG-SERVER DETECTION.
+ *
+ * This is here because it actually happened: another project's dev server was on
+ * the port this was opened against, so every fetch returned that app's HTML. The
+ * monitor showed nothing, looked broken, and gave no clue why.
+ *
+ * A static host answers an unknown path with its own index.html or a 404 page —
+ * so HTML where NDJSON should be does not mean "no run yet", it means "you are
+ * pointed at the wrong server". Say so, loudly, with the fix.
+ */
+function wrongServer(text) {
+  const head = text.slice(0, 400).toLowerCase();
+  return head.includes("<!doctype html") || head.includes("<html");
+}
+
+function showWrongServer(what) {
+  const box = document.getElementById("empty");
+  box.classList.remove("hidden");
+  box.innerHTML =
+    `<div>
+      <p class="disp" style="font-size:19px;color:var(--red)">Wrong server</p>
+      <p class="tech" style="margin-top:8px;line-height:1.6">
+        <b>${location.host}</b> returned a web page where <b>events.ndjson</b>
+        should be${what ? ` — it looks like “${what}”` : ""}. Another project is
+        almost certainly on this port, so nothing on this window is this project.
+      </p>
+      <code>uv run forecast ui --port 4321</code>
+      <p class="tech" style="margin-top:8px">then open the monitor from the header button</p>
+    </div>`;
+}
+
 async function poll() {
   try {
     const res = await fetch("events.ndjson?t=" + Date.now(), { cache:"no-store" });
     if (res.ok) {
-      const lines = (await res.text()).split("\n").filter(l => l.trim());
+      const raw = await res.text();
+      if (wrongServer(raw)) {
+        const title = raw.match(/<title[^>]*>(.*?)<\/title>/i);
+        showWrongServer(title ? title[1].trim() : "");
+        return;
+      }
+      const lines = raw.split("\n").filter(l => l.trim());
       const events = [];
       for (const line of lines) {
         // The last line can be half-written: we are reading a file the pipeline

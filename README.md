@@ -30,22 +30,40 @@ Everything upstream of `f_lambda` produces an estimate. λ decides how much to t
 
 ## Quick start
 
+Everything runs through `uv` and `npm`. **There is no `make` dependency** — the
+Makefile is a convenience for machines that have it, and every target has a
+direct equivalent below.
+
 ```bash
-make setup                    # uv sync + npm install
-cp .env.example .env          # ANTHROPIC_API_KEY, SEC_IDENTITY, FRED_API_KEY
-make test                     # pytest + ruff
+uv sync                                  # python deps
+cd ui && npm install && cd ..            # ui deps
+cp .env.example .env                     # ANTHROPIC_API_KEY, SEC_IDENTITY, FRED_API_KEY
+
+uv run pytest -q && uv run ruff check .  # tests + lint
 
 uv run forecast sources --ticker NVDA    # smoke test every source FIRST
 uv run forecast agents                   # the roster, printed from the prompts
+uv run forecast status                   # what is built, what is only asserted
 
-make fixture && make serve    # the UI on a labelled synthetic run → :3000
-make run TICKER=NVDA ASOF=2026-08-16
+uv run forecast ui --fixture             # build, stage, serve → :4321
+uv run forecast run --ticker NVDA --as-of 2026-08-16
 ```
+
+`forecast ui` **refuses to start on an occupied port and names what is already
+there.** Not 3000 by default, because that collides with every other front-end
+project on a developer machine — and a collision shows up as "the UI is broken"
+rather than as "something else is on that port".
+
+**The live monitor** is a separate window meant to sit on a second screen:
+`http://localhost:4321/monitor.html`, or the `Monitor ↗` button in the app
+header. One self-contained HTML file, no framework — it keeps running even if the
+app is mid-rebuild, and it tells you if you have pointed it at the wrong server.
 
 **Determinism:**
 
 ```bash
-make verify    # fixed inputs, byte-identical output, diffed against a golden file
+uv run python -m forecaster.tools.make_fixture --out out
+uv run python -m forecaster.tools.diff_golden out/results.json tests/golden/fixture.json
 ```
 
 Same command runs in CI on every commit, alongside a check that `ui/lib/types.ts` still matches the pydantic schemas it was generated from. It demonstrates reproducibility, point-in-time correctness and test discipline at once — which matters because OpenStocks' verified tier means *they* execute your agent, in their environment.

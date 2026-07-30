@@ -192,6 +192,32 @@ def agents(
 
 
 @app.command()
+def ui(
+    port: int = typer.Option(4321, help="deliberately not 3000 — that collides"),
+    build: bool = typer.Option(True, help="run the Next static export first"),
+    fixture: bool = typer.Option(
+        False, help="generate the labelled synthetic run before serving"
+    ),
+) -> None:
+    """Build, stage and serve the UI. Refuses an occupied port and says who has it.
+
+    One command because `make` is not installed everywhere, and a flow that only
+    works on a machine with GNU make is a flow that fails on the day.
+    """
+    from forecaster.tools import serve as serve_mod
+
+    if fixture:
+        from forecaster.tools import make_fixture
+        from forecaster.tools import status as status_mod
+
+        make_fixture.main(Path("out"))
+        agents(json_out=Path("out/agents.json"))
+        status_mod.main(Path("out/build.json"))
+
+    serve_mod.serve(port=port, build=build)
+
+
+@app.command()
 def status(
     json_out: Path | None = typer.Option(
         None, "--json", help="write the status board as JSON for the UI"

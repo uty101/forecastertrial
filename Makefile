@@ -43,8 +43,12 @@ ui-build:
 	cp -f out/eval.json out/agents.json out/portfolio.json out/build.json ui/public/ 2>/dev/null || true
 	cd ui && npm run build
 
-serve: ui-build              ## build and serve the static export
-	cd ui && npx --yes serve out -l 3000
+# NOTE: make is NOT a dependency of this project — it is not installed on every
+# machine, including the demo one. Every target here has a `uv run` equivalent in
+# the README, and `forecast ui` supersedes this one entirely: it stages, guards
+# the port and serves in a single command.
+serve:                       ## build, stage and serve — port-guarded
+	uv run forecast ui --port 4321
 
 # For a LIVE run whose events stream into an already-served page, point the
 # pipeline at the served directory instead of copying after the fact:
