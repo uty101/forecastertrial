@@ -14,18 +14,20 @@ export interface SheetDef {
 }
 
 export const SHEETS: SheetDef[] = [
-  // Sheet 01 is the whole-system view: the one screen that answers "what is
-  // this, what is running, and what is left" without reading the other nine.
-  { href: "/system/", n: 1, nav: "System", system: "system overview" },
-  { href: "/", n: 2, nav: "Live run", system: "pipeline execution" },
-  { href: "/forecast/", n: 3, nav: "Forecast", system: "earnings forecast" },
-  { href: "/reasoning/", n: 4, nav: "Reasoning", system: "lens + challenge trace" },
-  { href: "/model/", n: 5, nav: "Model", system: "three-statement model" },
-  { href: "/risk/", n: 6, nav: "Risk", system: "deviation + capital control" },
-  { href: "/eval/", n: 7, nav: "Method", system: "backtest + calibration" },
-  { href: "/agents/", n: 8, nav: "Agents", system: "agent roster" },
-  { href: "/cost/", n: 9, nav: "Cost", system: "token allocation" },
-  { href: "/integrity/", n: 10, nav: "Integrity", system: "provenance + point-in-time" },
+  // Sheet 01 is the system AND the live run, which used to be two tabs showing
+  // the same drawing: one with build state painted on it, one with live state.
+  // They were never two screens — they were one screen and an overlay switch,
+  // and splitting them meant the diagram you were looking at was always the
+  // wrong one for the question you had next.
+  { href: "/", n: 1, nav: "System", system: "system · live run" },
+  { href: "/forecast/", n: 2, nav: "Forecast", system: "earnings forecast" },
+  { href: "/reasoning/", n: 3, nav: "Reasoning", system: "lens + challenge trace" },
+  { href: "/model/", n: 4, nav: "Model", system: "three-statement model" },
+  { href: "/risk/", n: 5, nav: "Risk", system: "deviation + capital control" },
+  { href: "/eval/", n: 6, nav: "Method", system: "backtest + calibration" },
+  { href: "/agents/", n: 7, nav: "Agents", system: "agent roster" },
+  { href: "/cost/", n: 8, nav: "Cost", system: "token allocation" },
+  { href: "/integrity/", n: 9, nav: "Integrity", system: "provenance + point-in-time" },
 ];
 
 export const TOTAL = SHEETS.length;
