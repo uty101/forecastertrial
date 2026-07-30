@@ -26,13 +26,20 @@ from forecaster.schemas import (
     LensOutput,
 )
 
-# Fitted on backtest during prep — these are placeholders until Block 3.
+# Fitted on backtest during prep — these are placeholders until Block 1 runs.
 # The whole point is that these are measured numbers, not intuitions.
 FITTED_BETA: dict[LambdaPreset, float] = {
     LambdaPreset.SHRINK: 0.20,
     LambdaPreset.BARBELL: 0.55,
     LambdaPreset.CALIBRATED: 0.30,
 }
+
+# Flip to True in the same commit that replaces the numbers above with the output
+# of `forecast fit`. Nothing reads λ differently either way — this exists so the
+# distinction between an asserted coefficient and a measured one is a fact in the
+# code rather than a comment, and so the system sheet can report it honestly
+# instead of implying the thesis has been demonstrated when it has not.
+FITTED_BETA_MEASURED = False
 
 # Regime multipliers. Consensus is weak when coverage is thin, dispersion wide,
 # or estimates stale — those are the only places worth spending deviation.

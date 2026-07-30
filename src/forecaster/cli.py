@@ -192,6 +192,58 @@ def agents(
 
 
 @app.command()
+def status(
+    json_out: Path | None = typer.Option(
+        None, "--json", help="write the status board as JSON for the UI"
+    ),
+) -> None:
+    """What is built, what is measured, and what is still asserted.
+
+    Derived from the repo — module imports, test coverage, the golden file, the
+    case set, and whether `FITTED_BETA_MEASURED` is still False. A checklist in a
+    markdown file rots the moment someone lands a change without editing it.
+
+    The distinction that matters is BUILT versus MEASURED. A board where every
+    component is green and every gate is red is a system that has been built and
+    never tested against reality.
+    """
+    from forecaster.tools import status as status_mod
+
+    result = status_mod.main(json_out)
+    totals = result.totals
+
+    typer.echo(
+        f"components  {totals['built']} built · {totals['partial']} partial · "
+        f"{totals['missing']} missing   ({totals['components']} total)"
+    )
+    typer.echo(f"tests       {totals['tests']}")
+    typer.echo(
+        f"gates       {totals['gates_passed']} of {totals['gates_total']} passed"
+    )
+    typer.echo("")
+
+    for gate in result.gates:
+        mark = "PASS" if gate["passed"] else "FAIL"
+        colour = typer.colors.GREEN if gate["passed"] else typer.colors.YELLOW
+        typer.secho(f"  [{mark}] {gate['label']}", fg=colour)
+        typer.echo(f"         {gate['detail']}")
+
+    partial = [c for c in result.components if c.state == status_mod.PARTIAL]
+    if partial:
+        typer.echo("")
+        typer.secho(
+            f"  {len(partial)} component(s) have no test encoding their failure "
+            "modes:",
+            fg=typer.colors.YELLOW,
+        )
+        for component in partial:
+            typer.echo(f"         {component.label}")
+
+    if json_out is not None:
+        typer.echo(f"\nwrote {json_out}")
+
+
+@app.command()
 def run(
     ticker: str = typer.Option(...),
     as_of: str = typer.Option(..., "--as-of"),

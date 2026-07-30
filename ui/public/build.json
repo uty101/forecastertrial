@@ -1,0 +1,334 @@
+{
+  "components": [
+    {
+      "detail": "covered by test_point_in_time.py",
+      "id": "sec",
+      "label": "SEC XBRL + filings",
+      "layer": "sources",
+      "state": "built",
+      "tests": 5,
+      "tier": "none"
+    },
+    {
+      "detail": "covered by test_point_in_time.py, test_stage1.py",
+      "id": "yfinance",
+      "label": "yfinance consensus",
+      "layer": "sources",
+      "state": "built",
+      "tests": 29,
+      "tier": "none"
+    },
+    {
+      "detail": "covered by test_point_in_time.py",
+      "id": "fred",
+      "label": "FRED macro",
+      "layer": "sources",
+      "state": "built",
+      "tests": 5,
+      "tier": "none"
+    },
+    {
+      "detail": "no test encodes its failure modes",
+      "id": "sponsor",
+      "label": "Sponsor feed adapter",
+      "layer": "sources",
+      "state": "partial",
+      "tests": 0,
+      "tier": "none"
+    },
+    {
+      "detail": "no test encodes its failure modes",
+      "id": "universe",
+      "label": "Prepared universe",
+      "layer": "sources",
+      "state": "partial",
+      "tests": 0,
+      "tier": "none"
+    },
+    {
+      "detail": "no test encodes its failure modes",
+      "id": "acquire",
+      "label": "A1\u2013A4 acquirers",
+      "layer": "acquire",
+      "state": "partial",
+      "tests": 0,
+      "tier": "none"
+    },
+    {
+      "detail": "covered by test_llm_layer.py",
+      "id": "extract_guidance",
+      "label": "Guidance extractor",
+      "layer": "acquire",
+      "state": "built",
+      "tests": 24,
+      "tier": "cheap"
+    },
+    {
+      "detail": "covered by test_reconciler.py, test_llm_layer.py",
+      "id": "evidence",
+      "label": "Evidence store",
+      "layer": "structure",
+      "state": "built",
+      "tests": 41,
+      "tier": "none"
+    },
+    {
+      "detail": "covered by test_model.py",
+      "id": "statements",
+      "label": "3-statement model",
+      "layer": "structure",
+      "state": "built",
+      "tests": 16,
+      "tier": "none"
+    },
+    {
+      "detail": "covered by test_model.py",
+      "id": "bridge",
+      "label": "GAAP\u2194non-GAAP bridge",
+      "layer": "structure",
+      "state": "built",
+      "tests": 16,
+      "tier": "none"
+    },
+    {
+      "detail": "no test encodes its failure modes",
+      "id": "mechanical",
+      "label": "Mechanical lens",
+      "layer": "lenses",
+      "state": "partial",
+      "tests": 0,
+      "tier": "none"
+    },
+    {
+      "detail": "no test encodes its failure modes",
+      "id": "guidance",
+      "label": "Guidance lens",
+      "layer": "lenses",
+      "state": "partial",
+      "tests": 0,
+      "tier": "mid"
+    },
+    {
+      "detail": "no test encodes its failure modes",
+      "id": "drivers",
+      "label": "Drivers lens",
+      "layer": "lenses",
+      "state": "partial",
+      "tests": 0,
+      "tier": "mid"
+    },
+    {
+      "detail": "no test encodes its failure modes",
+      "id": "margins",
+      "label": "Margins lens",
+      "layer": "lenses",
+      "state": "partial",
+      "tests": 0,
+      "tier": "mid"
+    },
+    {
+      "detail": "no test encodes its failure modes",
+      "id": "forensics",
+      "label": "Forensics lens",
+      "layer": "lenses",
+      "state": "partial",
+      "tests": 0,
+      "tier": "mid"
+    },
+    {
+      "detail": "no test encodes its failure modes",
+      "id": "peer_read",
+      "label": "Peer read lens",
+      "layer": "lenses",
+      "state": "partial",
+      "tests": 0,
+      "tier": "mid"
+    },
+    {
+      "detail": "no test encodes its failure modes",
+      "id": "macro",
+      "label": "Macro lens",
+      "layer": "lenses",
+      "state": "partial",
+      "tests": 0,
+      "tier": "mid"
+    },
+    {
+      "detail": "covered by test_reconciler.py",
+      "id": "v1",
+      "label": "V1 reconcile",
+      "layer": "verify",
+      "state": "built",
+      "tests": 17,
+      "tier": "none"
+    },
+    {
+      "detail": "no test encodes its failure modes",
+      "id": "champion",
+      "label": "Champion \u00d77",
+      "layer": "challenge",
+      "state": "partial",
+      "tests": 0,
+      "tier": "mid"
+    },
+    {
+      "detail": "covered by test_llm_layer.py",
+      "id": "judge",
+      "label": "Judge",
+      "layer": "judge",
+      "state": "built",
+      "tests": 24,
+      "tier": "deep"
+    },
+    {
+      "detail": "no test encodes its failure modes",
+      "id": "v2",
+      "label": "V2 comparability",
+      "layer": "verify",
+      "state": "partial",
+      "tests": 0,
+      "tier": "cheap"
+    },
+    {
+      "detail": "no test encodes its failure modes",
+      "id": "lambda",
+      "label": "\u03bb positioning",
+      "layer": "position",
+      "state": "partial",
+      "tests": 0,
+      "tier": "none"
+    },
+    {
+      "detail": "covered by test_llm_layer.py",
+      "id": "v3",
+      "label": "V3 calibrate",
+      "layer": "verify",
+      "state": "built",
+      "tests": 24,
+      "tier": "none"
+    },
+    {
+      "detail": "no test encodes its failure modes",
+      "id": "orchestrator",
+      "label": "A\u2192G orchestrator",
+      "layer": "position",
+      "state": "partial",
+      "tests": 0,
+      "tier": "none"
+    },
+    {
+      "detail": "no test encodes its failure modes",
+      "id": "cases",
+      "label": "Case builder",
+      "layer": "eval",
+      "state": "partial",
+      "tests": 0,
+      "tier": "none"
+    },
+    {
+      "detail": "covered by test_stage1.py",
+      "id": "backtest",
+      "label": "Backtest harness",
+      "layer": "eval",
+      "state": "built",
+      "tests": 24,
+      "tier": "none"
+    },
+    {
+      "detail": "no test encodes its failure modes",
+      "id": "fit",
+      "label": "\u03bb regression",
+      "layer": "eval",
+      "state": "partial",
+      "tests": 0,
+      "tier": "none"
+    },
+    {
+      "detail": "covered by test_stage1.py",
+      "id": "baseline",
+      "label": "Baseline",
+      "layer": "eval",
+      "state": "built",
+      "tests": 24,
+      "tier": "none"
+    },
+    {
+      "detail": "covered by test_stage1.py",
+      "id": "landing",
+      "label": "Landing distribution",
+      "layer": "eval",
+      "state": "built",
+      "tests": 24,
+      "tier": "none"
+    },
+    {
+      "detail": "covered by test_llm_layer.py",
+      "id": "llm",
+      "label": "LLM client",
+      "layer": "infra",
+      "state": "built",
+      "tests": 24,
+      "tier": "none"
+    }
+  ],
+  "gates": [
+    {
+      "blocks": "everything downstream assumes a data shape that was inferred from documentation rather than observed",
+      "detail": "no cached responses \u2014 run `forecast sources --ticker NVDA` from the demo machine first. This is the check most likely to be silently broken.",
+      "id": "sources_verified",
+      "label": "Data sources run against the network",
+      "passed": false
+    },
+    {
+      "blocks": "without cases there is no baseline, and without a baseline a pipeline result cannot be interpreted",
+      "detail": "no case set \u2014 `forecast cases`",
+      "id": "cases_built",
+      "label": "Firm-quarter case set built",
+      "passed": false
+    },
+    {
+      "blocks": "every accuracy claim afterwards is measured against this",
+      "detail": "not scored \u2014 `forecast backtest`",
+      "id": "baseline_scored",
+      "label": "Baseline scored \u2014 THE number to beat",
+      "passed": false
+    },
+    {
+      "blocks": "\u03bb is the thesis; a guessed \u03bb makes the central claim unfalsifiable",
+      "detail": "FITTED_BETA holds three placeholder numbers \u2014 the thesis is asserted, not measured",
+      "id": "lambda_measured",
+      "label": "\u03bb fitted rather than asserted",
+      "passed": false
+    },
+    {
+      "blocks": "the regime table is the thesis as a statistical model",
+      "detail": "`forecast fit`",
+      "id": "lambda_report",
+      "label": "Per-regime \u03b2 table produced",
+      "passed": false
+    },
+    {
+      "blocks": "reproducibility is load-bearing if the organisers run your agent themselves",
+      "detail": "golden file committed",
+      "id": "determinism",
+      "label": "make verify green",
+      "passed": true
+    }
+  ],
+  "totals": {
+    "built": 14,
+    "components": 30,
+    "gates_passed": 1,
+    "gates_total": 6,
+    "missing": 0,
+    "partial": 16,
+    "tests": 86,
+    "tests_by_file": {
+      "tests/test_llm_layer.py": 24,
+      "tests/test_model.py": 16,
+      "tests/test_point_in_time.py": 5,
+      "tests/test_reconciler.py": 17,
+      "tests/test_stage1.py": 24
+    }
+  }
+}

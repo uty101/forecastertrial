@@ -25,6 +25,7 @@ fit:                         ## fit beta and replace the FITTED_BETA placeholder
 fixture:                     ## a labelled synthetic run, for UI dev and make verify
 	uv run python -m forecaster.tools.make_fixture --out out
 	uv run forecast agents --json out/agents.json
+	uv run forecast status --json out/build.json
 
 verify:                      ## THE ONE THAT MATTERS
 	uv run python -m forecaster.tools.make_fixture --out out
@@ -39,7 +40,7 @@ verify:                      ## THE ONE THAT MATTERS
 ui-build:
 	mkdir -p ui/public/replays
 	cp -f out/results.json out/events.ndjson ui/public/ 2>/dev/null || true
-	cp -f out/eval.json out/agents.json out/portfolio.json ui/public/ 2>/dev/null || true
+	cp -f out/eval.json out/agents.json out/portfolio.json out/build.json ui/public/ 2>/dev/null || true
 	cd ui && npm run build
 
 serve: ui-build              ## build and serve the static export
