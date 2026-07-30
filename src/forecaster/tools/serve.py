@@ -37,7 +37,7 @@ log = structlog.get_logger()
 # "the UI is broken" rather than as "something else is on that port".
 DEFAULT_PORT = 4321
 
-# Everything the sheets and the monitor poll for.
+# Everything the sheets poll for.
 ARTIFACTS = (
     "results.json",
     "events.ndjson",
@@ -52,8 +52,8 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
     """Serve with caching disabled.
 
     The page polls `events.ndjson` four times a second while a run is in
-    progress. A cached response means the monitor freezes on the first poll and
-    looks dead, which is the single most confusing way for this to fail.
+    progress. A cached response means the live screen freezes on the first poll
+    and looks dead, which is the single most confusing way for this to fail.
     """
 
     def end_headers(self) -> None:
@@ -175,8 +175,8 @@ def serve(
     handler = partial(NoCacheHandler, directory=str(export))
     server = ThreadingHTTPServer(("127.0.0.1", port), handler)
 
-    print(f"\n  forecaster UI   http://localhost:{port}/")
-    print(f"  live monitor    http://localhost:{port}/monitor.html")
+    print(f"\n  forecaster      http://localhost:{port}/")
+    print(f"  the sheets      http://localhost:{port}/system/")
     print(f"\n  serving         {export}")
     print(f"  staged          {', '.join(staged) if staged else 'nothing'}")
     print(

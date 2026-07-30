@@ -64,9 +64,9 @@ def test_agent_count_matches_every_surface_that_states_it():
 
     An agent is defined in exactly one way in this repo — a component with a
     versioned prompt in llm/prompts/ — because that is checkable rather than
-    asserted. The README, the /agents sheet, the /system org chart and the live
-    monitor all print a number, and at one point three of them said eleven by
-    counting the Mechanical lens, which has no prompt and no model in it.
+    asserted. The README, the /agents sheet and the /system drawings all print a
+    number, and at one point three of them said eleven by counting the Mechanical
+    lens, which has no prompt and no model in it.
 
     Counting Mechanical as an agent destroys the only distinction on those pages
     worth making: every stage that can hallucinate is checked by one that cannot.
@@ -75,8 +75,8 @@ def test_agent_count_matches_every_surface_that_states_it():
     prompts = load_all()
     assert len(prompts) == 10, (
         f"the agent roster changed: {sorted(prompts)}. Update the count on the "
-        f"/agents sheet, the /system legend, ui/public/monitor.html and the "
-        f"README in the same commit, or they will disagree on a projector."
+        f"/agents sheet, the /system legend and the README in the same commit, "
+        f"or they will disagree on a projector."
     )
     assert "mechanical" not in prompts, (
         "the Mechanical lens must not acquire a prompt file — it is arithmetic, "

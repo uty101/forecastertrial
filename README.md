@@ -54,10 +54,16 @@ there.** Not 3000 by default, because that collides with every other front-end
 project on a developer machine — and a collision shows up as "the UI is broken"
 rather than as "something else is on that port".
 
-**The live monitor** is a separate window meant to sit on a second screen:
-`http://localhost:4321/monitor.html`, or the `Monitor ↗` button in the app
-header. One self-contained HTML file, no framework — it keeps running even if the
-app is mid-rebuild, and it tells you if you have pointed it at the wrong server.
+**The home screen is the instrument.** `/` is the live signal-flow schematic,
+polling `out/events.ndjson` four times a second: parts light as they run, tokens
+and latency print on the part that spent them, and clicking any part says what it
+is and whether a test covers it. `Pop out ↗` in the header puts that same screen
+in its own OS window for a second monitor.
+
+There used to be a separate `monitor.html` for that pop-out — a second
+implementation of the same diagram. It diverged the moment the app was
+redesigned, and opened a window that looked like a different product. One
+implementation now.
 
 **Determinism:**
 
@@ -91,7 +97,7 @@ G  OUTPUT      forecast + model + trace
 
 **An agent here means one thing: a component with a versioned prompt in `llm/prompts/`.** By that definition there are ten of them, and it is checkable — `ls src/forecaster/llm/prompts/*.yaml | wc -l`. The Mechanical lens is on the roster below because it sits in layer C alongside the six that are agents, but it has no prompt and no model in it. It is arithmetic. That is the point of it, and calling it an eleventh agent would blur the only distinction on this page worth making.
 
-The same split is drawn on the `/system/` sheet and in the live monitor: agents get a coloured tab, deterministic code gets a machined hatch, data fetchers get a thin rule. Every stage that can hallucinate is checked by one that cannot.
+The same split is drawn everywhere a part appears, in the hue of what it is: violet for an agent, rose for the one deep-tier call, green for deterministic code, cyan for a data fetcher. Every stage that can hallucinate is checked by one that cannot.
 
 | Agent | Layer | Tier | What makes it different |
 |---|---|---|---|
@@ -223,7 +229,7 @@ ui/                       Next.js, static export, reads out/*.json
 
 **Pipeline complete, 90 tests passing.** Every layer A→G is wired, all ten agents are built, the UI builds clean and `make verify` is green in CI.
 
-One caveat visible on the `/system/` sheet and in the monitor, because drawing the agent/not-agent split is what surfaced it: **the guidance extractor is built and tested but `run.py` never calls it**, so the Guidance lens currently reads raw filing text rather than a structured guide. It is marked NOT WIRED on both screens rather than shown as complete.
+One caveat visible on the live screen and the `/system/` sheet, because drawing the agent/not-agent split is what surfaced it: **the guidance extractor is built and tested but `run.py` never calls it**, so the Guidance lens currently reads raw filing text rather than a structured guide. It is drawn as a dashed footprint marked NOT WIRED rather than shown as complete.
 
 **Two things are still asserted rather than measured, and both need one live run to fix:**
 
