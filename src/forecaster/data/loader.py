@@ -119,6 +119,15 @@ class Loader:
             f"actuals:{ticker}:{period}", lambda s: s.get_actuals(ticker, period, as_of)
         )
 
+    def history(self, ticker: str, as_of: date, keys: tuple[str, ...] | None = None):
+        """The quarterly series the three-statement model is built from."""
+        return self.resolve(
+            f"history:{ticker}",
+            lambda s: getattr(s, "get_history", lambda *_, **__: None)(
+                ticker, as_of, keys
+            ),
+        )
+
     def guidance(self, ticker: str, as_of: date):
         return self.resolve(f"guidance:{ticker}", lambda s: s.get_guidance(ticker, as_of))
 

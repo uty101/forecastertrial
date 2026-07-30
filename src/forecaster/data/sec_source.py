@@ -26,6 +26,8 @@ from typing import Any
 import structlog
 
 from forecaster.data.cache import Cache
+from forecaster.data.history import History, build_history
+from forecaster.data.lineitems import BY_KEY
 from forecaster.data.protocol import assert_point_in_time
 from forecaster.schemas import Basis, Claim, Source, SourceKind
 
@@ -128,15 +130,36 @@ class SECSource:
         if not facts:
             return []
         us_gaap = facts.get("facts", {}).get("us-gaap", {})
+
+        # MERGE across tags, do not take the first that answers.
+        #
+        # Filers change concepts over time, so coverage is split across the tag
+        # list rather than concentrated in one. NVDA has 28 facts under
+        # RevenueFromContractWithCustomerExcludingAssessedTax and 276 under
+        # Revenues; first-wins returned the 28 and silently discarded sixteen
+        # years of revenue, which then read as "this company does not report
+        # revenue" rather than as a mapping bug.
+        #
+        # Earlier tags in the list still win a genuine collision: same concept,
+        # same period, two spellings. `_dedupe` resolves that on (start, end).
+        merged: list[dict] = []
+        seen: set[tuple[str, str]] = set()
+        used: list[str] = []
         for tag in tags:
-            if tag not in us_gaap:
-                continue
-            entries = us_gaap[tag].get("units", {}).get(unit, [])
+            entries = us_gaap.get(tag, {}).get("units", {}).get(unit, [])
             visible = self._visible(entries, as_of)
-            if visible:
-                log.debug("sec_tag_used", ticker=ticker, tag=tag, n=len(visible))
-                return visible
-        return []
+            if not visible:
+                continue
+            used.append(tag)
+            for fact in visible:
+                stamp = (str(fact.get("start", "")), str(fact["end"]))
+                if stamp in seen:
+                    continue
+                seen.add(stamp)
+                merged.append(fact)
+        if merged:
+            log.debug("sec_tags_used", ticker=ticker, tags=used, n=len(merged))
+        return merged
 
     def _claim(
         self, ticker: str, fact: dict, label: str, unit: str, cid: str
@@ -177,28 +200,77 @@ class SECSource:
         return None  # SEC has no forward estimates. yfinance handles this.
 
     def get_actuals(self, ticker: str, period: str, as_of: date) -> list[Claim] | None:
+        """One quarter, as claims — read out of the same series as the model.
+
+        This used to match `f"{fact['fy']}{fact['fp']}" == period` directly.
+        Those fields describe the FILING rather than the fact, so the match was
+        wrong in two directions at once: a 10-K's comparatives all carry the
+        current year's fy, and a ninety-day quarter reprinted in a 10-K carries
+        fp='FY'. It returned a plausible number for the wrong three months.
+
+        Going through `get_history` is not just a fix, it removes the class of
+        bug: the quarter this returns and the quarter the three-statement model
+        forecasts are now the same object, so they cannot drift apart.
+        """
+        history = self.get_history(ticker, as_of)
+        if history is None:
+            return None
+
         claims: list[Claim] = []
-        for tags, unit, label in (
-            (REVENUE_TAGS, "USD", "Revenue"),
-            (EPS_TAGS, "USD/shares", "Diluted EPS (GAAP)"),
-            (SHARE_TAGS, "shares", "Diluted shares"),
-        ):
-            facts = self._concept(ticker, tags, unit, as_of)
-            match = [f for f in facts if f"{f.get('fy')}{f.get('fp', '')}" == period]
-            if not match:
+        for key in ("revenue", "eps_diluted", "diluted_shares"):
+            observation = history.get(key, period)
+            if observation is None:
                 continue
-            # Latest filing wins among those visible at as_of — that is the
-            # most recent restatement we were entitled to know about.
-            fact = max(match, key=lambda f: f["filed"])
+            item = BY_KEY[key]
             assert_point_in_time(
-                datetime.strptime(fact["filed"], "%Y-%m-%d").date(),
-                as_of,
-                f"{ticker} {label} {period}",
+                observation.filed, as_of, f"{ticker} {item.label} {period}"
             )
             claims.append(
-                self._claim(ticker, fact, label, unit, f"sec:{ticker}:{period}:{label}")
+                Claim(
+                    id=f"sec:{ticker}:{period}:{item.label}",
+                    label=item.label,
+                    value=observation.value,
+                    unit=item.unit,
+                    period=period,
+                    source=Source(
+                        kind=SourceKind.XBRL,
+                        uri=(
+                            f"https://www.sec.gov/Archives/edgar/data/"
+                            f"{(self._cik(ticker) or '').lstrip('0')}/"
+                            f"{observation.accession.replace('-', '')}/"
+                        ),
+                        as_of=observation.filed,
+                        accession=observation.accession,
+                        page_or_section=observation.form,
+                    ),
+                    verbatim_quote=(
+                        f"{item.label}={observation.value} for the quarter ended "
+                        f"{observation.period_end} (form {observation.form}, "
+                        f"accn {observation.accession}"
+                        f"{', derived as FY minus Q1-Q3' if observation.derived else ''})"
+                    ),
+                )
             )
         return claims or None
+
+    def get_history(
+        self, ticker: str, as_of: date, keys: tuple[str, ...] | None = None
+    ) -> History | None:
+        """Every quarter of every mapped line item, point-in-time.
+
+        The facts were always here — `companyfacts` returns a company's entire
+        tagged history in one response, and `get_actuals` was filtering it down
+        to a single period and throwing the rest away. This costs no extra
+        request: same cached payload, reshaped instead of discarded.
+        """
+        if not self._company_facts(ticker):
+            return None
+        return build_history(
+            ticker,
+            as_of,
+            facts_for=lambda item: self._concept(ticker, item.tags, item.unit, as_of),
+            keys=keys,
+        )
 
     def get_guidance(self, ticker: str, as_of: date):
         # Guidance lives in 8-K EX-99.1 prose, not XBRL. The acquisition layer

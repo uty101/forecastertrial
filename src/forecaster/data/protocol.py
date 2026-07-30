@@ -18,6 +18,10 @@ Two design rules that matter:
 from __future__ import annotations
 
 from datetime import date
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # avoids a cycle: history imports nothing from here
+    from forecaster.data.history import History
 from typing import Protocol, runtime_checkable
 
 from forecaster.schemas import Claim, Consensus, Guidance
@@ -41,6 +45,19 @@ class DataSource(Protocol):
     def get_actuals(
         self, ticker: str, period: str, as_of: date
     ) -> list[Claim] | None: ...
+
+    def get_history(
+        self, ticker: str, as_of: date, keys: tuple[str, ...] | None = None
+    ) -> History | None:
+        """Every mapped line item as a quarterly series, point-in-time.
+
+        Distinct from `get_actuals`, which answers "what was this one number in
+        this one quarter". A three-statement model is built from trends — margin
+        trajectory, working-capital ratios, share-count drift — and none of that
+        is visible in a single period. Sources without history return None; the
+        Loader treats it like any other unanswered request.
+        """
+        return None
 
     def get_guidance(self, ticker: str, as_of: date) -> list[Guidance] | None: ...
 
