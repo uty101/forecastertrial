@@ -1,78 +1,125 @@
 @import "tailwindcss";
 
 /*
- * The design system, decided once.
+ * TECHNICAL BLUEPRINT
  *
- * Three rules do most of the work:
+ * The whole screen is a drafted sheet: cream stock, near-black ink, a deep green
+ * for structure and exactly one orange for the thing being claimed.
  *
- * 1. ONE ACCENT COLOUR, used only for OUR forecast. Consensus is always neutral
- *    grey. The moment a second thing is accent-coloured, the eye stops knowing
- *    which number is the claim.
+ * Three rules survive from the previous design and still do most of the work:
+ *
+ * 1. ONE ACCENT, used only for OUR forecast and for live/alert state. Consensus
+ *    is always neutral. The moment a second thing is orange, the eye stops
+ *    knowing which number is the claim.
  * 2. TABULAR NUMERALS EVERYWHERE. Financial figures that jitter as they update
- *    read as amateur, and this view updates every 250ms.
- * 3. MOTION ONLY FOR STATE CHANGE, 150-200ms. Decorative animation reads as a
- *    template.
+ *    read as amateur, and the live view updates four times a second.
+ * 3. MOTION ONLY FOR STATE CHANGE, 150–200ms.
  *
- * Dark mode is deliberately stepped rather than an inverted filter — inverting
- * a financial layout produces grey-on-grey text at exactly the density where
- * you need contrast most.
+ * One rule is new and specific to this language:
+ *
+ * 4. THE CHROME CARRIES INFORMATION. Registration marks, dimension rules and
+ *    coordinate readouts are the visual grammar of a technical drawing, and it
+ *    would be easy to use them as pure decoration. Everywhere it is possible,
+ *    they show something real instead — the sheet number is the screen index,
+ *    the "coordinates" are the ticker and lock date, the dimension rules
+ *    annotate actual quantities. Decoration that lies about being data is worse
+ *    than no decoration.
+ *
+ * Dark mode is a stepped dark-paper variant, not an inverted filter. Inverting a
+ * dense financial layout produces grey-on-grey at exactly the density where
+ * contrast matters most.
  */
 
 @theme {
-  --color-ink: #0f172a;
-  --color-ink-2: #475569;
-  --color-ink-3: #94a3b8;
-  --color-line: #e2e8f0;
-  --color-surface: #ffffff;
-  --color-canvas: #fbfcfd;
+  /* paper and ink */
+  --color-paper: #f4f1ea;
+  --color-paper-2: #efebe1;
+  --color-sheet: #faf8f3;
+  --color-ink: #16181a;
+  --color-ink-2: #4a4f52;
+  --color-ink-3: #8b9095;
+  --color-rule: #cdc7ba;
+  --color-rule-2: #e0dad0;
 
-  /* The accent. Used for our forecast and nothing else. */
-  --color-accent: #0d9488;
-  --color-accent-soft: #ccfbf1;
+  /* structure — deep green, for headlines and confirmed state */
+  --color-structure: #1f3d2b;
+  --color-structure-2: #2f5a3f;
+  --color-structure-soft: #dfe6dc;
 
-  /* Consensus is never accented. */
-  --color-street: #64748b;
-  --color-street-soft: #f1f5f9;
+  /* the one accent */
+  --color-accent: #d0622b;
+  --color-accent-2: #b8501f;
+  --color-accent-soft: #f5e3d6;
 
-  /* Node states in the live view. */
-  --color-idle: #cbd5e1;
-  --color-running: #f59e0b;
-  --color-done: #16a34a;
-  --color-failed: #dc2626;
+  /* node / status states */
+  --color-idle: #cdc7ba;
+  --color-running: #d0622b;
+  --color-done: #1f3d2b;
+  --color-failed: #9b2c1e;
 
   --font-sans: ui-sans-serif, -apple-system, "Segoe UI", Inter, system-ui, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+  --font-mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+
+  /*
+   * The condensed display face. No webfont: venue wifi kills more demos than
+   * bugs do, and a headline that falls back to system-ui at the wrong width
+   * breaks the whole grid. This stack resolves to a real condensed grotesque on
+   * both Windows and macOS and degrades to a tight uppercase system face
+   * anywhere else.
+   */
+  --font-display: "Archivo Narrow", "Arial Narrow", "Helvetica Neue Condensed",
+    "Roboto Condensed", "Liberation Sans Narrow", Impact, system-ui, sans-serif;
 }
 
 :root {
   color-scheme: light dark;
 }
 
+/*
+ * Dark paper.
+ *
+ * A plain `:root` override, NOT a nested `@theme` — `@theme` only runs at the top
+ * level, so putting it inside a media query silently generates nothing and the
+ * dark palette never applies. Overriding the custom properties directly works
+ * because Tailwind v4 emits utilities that reference `var(--color-*)` rather than
+ * inlining the hex, so retinting the variables retints every utility built from
+ * them.
+ *
+ * Stepped, not inverted. Inverting a dense financial layout produces grey-on-grey
+ * at exactly the density where contrast matters most.
+ */
 @media (prefers-color-scheme: dark) {
-  @theme {
-    --color-ink: #e2e8f0;
-    --color-ink-2: #94a3b8;
-    --color-ink-3: #64748b;
-    --color-line: #1e293b;
-    --color-surface: #0f172a;
-    --color-canvas: #020617;
-    --color-accent: #2dd4bf;
-    --color-accent-soft: #134e4a;
-    --color-street: #94a3b8;
-    --color-street-soft: #1e293b;
+  :root {
+    --color-paper: #14161a;
+    --color-paper-2: #191c21;
+    --color-sheet: #1d2126;
+    --color-ink: #ece7dc;
+    --color-ink-2: #a8a49b;
+    --color-ink-3: #6b6f74;
+    --color-rule: #343a41;
+    --color-rule-2: #262b31;
+    --color-structure: #7fb894;
+    --color-structure-2: #5f9c76;
+    --color-structure-soft: #1b2b21;
+    --color-accent: #e4834f;
+    --color-accent-2: #d0622b;
+    --color-accent-soft: #2e1e14;
+    --color-idle: #343a41;
+    --color-done: #7fb894;
+    --color-failed: #d9705f;
   }
 }
 
 html,
 body {
-  background: var(--color-canvas);
+  background: var(--color-paper);
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
-/* Rule 2. Applied globally rather than per-component, because the one place it
-   gets forgotten is the place the judge is looking. */
+/* Rule 2, applied globally — the one place it gets forgotten is the place
+   someone is looking. */
 body {
   font-variant-numeric: tabular-nums;
 }
@@ -82,14 +129,93 @@ body {
   font-feature-settings: "tnum" 1;
 }
 
-/* Rule 3. */
+/* ---- typography ------------------------------------------------------- */
+
+.display {
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  line-height: 0.92;
+  /* Condensed faces vary in width; stretch is a last-resort nudge so a fallback
+     does not blow out the grid. */
+  font-stretch: condensed;
+}
+
+.label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-ink-3);
+}
+
+.tech {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink-2);
+}
+
+/* ---- the sheet -------------------------------------------------------- */
+
+.sheet {
+  position: relative;
+  background: var(--color-sheet);
+  border: 1px solid var(--color-rule);
+}
+
+/* Corner crop marks. Drawn with borders on pseudo-elements so they cost no
+   markup and never intercept a click. */
+.crop::before,
+.crop::after {
+  content: "";
+  position: absolute;
+  width: 13px;
+  height: 13px;
+  pointer-events: none;
+  border-color: var(--color-ink-3);
+}
+.crop::before {
+  top: -1px;
+  left: -1px;
+  border-top: 1.5px solid;
+  border-left: 1.5px solid;
+}
+.crop::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 1.5px solid;
+  border-right: 1.5px solid;
+}
+
+/* The dotted plate texture from the sheet margins. */
+.plate {
+  background-image: radial-gradient(var(--color-rule) 0.9px, transparent 0.9px);
+  background-size: 7px 7px;
+}
+
+/* ---- rules and dimensions --------------------------------------------- */
+
+.rule-h {
+  border-top: 1px solid var(--color-rule);
+}
+
+.dashed {
+  border-top: 1px dashed var(--color-rule);
+}
+
+/* ---- state ------------------------------------------------------------ */
+
 @keyframes pulse-running {
   0%,
   100% {
     opacity: 1;
   }
   50% {
-    opacity: 0.55;
+    opacity: 0.5;
   }
 }
 
@@ -97,16 +223,34 @@ body {
   animation: pulse-running 1.1s ease-in-out infinite;
 }
 
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.2;
+  }
+}
+
+.blink {
+  animation: blink 1.4s ease-in-out infinite;
+}
+
+/* Rule 3. */
 .state-change {
   transition:
     fill 180ms ease,
     stroke 180ms ease,
     opacity 180ms ease,
-    background-color 180ms ease;
+    color 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .node-running {
+  .node-running,
+  .blink {
     animation: none;
   }
   .state-change {
@@ -115,8 +259,8 @@ body {
 }
 
 /* Wide content scrolls inside its own container. The page body must never
-   scroll horizontally — a financial table that pushes the layout sideways is
-   the fastest way to look unfinished on a projector. */
+   scroll sideways — a financial table that pushes the layout is the fastest way
+   to look unfinished on a projector. */
 .scroll-x {
   overflow-x: auto;
   max-width: 100%;

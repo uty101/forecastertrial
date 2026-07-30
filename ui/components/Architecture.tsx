@@ -95,16 +95,16 @@ const EDGES: Array<[string, string]> = [
 ];
 
 const FILL = {
-  idle: "var(--color-street-soft)",
-  running: "#fef3c7",
-  done: "var(--color-accent-soft)",
-  failed: "#fee2e2",
+  idle: "var(--color-paper-2)",
+  running: "var(--color-accent-soft)",
+  done: "var(--color-structure-soft)",
+  failed: "var(--color-accent-soft)",
 } as const;
 
 const STROKE = {
   idle: "var(--color-idle)",
-  running: "var(--color-running)",
-  done: "var(--color-done)",
+  running: "var(--color-accent)",
+  done: "var(--color-structure)",
   failed: "var(--color-failed)",
 } as const;
 
@@ -125,7 +125,7 @@ export default function Architecture({
   const byId = Object.fromEntries(NODES.map((n) => [n.id, n]));
 
   return (
-    <div className="scroll-x rounded-xl border border-[--color-line] bg-[--color-surface] p-3">
+    <div className="scroll-x border border-rule bg-sheet p-3">
       <svg viewBox="0 0 1560 500" className="h-auto w-full min-w-[900px]">
         <defs>
           <marker
@@ -157,7 +157,7 @@ export default function Architecture({
             x={x as number}
             y={42}
             textAnchor="middle"
-            className="fill-[--color-ink-3]"
+            className="fill-ink-3"
             style={{
               fontSize: 9.5,
               fontWeight: 700,
@@ -178,7 +178,7 @@ export default function Architecture({
               key={`${a}->${b}`}
               d={edgePath(from, to)}
               fill="none"
-              stroke={active ? "var(--color-done)" : "var(--color-idle)"}
+              stroke={active ? "var(--color-structure)" : "var(--color-idle)"}
               strokeWidth={active ? 1.5 : 1.1}
               opacity={active ? 0.75 : 0.4}
               markerEnd="url(#arrow)"
@@ -211,7 +211,7 @@ export default function Architecture({
                 x={node.x + node.w / 2}
                 y={node.y + (node.sub ? node.h / 2 - 2 : node.h / 2 + 4)}
                 textAnchor="middle"
-                className="fill-[--color-ink]"
+                className="fill-ink"
                 style={{ fontSize: 12, fontWeight: 650 }}
               >
                 {node.label}
@@ -221,7 +221,7 @@ export default function Architecture({
                   x={node.x + node.w / 2}
                   y={node.y + node.h / 2 + 13}
                   textAnchor="middle"
-                  className="fill-[--color-ink-2]"
+                  className="fill-ink-2"
                   style={{ fontSize: 9.5 }}
                 >
                   {node.sub}
@@ -234,7 +234,7 @@ export default function Architecture({
                   x={node.x + node.w - 6}
                   y={node.y + 12}
                   textAnchor="end"
-                  className="num fill-[--color-ink-3]"
+                  className="num fill-ink-3"
                   style={{ fontSize: 8.5 }}
                 >
                   {latency >= 1000
@@ -249,7 +249,7 @@ export default function Architecture({
                 <text
                   x={node.x + 6}
                   y={node.y + 12}
-                  className="fill-[--color-failed]"
+                  className="fill-failed"
                   style={{ fontSize: 9, fontWeight: 700 }}
                 >
                   dropped
@@ -264,7 +264,7 @@ export default function Architecture({
           x={561}
           y={472}
           textAnchor="middle"
-          className="fill-[--color-ink-3]"
+          className="fill-ink-3"
           style={{ fontSize: 10 }}
         >
           seven lenses, blind to each other — if they talk, they converge
@@ -273,14 +273,14 @@ export default function Architecture({
           x={1167}
           y={452}
           textAnchor="middle"
-          className="fill-[--color-ink-3]"
+          className="fill-ink-3"
           style={{ fontSize: 10 }}
         >
           λ decides how far to deviate
         </text>
       </svg>
 
-      <div className="mt-2 flex flex-wrap gap-4 border-t border-[--color-line] pt-3 text-[12px] text-[--color-ink-2]">
+      <div className="mt-2 flex flex-wrap gap-4 border-t border-rule pt-3">
         {(
           [
             ["idle", "waiting"],
@@ -289,15 +289,15 @@ export default function Architecture({
             ["failed", "dropped, with a reason"],
           ] as const
         ).map(([state, label]) => (
-          <span key={state} className="flex items-center gap-2">
+          <span key={state} className="tech flex items-center gap-2">
             <span
-              className="inline-block h-3 w-5 rounded-sm border"
+              className="inline-block h-3 w-5 border"
               style={{ background: FILL[state], borderColor: STROKE[state] }}
             />
             {label}
           </span>
         ))}
-        <span className="ml-auto text-[--color-ink-3]">
+        <span className="tech ml-auto text-ink-3">
           solid rule = pure code, no model, cannot hallucinate
         </span>
       </div>

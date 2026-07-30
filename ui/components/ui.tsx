@@ -15,16 +15,16 @@ export function Card({
 }) {
   return (
     <section
-      className={`rounded-xl border border-[--color-line] bg-[--color-surface] ${className}`}
+      className={`rounded-xl border border-line bg-surface ${className}`}
     >
       {(title || right) && (
-        <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-[--color-line] px-4 py-3">
+        <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-line px-4 py-3">
           {title && (
-            <h2 className="text-[11px] font-bold uppercase tracking-[0.13em] text-[--color-ink-3]">
+            <h2 className="text-[11px] font-bold uppercase tracking-[0.13em] text-ink-3">
               {title}
             </h2>
           )}
-          {hint && <p className="text-[12.5px] text-[--color-ink-2]">{hint}</p>}
+          {hint && <p className="text-[12.5px] text-ink-2">{hint}</p>}
           {right && <div className="ml-auto">{right}</div>}
         </header>
       )}
@@ -46,17 +46,17 @@ export function Stat({
 }) {
   return (
     <div>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[--color-ink-3]">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-3">
         {label}
       </p>
       <p
         className={`num mt-1 text-[26px] font-semibold leading-none tracking-tight ${
-          accent ? "text-[--color-accent]" : ""
+          accent ? "text-accent" : ""
         }`}
       >
         {value}
       </p>
-      {sub && <p className="mt-1.5 text-[12px] text-[--color-ink-2]">{sub}</p>}
+      {sub && <p className="mt-1.5 text-[12px] text-ink-2">{sub}</p>}
     </div>
   );
 }
@@ -76,13 +76,13 @@ export function Empty({
   command?: string;
 }) {
   return (
-    <div className="rounded-xl border border-dashed border-[--color-line] bg-[--color-surface] p-8 text-center">
+    <div className="rounded-xl border border-dashed border-line bg-surface p-8 text-center">
       <p className="text-[14px] font-medium">{title}</p>
-      <p className="mx-auto mt-2 max-w-xl text-[13px] text-[--color-ink-2]">
+      <p className="mx-auto mt-2 max-w-xl text-[13px] text-ink-2">
         {detail}
       </p>
       {command && (
-        <code className="mt-3 inline-block rounded-md bg-[--color-street-soft] px-3 py-1.5 font-mono text-[12.5px] text-[--color-ink-2]">
+        <code className="mt-3 inline-block rounded-md bg-street-soft px-3 py-1.5 font-mono text-[12.5px] text-ink-2">
           {command}
         </code>
       )}
@@ -116,11 +116,11 @@ export function Pill({
   children: ReactNode;
 }) {
   const tones = {
-    neutral: "bg-[--color-street-soft] text-[--color-ink-2]",
-    good: "bg-[--color-accent-soft] text-[--color-accent]",
+    neutral: "bg-street-soft text-ink-2",
+    good: "bg-accent-soft text-accent",
     bad: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
     warn: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
-    accent: "bg-[--color-accent-soft] text-[--color-accent]",
+    accent: "bg-accent-soft text-accent",
   };
   return (
     <span

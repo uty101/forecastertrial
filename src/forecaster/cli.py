@@ -98,31 +98,53 @@ def sources(ticker: str = "NVDA") -> None:
     typer.echo(json.dumps(loader.report(), indent=2, default=str))
 
 
+AGENT_LAYERS = {
+    "extract_guidance": "B  structure",
+    "lens_guidance": "C  analyse",
+    "lens_drivers": "C  analyse",
+    "lens_margins": "C  analyse",
+    "lens_forensics": "C  analyse",
+    "lens_peer_read": "C  analyse",
+    "lens_macro": "C  analyse",
+    "champion": "D  challenge",
+    "judge": "E  judge",
+    "comparability": "V2 comparability",
+}
+
+# The Mechanical lens has no prompt file, because it has no model. It still
+# belongs on the roster — it is the agent the whole determinism argument rests on.
+MECHANICAL = {
+    "id": "mechanical",
+    "layer": "C  analyse",
+    "tier": "none",
+    "version": None,
+    "model": "pure code — cannot hallucinate",
+    "description": (
+        "FX translation, diluted share count, net interest and calendar effects. "
+        "Four things that move a quarterly EPS number, are fully disclosed, are "
+        "pure arithmetic, and change after consensus is set."
+    ),
+}
+
+
 @app.command()
-def agents() -> None:
+def agents(
+    json_out: Path | None = typer.Option(
+        None, "--json", help="also write the roster as JSON for the UI"
+    ),
+) -> None:
     """The roster: every agent, the layer it sits in, and the tier it runs on.
 
-    Model tiering is a cost decision — cheap for extraction, mid for the lenses
-    and the advocate, one expensive call for the judge — and this prints it from
-    the prompts themselves rather than from a slide that can drift.
+    Read from the prompt files rather than a hand-kept list, so it cannot drift
+    from what actually runs. Model tiering is a cost decision — cheap for
+    extraction, mid for the lenses and the advocate, one expensive call for the
+    judge — and printing it from source keeps that claim honest.
     """
     prompts = load_all()
     tier_model = {
         "cheap": settings.model_cheap,
         "mid": settings.model_mid,
         "deep": settings.model_deep,
-    }
-    layers = {
-        "extract_guidance": "B  structure",
-        "lens_guidance": "C  analyse",
-        "lens_drivers": "C  analyse",
-        "lens_margins": "C  analyse",
-        "lens_forensics": "C  analyse",
-        "lens_peer_read": "C  analyse",
-        "lens_macro": "C  analyse",
-        "champion": "D  challenge",
-        "judge": "E  judge",
-        "comparability": "V2 comparability",
     }
 
     typer.echo(f"{'agent':20} {'layer':18} {'tier':6} {'v':>3}  model")
@@ -131,14 +153,42 @@ def agents() -> None:
         f"{'mechanical':20} {'C  analyse':18} {'none':6} {'-':>3}  "
         "pure code — cannot hallucinate"
     )
-    for name in sorted(prompts, key=lambda n: (layers.get(n, "Z"), n)):
+    for name in sorted(prompts, key=lambda n: (AGENT_LAYERS.get(n, "Z"), n)):
         prompt = prompts[name]
         typer.echo(
-            f"{name:20} {layers.get(name, '?'):18} {prompt.model_tier:6} "
+            f"{name:20} {AGENT_LAYERS.get(name, '?'):18} {prompt.model_tier:6} "
             f"{prompt.version:>3}  {tier_model[prompt.model_tier]}"
         )
     typer.echo("-" * 86)
     typer.echo(f"{len(prompts) + 1} agents. Prepared companies: {len(UNIVERSE)}")
+
+    if json_out is not None:
+        rows = [MECHANICAL] + [
+            {
+                "id": name,
+                "layer": AGENT_LAYERS.get(name, "?"),
+                "tier": prompts[name].model_tier,
+                "version": prompts[name].version,
+                "model": tier_model[prompts[name].model_tier],
+                # The prompt's own description, so the roster sheet and the prompt
+                # cannot disagree about what an agent is for.
+                "description": " ".join(prompts[name].description.split()),
+            }
+            for name in sorted(prompts, key=lambda n: (AGENT_LAYERS.get(n, "Z"), n))
+        ]
+        json_out.parent.mkdir(parents=True, exist_ok=True)
+        json_out.write_text(
+            json.dumps(
+                {
+                    "agents": rows,
+                    "tiers": tier_model,
+                    "prepared_companies": len(UNIVERSE),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        typer.echo(f"wrote {json_out}")
 
 
 @app.command()

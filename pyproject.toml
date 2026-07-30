@@ -47,3 +47,10 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
+
+# B008 flags function calls in argument defaults, which is exactly how Typer
+# declares CLI options. Its Option/Argument objects are immutable sentinels
+# consumed at decoration time, so the mutable-default hazard B008 exists to
+# catch does not apply.
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["typer.Option", "typer.Argument"]

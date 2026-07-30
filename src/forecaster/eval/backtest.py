@@ -141,6 +141,51 @@ class Result:
         return (max(0.0, centre - half), min(1.0, centre + half))
 
     @property
+    def information_ratio(self) -> float:
+        """Mean per-case skill divided by its standard deviation.
+
+        The honest analogue of a Sharpe ratio for a forecaster. A trading Sharpe
+        is excess return over its volatility; here "return" is error saved
+        against consensus on a case, and the ratio asks whether the edge is
+        consistent or one lucky quarter carrying the average.
+
+        It is NOT a Sharpe ratio and must not be presented as one: there is no
+        capital, no compounding and no risk-free rate. It is a consistency
+        measure on the same case set the MAE comes from.
+        """
+        per_case = [s.err_consensus - s.err for s in self.scored]
+        if len(per_case) < 2:
+            return 0.0
+        spread = statistics.stdev(per_case)
+        return statistics.fmean(per_case) / spread if spread else 0.0
+
+    def skill_curve(self) -> list[dict]:
+        """Cumulative error saved against consensus, case by case.
+
+        This system's equity curve, and named that way nowhere in the code
+        because it is not one — there is no capital and nothing compounds. It
+        plots the running sum of |consensus − actual| − |forecast − actual|, so
+        the line rising means we were closer than the Street more often than not.
+
+        The baseline is on the series, not alongside it, because the baseline
+        belongs on every chart.
+        """
+        curve: list[dict] = []
+        running = 0.0
+        running_baseline = 0.0
+        for i, scored in enumerate(self.scored, start=1):
+            running += scored.err_consensus - scored.err
+            running_baseline += scored.err_consensus - scored.err_baseline
+            curve.append(
+                {
+                    "i": i,
+                    "cumulative_skill": round(running, 5),
+                    "baseline": round(running_baseline, 5),
+                }
+            )
+        return curve
+
+    @property
     def underpowered(self) -> bool:
         return self.n < POWER_N
 
@@ -167,6 +212,7 @@ class Result:
             else 0.0,
             "win_rate_vs_consensus": round(self.win_rate, 3),
             "win_rate_ci95": [round(lo, 3), round(hi, 3)],
+            "information_ratio": round(self.information_ratio, 3),
             "mean_run_spread": round(self.mean_run_spread, 4),
             "underpowered": self.underpowered,
             "power_note": (

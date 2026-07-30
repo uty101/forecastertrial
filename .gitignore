@@ -19,3 +19,5 @@ ui/tsconfig.tsbuildinfo
 ui/public/results.json
 ui/public/events.ndjson
 ui/public/eval.json
+ui/public/agents.json
+ui/public/portfolio.json
