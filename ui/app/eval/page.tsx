@@ -16,13 +16,11 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-
 import {
   Callout,
   Disclaimer,
-  Display,
   Empty,
-  Green,
+  Lede,
   Panel,
   Pill,
   Sheet,
@@ -99,11 +97,9 @@ export default function EvalScreen() {
     return (
       <Sheet system="backtest + calibration" sheet={sheetOf("/eval/")}>
         <div className="space-y-5">
-          <Display kicker="Nothing downstream means anything until the baseline number exists. Build the firm-quarter cases, score consensus × 1.02 against them, and everything after that is measured rather than asserted.">
-            Every claim
-            <br />
-            <Green>gets backtested.</Green>
-          </Display>
+          <Lede>
+            Nothing downstream means anything until the baseline number exists. Build the firm-quarter cases, score consensus × 1.02 against them, and everything after that is measured rather than asserted.
+          </Lede>
           <Empty
             title="No eval yet — and this is the gate"
             detail="The case set has not been built. Until consensus × 1.02 has a score, a pipeline result has nothing to be compared to and cannot be interpreted."
@@ -190,11 +186,9 @@ export default function EvalScreen() {
         )}
 
         <div className="grid gap-6 lg:grid-cols-[1fr_270px]">
-          <Display kicker="Before claiming an edge. The baseline is on every chart, the intervals are checked against their own coverage, and every lens has to earn its tokens or be dropped.">
-            Every claim
-            <br />
-            <Green>gets backtested.</Green>
-          </Display>
+          <Lede>
+            Before claiming an edge. The baseline is on every chart, the intervals are checked against their own coverage, and every lens has to earn its tokens or be dropped.
+          </Lede>
 
           <StatusPanel
             title="backtest status"
@@ -578,11 +572,9 @@ export default function EvalScreen() {
 
         <Disclaimer>
           <strong className="text-ink">Historical validation only.</strong>{" "}
-          Past accuracy is not indicative of future accuracy, and at this sample
-          size the confidence interval on the win rate very likely spans 50% —
-          which means nobody in the room can distinguish skill from luck. That is
-          the honest reading and it is stated here rather than left for someone
-          else to point out.
+          Past accuracy is not indicative of future accuracy. At this sample size
+          the confidence interval on the win rate very likely spans 50%, so the
+          result does not distinguish skill from luck.
         </Disclaimer>
       </div>
     </Sheet>

@@ -864,9 +864,6 @@ export default function OrgChart({
             <tspan className="fill-ink-2"> — fetch and stage, make no judgment</tspan>
           </text>
 
-          <text x={730} y={-3} className="fill-ink-3" style={{ fontSize: 9 }}>
-            every stage that can hallucinate is checked by one that cannot
-          </text>
         </g>
 
         {/* The structural point the layout exists to make. */}

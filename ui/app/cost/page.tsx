@@ -9,13 +9,11 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-
 import {
   Callout,
   Dimension,
-  Display,
   Empty,
-  Green,
+  Lede,
   Panel,
   Pill,
   Sheet,
@@ -96,11 +94,9 @@ export default function CostScreen() {
         <SyntheticBanner trace={result.trace} />
 
         <div className="grid gap-6 lg:grid-cols-[1fr_270px]">
-          <Display kicker="Cheap models for extraction, mid for the seven lenses and the advocate, one expensive call for the judge. Every figure on this sheet is measured from the call ledger, never estimated.">
-            Tokens are
-            <br />
-            <Green>a budget, not a bill.</Green>
-          </Display>
+          <Lede>
+            Cheap models for extraction, mid for the seven lenses and the advocate, one expensive call for the judge. Every figure on this sheet is measured from the call ledger, never estimated.
+          </Lede>
 
           <StatusPanel
             title="budget status"

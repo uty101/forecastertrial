@@ -865,7 +865,7 @@ export default function Schematic({
             fill="none"
           />
           <text x={48} y={60} className="fill-ink-2" style={{ fontSize: 8.5 }}>
-            consensus bus — <tspan className="fill-ink">the anchor, routed straight to λ</tspan>
+            consensus bus — <tspan className="fill-ink">routed straight to λ</tspan>
           </text>
         </g>
 
@@ -1366,18 +1366,8 @@ export default function Schematic({
           style={{ fontSize: 9.5 }}
         >
           Tapped at A1, past every stage untouched, into λ&rsquo;s second input. The
-          baseline sits in series on it and terminates there — it is what the
-          forecast is scored against, not an input to it.
-        </text>
-        <text
-          x={BUS.railDown}
-          y={BUS.rail + 55}
-          className="fill-ink-3"
-          style={{ fontSize: 9.5 }}
-        >
-          Everything above this line exists to earn the right to move the wiper off
-          it. On a sixty-one-analyst mega-cap, not moving it is the correct answer —
-          not a failure.
+          baseline sits in series and terminates there: it is what the forecast is
+          scored against, not an input to it.
         </text>
 
         <text
@@ -1397,9 +1387,9 @@ export default function Schematic({
           style={{ fontSize: 8.5, letterSpacing: "0.04em" }}
         >
           IN-LINE V1 sits in the signal path and can break it · CONTROL V2
-          collapses λ, V3 sets interval width only · ✕ open circuit = lens dropped,
-          logged, and the judge is told it is missing · dashed footprint = built but
-          not in the circuit
+          collapses λ, V3 sets interval width only · ✕ open circuit = lens dropped
+          and the judge told it is missing · dashed footprint = built, not in the
+          circuit
         </text>
       </svg>
     </div>

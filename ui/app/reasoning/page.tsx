@@ -5,9 +5,8 @@ import { useState } from "react";
 import LensConstellation from "@/components/LensConstellation";
 import {
   Callout,
-  Display,
   Empty,
-  Green,
+  Lede,
   Panel,
   Pill,
   Sheet,
@@ -101,11 +100,9 @@ export default function ReasoningScreen() {
         <SyntheticBanner trace={result.trace} />
 
         <div className="grid gap-6 lg:grid-cols-[1fr_270px]">
-          <Display kicker="Every case is argued properly and then argued against, before anything is compared. Comparing raw findings and taking the plurality rewards the finding that is easiest to reach, not the one that matters.">
-            Then every case
-            <br />
-            <Green>gets attacked.</Green>
-          </Display>
+          <Lede>
+            Every case is argued properly and then argued against, before anything is compared. Comparing raw findings and taking the plurality rewards the finding that is easiest to reach, not the one that matters.
+          </Lede>
 
           <StatusPanel
             title="challenge status"

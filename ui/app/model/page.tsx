@@ -2,9 +2,8 @@
 
 import {
   Callout,
-  Display,
   Empty,
-  Green,
+  Lede,
   Panel,
   Pill,
   Sheet,
@@ -163,11 +162,9 @@ export default function ModelScreen() {
         <SyntheticBanner trace={result.trace} />
 
         <div className="grid gap-6 lg:grid-cols-[1fr_270px]">
-          <Display kicker="A model built by a language model is a model you cannot trust. The links between the statements are pure arithmetic, so they are code — and the balance check is a hard gate, not a warning.">
-            The model is
-            <br />
-            <Green>deterministic.</Green>
-          </Display>
+          <Lede>
+            A model built by a language model is a model you cannot trust. The links between the statements are pure arithmetic, so they are code — and the balance check is a hard gate, not a warning.
+          </Lede>
 
           <StatusPanel
             title="model status"

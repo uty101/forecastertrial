@@ -129,8 +129,8 @@ export function useRun(): RunState {
         if (cancelled || !logRes.ok) return;
 
         const recorded = parseNdjson(await logRes.text());
-        // Original pacing, from the events themselves. The room watches the
-        // system think at the speed it actually thought.
+        // Original pacing, from the events themselves, so a replay runs at the
+        // speed the run actually took rather than an arbitrary one.
         for (let i = 0; i < recorded.length; i++) {
           const at = recorded[i].ts_ms;
           timers.current.push(

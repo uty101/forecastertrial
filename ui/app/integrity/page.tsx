@@ -3,9 +3,8 @@
 import {
   Callout,
   Disclaimer,
-  Display,
   Empty,
-  Green,
+  Lede,
   Panel,
   Pill,
   Sheet,
@@ -119,11 +118,9 @@ export default function IntegrityScreen() {
         <SyntheticBanner trace={result.trace} />
 
         <div className="grid gap-6 lg:grid-cols-[1fr_270px]">
-          <Display kicker='"We don&rsquo;t invent figures" is a validation error here, not a code-review comment. And a backtest that cannot fail on a leak is not enforcing anything — so there is a test that deliberately tries to leak.'>
-            No number
-            <br />
-            <Green>without a source.</Green>
-          </Display>
+          <Lede>
+            "We don&rsquo;t invent figures" is a validation error here, not a code-review comment. And a backtest that cannot fail on a leak is not enforcing anything — so there is a test that deliberately tries to leak.
+          </Lede>
 
           <StatusPanel
             title="integrity status"

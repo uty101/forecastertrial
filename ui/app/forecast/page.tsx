@@ -10,13 +10,11 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-
 import {
   Callout,
   Dimension,
-  Display,
   Empty,
-  Green,
+  Lede,
   Panel,
   Pill,
   Sheet,
@@ -91,11 +89,9 @@ export default function ForecastScreen() {
         <SyntheticBanner trace={result.trace} />
 
         <div className="grid gap-6 lg:grid-cols-[1fr_270px]">
-          <Display kicker="A distribution is a strict superset of a point forecast — median for MAE, mean for MSE, quantiles for CRPS. Building it once makes the scoring rule a config value.">
-            The number,
-            <br />
-            <Green>and how sure we are.</Green>
-          </Display>
+          <Lede>
+            A distribution is a strict superset of a point forecast — median for MAE, mean for MSE, quantiles for CRPS. Building it once makes the scoring rule a config value.
+          </Lede>
 
           <StatusPanel
             title="forecast status"

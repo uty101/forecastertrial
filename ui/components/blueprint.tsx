@@ -140,43 +140,35 @@ export function SheetFooter({ cells }: { cells: Array<[string, string]> }) {
   );
 }
 
-/* ---- display headline -------------------------------------------------- */
+/* ---- lede -------------------------------------------------------------- */
 
-export function Display({
-  children,
-  kicker,
-  size = "lg",
-}: {
-  children: ReactNode;
-  kicker?: ReactNode;
-  size?: "lg" | "md";
-}) {
+/**
+ * What this sheet is, in plain sentences.
+ *
+ * This replaced a 58px two-line headline with a coloured punchline on every
+ * sheet — "Tokens are / a budget, not a bill", that sort of thing. Three reasons
+ * it had to go, in order of how much they cost:
+ *
+ * 1. It was a second title. Every sheet already carries its name in the header
+ *    block, so the headline restated it in a louder font and bought nothing.
+ * 2. It was advertising. This is an instrument someone reads to find out what a
+ *    number means, and a slogan above the number is a claim about the work
+ *    standing where the work should be.
+ * 3. It set the register for everything else. Once the top of the page is
+ *    selling, the prose underneath drifts into selling too.
+ *
+ * So: no headline, no punchline colour, and the explanation that used to be
+ * demoted to a caption is now the first thing on the sheet.
+ */
+export function Lede({ children }: { children: ReactNode }) {
   return (
     <div>
-      <h1
-        className={`display text-ink ${
-          size === "lg"
-            ? "text-[clamp(30px,5.4vw,58px)]"
-            : "text-[clamp(22px,3.4vw,36px)]"
-        }`}
-      >
+      <div className="h-[2px] w-8 bg-accent" />
+      <p className="mt-2.5 max-w-[62ch] text-[12.5px] leading-relaxed text-ink-2">
         {children}
-      </h1>
-      {kicker && (
-        <>
-          <div className="mt-3 h-[3px] w-9 bg-accent" />
-          <p className="tech mt-2.5 max-w-xl leading-relaxed text-ink-2">
-            {kicker}
-          </p>
-        </>
-      )}
+      </p>
     </div>
   );
-}
-
-/** Second line of a display headline, in the structural green. */
-export function Green({ children }: { children: ReactNode }) {
-  return <span className="text-structure">{children}</span>;
 }
 
 /* ---- status panel ------------------------------------------------------ */

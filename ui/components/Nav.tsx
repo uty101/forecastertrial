@@ -7,11 +7,9 @@ import { RegMark } from "@/components/blueprint";
 import { SHEETS, TOTAL } from "@/lib/sheets";
 
 /**
- * The drawing-set index, as navigation.
- *
- * Numbered because the sheets are numbered, and in demo order: the live run
- * wins the room, the reasoning trace wins on substance, and the method sheet is
- * what the architecture prize is actually judged on.
+ * The sheet index, as navigation. Numbered because the sheets are numbered, and
+ * ordered so the system view and the live run come first — those are the two
+ * anyone opens without being told to.
  */
 export default function Nav() {
   const pathname = usePathname();
@@ -26,10 +24,6 @@ export default function Nav() {
             forecaster
           </span>
         </Link>
-        <p className="tech hidden text-ink-3 md:block">
-          an analyst with no incentives
-        </p>
-
         <nav className="ml-auto flex flex-wrap items-center gap-x-1 gap-y-1">
           {SHEETS.map((sheet) => {
             const active =

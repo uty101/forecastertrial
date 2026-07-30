@@ -14,8 +14,7 @@ import OrgChart, {
 import Schematic from "@/components/Schematic";
 import {
   Callout,
-  Display,
-  Green,
+  Lede,
   Panel,
   Pill,
   Sheet,
@@ -123,11 +122,14 @@ export default function SystemScreen() {
     >
       <div className="space-y-6">
         <div className="grid gap-6 lg:grid-cols-[1fr_270px]">
-          <Display kicker="Eight ranks, from the deliverable down to the data sources. Solid lines are reporting lines. Dashed lines are the verification layers, which audit the chain and contribute no estimate of their own.">
-            The whole system,
-            <br />
-            <Green>on one sheet.</Green>
-          </Display>
+          <Lede>
+            Two drawings of the same parts. The schematic shows how evidence
+            flows and what each conductor is carrying; the reporting chain shows
+            the same parts as a hierarchy. Three overlays on either: what is
+            built, what is running, what each part costs. Build state is derived
+            from the repository rather than kept by hand, so it cannot claim
+            something exists that does not.
+          </Lede>
 
           <StatusPanel
             title={overlay === "live" ? "run status" : "build status"}

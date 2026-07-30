@@ -3,9 +3,9 @@ import Nav from "@/components/Nav";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "forecaster — an analyst with no incentives",
+  title: "forecaster",
   description:
-    "An earnings-forecasting agent that knows when to disagree with Wall Street, and more often when not to.",
+    "Quarterly EPS forecasting. Seven independent lenses over cited filing evidence, reconciled and judged, then positioned against consensus by a fitted lambda.",
 };
 
 export default function RootLayout({

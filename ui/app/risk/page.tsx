@@ -6,9 +6,8 @@ import {
   Callout,
   Dimension,
   Disclaimer,
-  Display,
   Empty,
-  Green,
+  Lede,
   Panel,
   Pill,
   Sheet,
@@ -195,11 +194,9 @@ export default function RiskScreen() {
         <SyntheticBanner trace={result.trace} />
 
         <div className="grid gap-6 lg:grid-cols-[1fr_270px]">
-          <Display kicker="This system holds no positions, so the scarce resource is not capital — it is deviation. Every basis point of disagreement with sixty-one analysts is risk taken, and it is budgeted the same way.">
-            Risk always
-            <br />
-            <Green>comes first.</Green>
-          </Display>
+          <Lede>
+            This system holds no positions, so the scarce resource is not capital — it is deviation. Every basis point of disagreement with sixty-one analysts is risk taken, and it is budgeted the same way.
+          </Lede>
 
           <StatusPanel
             title="risk status"

@@ -1,6 +1,6 @@
 # forecaster
 
-An earnings-forecasting agent that knows when to disagree with Wall Street — and, more often, when not to.
+Quarterly EPS forecasting. Seven independent lenses read cited filing evidence, every citation is verified against its source, each case is argued and then argued against, and a judge weighs them by materiality into a distribution. A fitted λ decides how far that distribution sits from consensus.
 
 Built for **Agents vs Wall Street**, London, 16 August 2026.
 

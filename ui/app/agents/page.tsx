@@ -4,9 +4,8 @@ import { useEffect, useState } from "react";
 
 import {
   Callout,
-  Display,
   Empty,
-  Green,
+  Lede,
   Panel,
   Pill,
   Sheet,
@@ -101,11 +100,9 @@ export default function AgentsScreen() {
     >
       <div className="space-y-6">
         <div className="grid gap-6 lg:grid-cols-[1fr_270px]">
-          <Display kicker="Ten agents, one file each in llm/prompts/ — the only definition of “agent” here that can be checked rather than asserted. The eleventh row is the Mechanical lens: same layer, same job, no prompt and no model. Read from the prompt files themselves, because a roster maintained by hand drifts from what actually runs and then this sheet confidently describes a system that no longer exists.">
-            Ten agents.
-            <br />
-            <Green>One that isn&rsquo;t.</Green>
-          </Display>
+          <Lede>
+            Ten agents, one file each in llm/prompts/ — the only definition of “agent” here that can be checked rather than asserted. The eleventh row is the Mechanical lens: same layer, same job, no prompt and no model. Read from the prompt files themselves, because a roster maintained by hand drifts from what actually runs and then this sheet confidently describes a system that no longer exists.
+          </Lede>
 
           <StatusPanel
             title="roster status"
