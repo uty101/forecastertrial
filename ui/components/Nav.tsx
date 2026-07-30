@@ -53,32 +53,6 @@ export default function Nav() {
             );
           })}
           <span className="tech ml-1 text-ink-3">/{TOTAL}</span>
-
-          {/* Pops the LIVE SCREEN into its own OS window, so it can be parked on
-              a second monitor while you work on the other one.
-
-              This used to open a separate hand-rolled monitor.html — a second
-              implementation of the same diagram, which promptly diverged: the app
-              was redesigned and the pop-out was not, so the button opened a window
-              that looked like a different product. A duplicate of your best screen
-              is a liability, not insurance. Same window, same route, one
-              implementation. */}
-          <button
-            type="button"
-            onClick={() =>
-              window.open(
-                "/",
-                "forecaster-live",
-                "width=1600,height=980,menubar=no,toolbar=no,location=no",
-              )
-            }
-            title="Pop the live screen out into its own window for a second monitor"
-            className="state-change ml-2 flex items-center gap-1.5 border border-rule px-2 py-1 text-[12.5px] text-ink-2 hover:border-accent hover:text-accent"
-          >
-            <span className="blink inline-block h-1.5 w-1.5 rounded-full bg-accent" />
-            Pop out
-            <span className="tech">↗</span>
-          </button>
         </nav>
       </div>
     </header>

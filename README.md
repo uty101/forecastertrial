@@ -57,10 +57,11 @@ rather than as "something else is on that port".
 **The home screen is the instrument.** `/` is the live signal-flow schematic,
 polling `out/events.ndjson` four times a second: parts light as they run, tokens
 and latency print on the part that spent them, and clicking any part says what it
-is and whether a test covers it. `Pop out ↗` in the header puts that same screen
-in its own OS window for a second monitor.
+is and whether a test covers it. For a second screen, open `/` in another browser
+window — it is the same page and the same poll, so there is nothing to keep in
+sync.
 
-There used to be a separate `monitor.html` for that pop-out — a second
+There used to be a separate `monitor.html` doing this in its own window: a second
 implementation of the same diagram. It diverged the moment the app was
 redesigned, and opened a window that looked like a different product. One
 implementation now.
