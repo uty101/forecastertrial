@@ -47,8 +47,11 @@
         "basis": "non_gaap",
         "claim_ids": [
           "c1",
+          "c2",
+          "c3",
           "c4",
-          "c7"
+          "c5",
+          "c6"
         ],
         "confidence": 0.9,
         "counterargument": null,
@@ -68,9 +71,8 @@
       {
         "basis": "non_gaap",
         "claim_ids": [
-          "c1",
-          "c4",
-          "c7"
+          "c5",
+          "c6"
         ],
         "confidence": 0.78,
         "counterargument": "Most of this is already in the guided range, and the guide is three months old. Most material weakness: the effect is real but is likely a third of the claimed size.",
@@ -90,9 +92,17 @@
       {
         "basis": "non_gaap",
         "claim_ids": [
-          "c1",
-          "c4",
-          "c7"
+          "c9",
+          "c10",
+          "c11",
+          "c12",
+          "c13",
+          "c14",
+          "c15",
+          "c16",
+          "c17",
+          "c18",
+          "c19"
         ],
         "confidence": 0.62,
         "counterargument": "Most of this is already in the guided range, and the guide is three months old. Most material weakness: the effect is real but is likely a third of the claimed size.",
@@ -112,9 +122,14 @@
       {
         "basis": "non_gaap",
         "claim_ids": [
-          "c1",
-          "c4",
-          "c7"
+          "c13",
+          "c14",
+          "c15",
+          "c16",
+          "c17",
+          "c18",
+          "c19",
+          "c20"
         ],
         "confidence": 0.55,
         "counterargument": "Most of this is already in the guided range, and the guide is three months old. Most material weakness: the effect is real but is likely a third of the claimed size.",
@@ -134,9 +149,11 @@
       {
         "basis": "non_gaap",
         "claim_ids": [
-          "c1",
-          "c4",
-          "c7"
+          "c17",
+          "c18",
+          "c19",
+          "c20",
+          "c21"
         ],
         "confidence": 0.44,
         "counterargument": "Most of this is already in the guided range, and the guide is three months old. Most material weakness: the effect is real but is likely a third of the claimed size.",
@@ -156,9 +173,9 @@
       {
         "basis": "non_gaap",
         "claim_ids": [
-          "c1",
-          "c4",
-          "c7"
+          "c21",
+          "c22",
+          "c23"
         ],
         "confidence": 0.51,
         "counterargument": null,
