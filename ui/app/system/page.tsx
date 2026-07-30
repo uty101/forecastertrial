@@ -11,6 +11,7 @@ import OrgChart, {
   type OrgNode,
   type Overlay,
 } from "@/components/OrgChart";
+import Schematic from "@/components/Schematic";
 import {
   Callout,
   Display,
@@ -68,6 +69,17 @@ const KIND_NOTE: Record<Kind, string> = {
   output: "the artifact, not a component",
 };
 
+type View = "schematic" | "org";
+
+const VIEWS: Array<[View, string, string]> = [
+  [
+    "schematic",
+    "Signal flow",
+    "how evidence moves, and what each conductor is carrying",
+  ],
+  ["org", "Reporting chain", "the same parts as a hierarchy, eight ranks deep"],
+];
+
 const OVERLAYS: Array<[Overlay, string, string]> = [
   ["build", "Built", "what exists and what a test actually covers"],
   ["live", "Running", "state from the event log, four times a second"],
@@ -75,6 +87,7 @@ const OVERLAYS: Array<[Overlay, string, string]> = [
 ];
 
 export default function SystemScreen() {
+  const [view, setView] = useState<View>("schematic");
   const [overlay, setOverlay] = useState<Overlay>("build");
   const [build, setBuild] = useState<BuildPayload | null>(null);
   const [selected, setSelected] = useState<OrgNode | null>(null);
@@ -187,7 +200,34 @@ export default function SystemScreen() {
           />
         </div>
 
-        {/* Three questions, one hierarchy. */}
+        {/* Two drawings of the same system, because they answer different
+            questions. The schematic shows how evidence FLOWS and what each
+            conductor is carrying; the org chart shows the reporting hierarchy.
+            The schematic is the default because flow is the truer description —
+            nothing here reports to anything. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="label mr-1">drawing:</span>
+          {VIEWS.map(([key, label, hint]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setView(key)}
+              title={hint}
+              className={`state-change border px-3 py-1.5 text-[12.5px] ${
+                view === key
+                  ? "border-ink bg-structure-soft font-semibold text-ink"
+                  : "border-rule text-ink-2 hover:border-ink-3"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+          <span className="tech ml-2 text-ink-3">
+            {VIEWS.find(([k]) => k === view)?.[2]}
+          </span>
+        </div>
+
+        {/* Three questions, one system. */}
         <div className="flex flex-wrap items-center gap-2">
           <span className="label mr-1">overlay:</span>
           {OVERLAYS.map(([key, label, hint]) => (
@@ -211,23 +251,36 @@ export default function SystemScreen() {
         </div>
 
         <Panel
-          label="reporting chain"
-          hint="click any box for its detail"
+          label={view === "schematic" ? "signal flow schematic" : "reporting chain"}
+          hint="click any part for its detail"
           right={
             <span className="tech text-ink-3">
               {overlay === "build" && !build ? "build.json not staged" : ""}
             </span>
           }
         >
-          <OrgChart
-            overlay={overlay}
-            build={byComponent}
-            live={run.nodes}
-            selected={selected?.id ?? null}
-            onSelect={(node) =>
-              setSelected((current) => (current?.id === node.id ? null : node))
-            }
-          />
+          {view === "schematic" ? (
+            <Schematic
+              overlay={overlay}
+              build={byComponent}
+              live={run.nodes}
+              result={run.result}
+              selected={selected?.id ?? null}
+              onSelect={(node) =>
+                setSelected((current) => (current?.id === node.id ? null : node))
+              }
+            />
+          ) : (
+            <OrgChart
+              overlay={overlay}
+              build={byComponent}
+              live={run.nodes}
+              selected={selected?.id ?? null}
+              onSelect={(node) =>
+                setSelected((current) => (current?.id === node.id ? null : node))
+              }
+            />
+          )}
 
           <div className="dashed mt-3 flex flex-wrap gap-4 pt-3">
             {overlay === "build" &&

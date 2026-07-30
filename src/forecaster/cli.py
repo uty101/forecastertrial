@@ -160,7 +160,16 @@ def agents(
             f"{prompt.version:>3}  {tier_model[prompt.model_tier]}"
         )
     typer.echo("-" * 86)
-    typer.echo(f"{len(prompts) + 1} agents. Prepared companies: {len(UNIVERSE)}")
+    # `len(prompts)`, not `len(prompts) + 1`. The mechanical row is printed above
+    # because it sits in layer C alongside the six lenses that are agents, but it
+    # has no prompt and no model in it and counting it as an agent destroys the
+    # only distinction this table exists to make. See
+    # test_agent_count_matches_every_surface_that_states_it.
+    typer.echo(
+        f"{len(prompts)} agents — one prompt file each. "
+        f"1 row above is not an agent (mechanical: pure code). "
+        f"Prepared companies: {len(UNIVERSE)}"
+    )
 
     if json_out is not None:
         rows = [MECHANICAL] + [

@@ -52,7 +52,14 @@ CONSENSUS = Consensus(
     as_of=AS_OF,
 )
 
-LENSES: list[tuple[LensName, float | None, float, str, str | None]] = [
+# The trailing int is how many claims the lens cited, and it is NOT decorative.
+# The schematic sizes each conductor by citation count, so a fixture where every
+# lens cites exactly the same three claims draws seven identical wires and hides
+# the one thing that view exists to show. These counts are the realistic shape:
+# Drivers cites a segment table, Guidance stands on two sentences and is still
+# the strongest lens — which is the point, since the judge weighs by materiality
+# and not by how many claims a lens managed to pile up.
+LENSES: list[tuple[LensName, float | None, float, str, str | None, int]] = [
     (
         LensName.MECHANICAL,
         2.44,
@@ -61,6 +68,7 @@ LENSES: list[tuple[LensName, float | None, float, str, str | None]] = [
         "count 2,480m -> 2,468m from $1.4bn of buyback at $118. No model "
         "judgment — arithmetic only.",
         None,
+        6,
     ),
     (
         LensName.GUIDANCE,
@@ -71,6 +79,7 @@ LENSES: list[tuple[LensName, float | None, float, str, str | None]] = [
         "above the top end more often than not.",
         "The landing distribution is the load-bearing input and it is measured, "
         "not assumed: eight quarters, empirical-Bayes shrunk toward the sector.",
+        2,
     ),
     (
         LensName.DRIVERS,
@@ -80,6 +89,7 @@ LENSES: list[tuple[LensName, float | None, float, str, str | None]] = [
         "across the remaining segments. Segments sum to the total.",
         "Unit build is disclosed at segment level, so the decomposition is not "
         "inferred.",
+        11,
     ),
     (
         LensName.MARGINS,
@@ -88,6 +98,7 @@ LENSES: list[tuple[LensName, float | None, float, str, str | None]] = [
         "Gross margin 73.2% against 74.1% prior on an unfavourable product mix "
         "shift; opex +6% sequentially on headcount; tax rate 16.5%.",
         "Mix is the whole argument and mix is the part most easily wrong.",
+        8,
     ),
     (
         LensName.FORENSICS,
@@ -99,6 +110,7 @@ LENSES: list[tuple[LensName, float | None, float, str, str | None]] = [
         "below the line rather than an unusual item.",
         "The recurring exclusion is the stronger of the two findings: it moves "
         "what the reported number means, not just its level.",
+        5,
     ),
     (
         LensName.PEER_READ,
@@ -108,6 +120,7 @@ LENSES: list[tuple[LensName, float | None, float, str, str | None]] = [
         "content up 34% and supplies roughly 40% of this company's segment "
         "input — the transmission mechanism is specific rather than sectoral.",
         None,
+        3,
     ),
 ]
 
@@ -117,6 +130,21 @@ DROPPED = {
         "returned null rather than reasoning from general economic conditions"
     )
 }
+
+# The evidence store holds this many claims; the lens counts above draw from it.
+N_CLAIMS = 24
+
+
+def _cited(lens_index: int, count: int) -> list[str]:
+    """`count` claim ids out of the store, overlapping between lenses.
+
+    Overlap is the realistic shape and it matters: two lenses citing the same
+    filed figure is normal, and it is not the same thing as two lenses agreeing
+    because one read the other's output. Staggering the start keeps the sets
+    distinct without pretending the store is partitioned.
+    """
+    start = lens_index * 4
+    return [f"c{1 + (start + k) % N_CLAIMS}" for k in range(count)]
 
 
 @app.command()
@@ -130,7 +158,7 @@ def main(out: Path = Path("out"), ticker: str = "DEMO") -> None:
             revenue=44_600.0 if eps else None,
             basis=Basis.NON_GAAP,
             reasoning=reasoning,
-            claim_ids=["c1", "c4", "c7"],
+            claim_ids=_cited(i, cites),
             confidence=confidence,
             reconciled=True,
             thesis=thesis,
@@ -146,7 +174,7 @@ def main(out: Path = Path("out"), ticker: str = "DEMO") -> None:
             output_tokens=0 if name is LensName.MECHANICAL else 720,
             latency_ms=2 if name is LensName.MECHANICAL else 7_800,
         )
-        for name, eps, confidence, reasoning, thesis in LENSES
+        for i, (name, eps, confidence, reasoning, thesis, cites) in enumerate(LENSES)
     ]
 
     forecast = Forecast(
@@ -245,11 +273,11 @@ def main(out: Path = Path("out"), ticker: str = "DEMO") -> None:
     for node in ("A1_numbers", "A2_filings", "A3_industry", "A4_macro", "B_structure"):
         events.emit(EventType.NODE_START, node)
         events.emit(EventType.NODE_DONE, node, latency_ms=900)
-    events.emit(EventType.CLAIM_ADDED, "B_structure", n=24)
-    for name, _, confidence, _, _ in LENSES:
+    events.emit(EventType.CLAIM_ADDED, "B_structure", n=N_CLAIMS)
+    for name, _, confidence, _, _, cites in LENSES:
         events.emit(EventType.NODE_START, f"C_{name.value}")
         events.emit(EventType.NODE_DONE, f"C_{name.value}",
-                    latency_ms=7800, confidence=confidence)
+                    latency_ms=7800, confidence=confidence, cited=cites)
     events.emit(EventType.NODE_START, "C_macro")
     events.emit(EventType.NODE_FAILED, "C_macro", error=DROPPED["macro"])
     for node in ("V1_reconcile", "D_champion", "E_judge", "V2_comparability",

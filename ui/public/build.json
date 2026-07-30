@@ -60,7 +60,7 @@
       "label": "Guidance extractor",
       "layer": "acquire",
       "state": "built",
-      "tests": 24,
+      "tests": 25,
       "tier": "cheap"
     },
     {
@@ -69,7 +69,7 @@
       "label": "Evidence store",
       "layer": "structure",
       "state": "built",
-      "tests": 41,
+      "tests": 42,
       "tier": "none"
     },
     {
@@ -177,7 +177,7 @@
       "label": "Judge",
       "layer": "judge",
       "state": "built",
-      "tests": 24,
+      "tests": 25,
       "tier": "deep"
     },
     {
@@ -204,7 +204,7 @@
       "label": "V3 calibrate",
       "layer": "verify",
       "state": "built",
-      "tests": 24,
+      "tests": 25,
       "tier": "none"
     },
     {
@@ -267,7 +267,7 @@
       "label": "LLM client",
       "layer": "infra",
       "state": "built",
-      "tests": 24,
+      "tests": 25,
       "tier": "none"
     }
   ],
@@ -322,9 +322,9 @@
     "gates_total": 6,
     "missing": 0,
     "partial": 16,
-    "tests": 86,
+    "tests": 87,
     "tests_by_file": {
-      "tests/test_llm_layer.py": 24,
+      "tests/test_llm_layer.py": 25,
       "tests/test_model.py": 16,
       "tests/test_point_in_time.py": 5,
       "tests/test_reconciler.py": 17,

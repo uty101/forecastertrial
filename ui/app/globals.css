@@ -237,6 +237,35 @@ body {
   animation: blink 1.4s ease-in-out infinite;
 }
 
+/* Marching ants along a trunk that is carrying signal right now. Direction
+   matters: the dashes travel the way the data travels, so the schematic reads as
+   a live circuit rather than a picture of one. */
+@keyframes march {
+  to {
+    stroke-dashoffset: -28;
+  }
+}
+
+.trunk-live {
+  stroke-dasharray: 7 7;
+  animation: march 620ms linear infinite;
+}
+
+/* An energised trunk that has already delivered: solid, no motion. */
+@keyframes trace-in {
+  from {
+    stroke-dashoffset: 340;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.trunk-done {
+  stroke-dasharray: 340;
+  animation: trace-in 520ms ease-out 1 both;
+}
+
 /* Rule 3. */
 .state-change {
   transition:
@@ -250,8 +279,14 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .node-running,
-  .blink {
+  .blink,
+  .trunk-live,
+  .trunk-done {
     animation: none;
+  }
+  .trunk-live,
+  .trunk-done {
+    stroke-dasharray: none;
   }
   .state-change {
     transition: none;

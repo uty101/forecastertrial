@@ -393,42 +393,45 @@ const EDGES: Array<[string, string, "reports" | "audit"]> = [
   ["extract_guidance", "evidence", "audit"],
 ];
 
-const BUILD_FILL = {
+/* The state palettes are exported because the schematic view paints from the same
+   three overlays. Two components inventing their own greens is how a legend ends
+   up describing a colour that appears nowhere. */
+export const BUILD_FILL = {
   built: "var(--color-structure-soft)",
   partial: "var(--color-accent-soft)",
   missing: "var(--color-paper-2)",
   unknown: "var(--color-paper-2)",
 } as const;
 
-const BUILD_STROKE = {
+export const BUILD_STROKE = {
   built: "var(--color-structure)",
   partial: "var(--color-accent)",
   missing: "var(--color-failed)",
   unknown: "var(--color-idle)",
 } as const;
 
-const LIVE_FILL = {
+export const LIVE_FILL = {
   idle: "var(--color-paper-2)",
   running: "var(--color-accent-soft)",
   done: "var(--color-structure-soft)",
   failed: "var(--color-accent-soft)",
 } as const;
 
-const LIVE_STROKE = {
+export const LIVE_STROKE = {
   idle: "var(--color-idle)",
   running: "var(--color-accent)",
   done: "var(--color-structure)",
   failed: "var(--color-failed)",
 } as const;
 
-const TIER_FILL = {
+export const TIER_FILL = {
   none: "var(--color-structure-soft)",
   cheap: "var(--color-paper-2)",
   mid: "var(--color-accent-soft)",
   deep: "var(--color-accent)",
 } as const;
 
-const TIER_STROKE = {
+export const TIER_STROKE = {
   none: "var(--color-structure)",
   cheap: "var(--color-idle)",
   mid: "var(--color-accent)",
@@ -436,7 +439,7 @@ const TIER_STROKE = {
 } as const;
 
 /** The agent's left-edge tab, coloured by what the call costs. */
-const TAB = {
+export const TAB = {
   none: "var(--color-ink-3)",
   cheap: "var(--color-ink-3)",
   mid: "var(--color-accent)",
