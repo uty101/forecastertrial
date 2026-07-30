@@ -239,7 +239,9 @@ def main(out: Path = Path("out"), ticker: str = "DEMO") -> None:
     # An event log with the same node ids the pipeline emits, so the live view
     # can be developed against it.
     events = EventLog(out / "events.ndjson")
-    events.emit(EventType.RUN_START, payload={"ticker": ticker, "as_of": str(AS_OF)})
+    # kwargs, not payload= — `emit` collects **payload, so a dict named `payload`
+    # would nest a second time and consumers would read undefined.
+    events.emit(EventType.RUN_START, ticker=ticker, as_of=str(AS_OF))
     for node in ("A1_numbers", "A2_filings", "A3_industry", "A4_macro", "B_structure"):
         events.emit(EventType.NODE_START, node)
         events.emit(EventType.NODE_DONE, node, latency_ms=900)
@@ -254,7 +256,7 @@ def main(out: Path = Path("out"), ticker: str = "DEMO") -> None:
                  "F_lambda", "V3_calibrate"):
         events.emit(EventType.NODE_START, node)
         events.emit(EventType.NODE_DONE, node, latency_ms=1200)
-    events.emit(EventType.RUN_DONE, payload={"eps": 2.44, "cost_usd": 0.2837})
+    events.emit(EventType.RUN_DONE, eps=2.44, cost_usd=0.2837)
 
     _write_eval(out)
     _write_portfolio(out)

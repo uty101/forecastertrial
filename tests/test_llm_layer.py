@@ -59,6 +59,38 @@ def test_every_prompt_parses():
         assert prompt.system.strip() and prompt.user.strip()
 
 
+def test_agent_count_matches_every_surface_that_states_it():
+    """"How many agents are there" is answered on four surfaces, and they drifted.
+
+    An agent is defined in exactly one way in this repo — a component with a
+    versioned prompt in llm/prompts/ — because that is checkable rather than
+    asserted. The README, the /agents sheet, the /system org chart and the live
+    monitor all print a number, and at one point three of them said eleven by
+    counting the Mechanical lens, which has no prompt and no model in it.
+
+    Counting Mechanical as an agent destroys the only distinction on those pages
+    worth making: every stage that can hallucinate is checked by one that cannot.
+    So the count is pinned here, and the UI derives its own from the same rule.
+    """
+    prompts = load_all()
+    assert len(prompts) == 10, (
+        f"the agent roster changed: {sorted(prompts)}. Update the count on the "
+        f"/agents sheet, the /system legend, ui/public/monitor.html and the "
+        f"README in the same commit, or they will disagree on a projector."
+    )
+    assert "mechanical" not in prompts, (
+        "the Mechanical lens must not acquire a prompt file — it is arithmetic, "
+        "and that is the point of it"
+    )
+    from forecaster.cli import AGENT_LAYERS
+
+    assert set(AGENT_LAYERS) == set(prompts), (
+        f"cli.AGENT_LAYERS is out of step with the prompt files: "
+        f"only in AGENT_LAYERS {set(AGENT_LAYERS) - set(prompts)}, "
+        f"only in prompts {set(prompts) - set(AGENT_LAYERS)}"
+    )
+
+
 def test_unknown_prompt_lists_what_is_available():
     with pytest.raises(PromptError) as err:
         load("lens_vibes")

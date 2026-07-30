@@ -90,15 +90,16 @@ def forecast(
     events: EventLog,
 ) -> RunResult:
     started = time.monotonic()
+    # Note the kwargs: `EventLog.emit` collects **payload, so passing
+    # `payload={...}` would nest it a second time and every consumer reading
+    # `event.payload.ticker` would get undefined.
     events.emit(
         EventType.RUN_START,
-        payload={
-            "ticker": config.ticker,
-            "period": config.period,
-            "as_of": config.as_of.isoformat(),
-            "preset": config.preset.value,
-            "run_index": config.run_index,
-        },
+        ticker=config.ticker,
+        period=config.period,
+        as_of=config.as_of.isoformat(),
+        preset=config.preset.value,
+        run_index=config.run_index,
     )
 
     # ---- A: acquire --------------------------------------------------- #
@@ -266,12 +267,10 @@ def forecast(
 
     events.emit(
         EventType.RUN_DONE,
-        payload={
-            "eps": final_eps,
-            "baseline": baseline_eps,
-            "lambda": decision.value,
-            "cost_usd": cost["total_cost_usd"],
-        },
+        eps=final_eps,
+        baseline=baseline_eps,
+        lambda_value=decision.value,
+        cost_usd=cost["total_cost_usd"],
     )
     log.info(
         "run_complete",

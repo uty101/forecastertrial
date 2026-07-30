@@ -160,7 +160,17 @@
   footer .cell:first-child{border-left:0}
   footer .v{font-family:var(--mono);font-size:11px;font-weight:700;margin-top:1px}
 
-  .empty{position:absolute;inset:0;display:flex;align-items:center;
+  .key{display:flex;flex-wrap:wrap;gap:14px;align-items:center;
+    padding:6px 12px;border-top:1px solid var(--rule);background:var(--sheet)}
+  .key .k{display:inline-flex;align-items:center;gap:6px;
+    font-family:var(--mono);font-size:9.5px;letter-spacing:.04em;
+    text-transform:uppercase;color:var(--ink2)}
+  .key .k b{color:var(--ink);font-weight:700}
+  .key svg{width:26px;height:15px;flex:none}
+
+  /* Bottom inset clears the key bar, so the empty state centres on the chart
+     rather than on the chart-plus-legend. */
+  .empty{position:absolute;inset:0 0 34px 0;display:flex;align-items:center;
     justify-content:center;text-align:center;padding:24px;pointer-events:none}
   .empty div{max-width:420px}
   .empty code{font-family:var(--mono);font-size:11px;background:var(--paper2);
@@ -179,6 +189,7 @@
     <span class="disp title">forecaster · monitor</span>
   </div>
   <span class="hb" id="hb"><i></i><span id="hbtext">connecting</span></span>
+  <span class="chip" id="c-kinds" style="border-color:var(--orange);color:var(--orange)"></span>
   <div class="chips">
     <span class="chip" id="c-state">idle</span>
     <span class="chip" id="c-nodes"><b>0</b>/19 nodes</span>
@@ -202,6 +213,39 @@
         </p>
         <code>uv run forecast run --ticker NVDA --as-of 2026-08-16</code>
       </div>
+    </div>
+
+    <!-- Names the three kinds of thing. Without this the encoding is decoration;
+         with it, the architecture's best property is readable at a glance. -->
+    <div class="key">
+      <span class="k">
+        <svg width="26" height="15" aria-hidden><rect x="1" y="1" width="24" height="13"
+          fill="var(--paper2)" stroke="var(--rule)" stroke-width="1.5"/>
+          <rect x="1" y="1" width="4" height="13" fill="var(--orange)"/></svg>
+        <b>agent</b> — reasons with a model
+      </span>
+      <span class="k">
+        <svg width="26" height="15" aria-hidden><rect x="1" y="1" width="24" height="13"
+          fill="var(--paper2)" stroke="var(--rule)" stroke-width="1.5"/>
+          <rect x="1" y="1" width="24" height="13" fill="url(#keyhatch)" opacity=".3"/>
+          <defs><pattern id="keyhatch" width="5" height="5" patternUnits="userSpaceOnUse"
+            patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5"
+            stroke="var(--ink3)" stroke-width="1"/></pattern></defs></svg>
+        <b>code</b> — deterministic, cannot hallucinate
+      </span>
+      <span class="k">
+        <svg width="26" height="15" aria-hidden><rect x="1" y="1" width="24" height="13"
+          fill="var(--paper2)" stroke="var(--rule)" stroke-width="1"/></svg>
+        <b>data</b> — fetches, makes no judgment
+      </span>
+      <span class="k">
+        <svg width="26" height="15" aria-hidden><rect x="1" y="1" width="24" height="13"
+          fill="none" stroke="var(--rule)" stroke-width="1.5" stroke-dasharray="4 3"/></svg>
+        <b>dashed</b> — audits the chain, has a veto
+      </span>
+      <span class="k" style="margin-left:auto;color:var(--ink3)">
+        every stage that can hallucinate is checked by one that cannot
+      </span>
     </div>
   </div>
 
@@ -238,9 +282,27 @@
 const N = (id, label, sub, x, y, w, h, extra) => Object.assign(
   { id, label, sub, x, y, w, h, live: id, tier: "none" }, extra || {});
 
+/*
+ * THREE KINDS OF THING, and the distinction matters more than anything else on
+ * this window:
+ *
+ *   agent  — reasons with a language model. Can be wrong in interesting ways,
+ *            and is why the verification layers exist. Gets a solid tier-coloured
+ *            tab on its left edge and a doubled rule.
+ *   code   — deterministic. No model, cannot hallucinate. Drawn with a machined
+ *            diagonal hatch, because that is what it is: a machined part.
+ *   data   — fetches and stages. Makes no judgment at all. Thin, light rule.
+ *   output — the artifact, not a component.
+ *
+ * Drawing all four identically was hiding the single best thing about the
+ * architecture: one of the seven lenses has no language model in it at all, and
+ * every stage that could hallucinate is checked by one that cannot.
+ */
+const KIND = { AGENT:"agent", CODE:"code", DATA:"data", OUT:"output" };
+
 const LENSES = [
   ["mechanical", "Mechanical", "FX · shares · interest", "none",
-   "Pure arithmetic, no model at all: FX translation, diluted share count from buyback pace, net interest, calendar effects. Four things that move EPS, are fully disclosed, and change AFTER consensus is set. Cannot hallucinate."],
+   "NOT AN AGENT. Pure arithmetic, no model at all: FX translation, diluted share count from buyback pace, net interest, calendar effects. Four things that move EPS, are fully disclosed, and change AFTER consensus is set. Cannot hallucinate, and will be working while every model stage is still flaky."],
   ["guidance", "Guidance", "guide + landing CDF", "mid",
    "Anchors on what management guided for this quarter, then adjusts for where this company historically lands INSIDE its own range. Everyone reads the guide; almost nobody builds the landing distribution."],
   ["drivers", "Drivers", "units × ASP", "mid",
@@ -259,66 +321,99 @@ const LX = 322, LW = 150, LH = 40, LGAP = 6, LY0 = 96;
 
 const NODES = [
   N("A1_numbers", "A1 Numbers", "XBRL · consensus", 30, 108, 132, 40, {
-    what: "Point-in-time actuals from SEC XBRL plus forward consensus. Every fact carries a filed date, so nothing published after the lock date is visible.",
+    kind: KIND.DATA,
+    what: "NOT AN AGENT — a fetcher. Point-in-time actuals from SEC XBRL plus forward consensus. Every fact carries a filed date, so nothing published after the lock date is visible. Makes no judgment.",
   }),
   N("A2_filings", "A2 Filings", "8-K · 10-Q · text", 30, 156, 132, 40, {
-    what: "Ranked filings AND their body text. The text is not optional: citation verification string-matches every prose quote against its source, so a filing acquired as a bare URL drops every lens that cites it.",
+    kind: KIND.DATA,
+    what: "NOT AN AGENT — a fetcher. Ranked filings AND their body text. The text is not optional: citation verification string-matches every prose quote against its source, so a filing acquired as a bare URL drops every lens that cites it.",
   }),
   N("A3_industry", "A3 Industry", "peers · chain", 30, 204, 132, 40, {
-    what: "Peers, suppliers and customers who already reported inside a 100-day window. Older prints are fully in consensus and tell you nothing new.",
+    kind: KIND.DATA,
+    what: "NOT AN AGENT — a fetcher. Peers, suppliers and customers who already reported inside a 100-day window. Older prints are fully in consensus and tell you nothing new.",
   }),
   N("A4_macro", "A4 Macro", "FRED, point-in-time", 30, 252, 132, 40, {
-    what: "Sector macro series with realtime_start pinned to the lock date. Macro data is revised for months; pulling today's value for last year's quarter leaks the future invisibly.",
+    kind: KIND.DATA,
+    what: "NOT AN AGENT — a fetcher. Sector macro series with realtime_start pinned to the lock date. Macro data is revised for months; pulling today's value for last year's quarter leaks the future invisibly.",
+  }),
+
+  // Drawing the agent/not-agent split forced this box to exist. The extractor
+  // has a versioned prompt, a schema and tests, so it is unambiguously one of
+  // the agents — but `run.py` never calls it, so leaving it off the chart made
+  // the roster look complete when it isn't. It is on the chart, marked.
+  N("B_extract", "B2 Extract", "8-K prose → guide", 186, 252, 112, 44, {
+    tier: "cheap", comp: "extract_guidance", kind: KIND.AGENT,
+    live: null, unwired: true,
+    what: "AGENT — the one extraction step that needs a model, because prior-quarter guidance is the strongest single predictor of the print and it lives in prose, not XBRL. Every extracted range is string-matched back to its filing and dropped if the quote isn't there verbatim: a guide composed from two different sentences reads perfectly and is wrong. NOT WIRED INTO run.py YET — built and tested, never called, so the Guidance lens is currently reading raw filing text instead of a structured guide.",
   }),
 
   N("B_structure", "B Evidence", "claims + quotes", 186, 176, 112, 52, {
-    what: "One byte-identical corpus, cached once and read by every lens. Claims are renumbered to short citable ids (c1, c2 …) because a model asked to cite sec:NVDA:2026Q1:Diluted EPS will get it wrong and lose its lens.",
+    kind: KIND.CODE,
+    what: "NOT AN AGENT — deterministic assembly. One byte-identical corpus, cached once and read by every lens. Claims are renumbered to short citable ids (c1, c2 …) because a model asked to cite sec:NVDA:2026Q1:Diluted EPS will get it wrong and lose its lens.",
   }),
 
   ...LENSES.map(([id, label, sub, tier, what], i) => N(
     "C_" + id, label, sub, LX, LY0 + i * (LH + LGAP), LW, LH,
-    { tier, what, comp: id })),
+    { tier, what, comp: id,
+      kind: tier === "none" ? KIND.CODE : KIND.AGENT })),
 
   N("V1_reconcile", "V1", "arithmetic + cites", 486, 96, 74, 320, {
-    audit: true, what: "Arithmetic and citations, in plain code. Recomputes EPS from the inputs a lens claimed and string-matches every prose quote against its filing. A lens that fails either is DROPPED and logged — never silently averaged in.",
+    audit: true, kind: KIND.CODE,
+    what: "NOT AN AGENT — plain code, and deliberately so. Recomputes EPS from the inputs a lens claimed and string-matches every prose quote against its filing. A lens that fails either is DROPPED and logged, never silently averaged in. The thing checking the agents must not itself be able to hallucinate.",
   }),
 
   N("D_champion", "D Champion", "argue, then attack", 578, 96, 116, 320, {
-    tier: "mid", comp: "champion",
-    what: "Develops each case into its strongest honest form, then attacks it in good faith — before anything is compared. This is the step that took the reference system from failing to ~92%. Replaces self-reported confidence with what survived.",
+    tier: "mid", comp: "champion", kind: KIND.AGENT,
+    what: "AGENT ×7. Develops each case into its strongest honest form, then attacks it in good faith — before anything is compared. This is the step that took the reference system from failing to ~92%. Replaces self-reported confidence with what survived.",
   }),
 
   N("E_judge", "E Judge", "materiality", 712, 216, 108, 56, {
-    tier: "deep", comp: "judge",
-    what: "One expensive call. Weighs by MATERIALITY, never by vote count — six lenses agreeing on a weak signal lose to one carrying the company's own guidance with a quote. Outputs a distribution, not a point.",
+    tier: "deep", comp: "judge", kind: KIND.AGENT,
+    what: "AGENT — the one expensive call. Weighs by MATERIALITY, never by vote count: six lenses agreeing on a weak signal lose to one carrying the company's own guidance with a quote. Outputs a distribution, not a point.",
   }),
 
   N("V2_comparability", "V2", "→ λ collapses", 712, 320, 108, 46, {
-    audit: true, tier: "cheap", comp: "v2",
-    what: "Is this quarter comparable to the company's own history? M&A mid-quarter, an accounting change, a 53rd week. When it fires λ collapses — the system gets least confident exactly where it would otherwise be most.",
+    audit: true, tier: "cheap", comp: "v2", kind: KIND.AGENT,
+    what: "AGENT — the only verification layer that is one, because the question needs reading prose. Is this quarter comparable to the company's own history? M&A mid-quarter, an accounting change, a 53rd week. When it fires λ collapses.",
   }),
 
   N("F_lambda", "F λ", "fitted, not guessed", 838, 216, 104, 56, {
-    comp: "lambda",
-    what: "forecast = consensus + λ · (own − consensus). Everything upstream produces an estimate; λ decides how far to trust it against sixty-one analysts. Fitted on backtest and conditioned on regime.",
+    comp: "lambda", kind: KIND.CODE,
+    what: "NOT AN AGENT — arithmetic on a fitted coefficient. forecast = consensus + λ · (own − consensus). Everything upstream produces an estimate; λ decides how far to trust it against sixty-one analysts. The most consequential decision in the system has no model in it.",
   }),
 
   N("V3_calibrate", "V3", "own residuals", 838, 320, 104, 46, {
-    audit: true, comp: "v3",
-    what: "Rebuilds the interval from bootstrapped residuals of our own backtest, by regime. Preserves the centre and replaces only the width — how wrong we HAVE been, not how wrong the model thinks it might be.",
+    audit: true, comp: "v3", kind: KIND.CODE,
+    what: "NOT AN AGENT — statistics. Rebuilds the interval from bootstrapped residuals of our own backtest, by regime. Preserves the centre and replaces only the width: how wrong we HAVE been, not how wrong a model thinks it might be. A calibration step that itself needed calibrating would be circular.",
   }),
 
   N("G_output", "Forecast", "a distribution", 838, 128, 104, 50, {
-    live: null, comp: null,
-    what: "EPS on both bases, a full set of quantiles, every lens's trace, and the cost. Written to out/results.json — which is the only interface between the pipeline and any screen.",
+    live: null, comp: null, kind: KIND.OUT,
+    what: "The artifact, not a component. EPS on both bases, a full set of quantiles, every lens's trace, and the cost. Written to out/results.json — the only interface between the pipeline and any screen.",
   }),
 ];
+
+const COUNTS = NODES.reduce((acc, n) => {
+  acc[n.kind] = (acc[n.kind] ?? 0) + 1;
+  return acc;
+}, {});
+// An agent is a component with a versioned prompt in llm/prompts/ — that is the
+// only definition that can be checked rather than asserted, and this count has
+// to equal `ls llm/prompts/*.yaml | wc -l` (10). The champion box stands for
+// seven parallel calls of ONE prompt, so it counts once, not seven times.
+const AGENT_COUNT = COUNTS[KIND.AGENT] ?? 0;
+
+// Derived, not hardcoded — adding a box used to silently make the "n/19 nodes"
+// chip wrong, which is the sort of thing nobody notices until it is on a
+// projector. Only boxes that actually emit events can be "done".
+const LIVE_NODE_COUNT = NODES.filter(n => n.live && !n.unwired).length;
 
 const NODE_BY_ID = Object.fromEntries(NODES.map(n => [n.id, n]));
 
 const EDGES = [
   ["A1_numbers","B_structure"],["A2_filings","B_structure"],
   ["A3_industry","B_structure"],["A4_macro","B_structure"],
+  ["A2_filings","B_extract"],["B_extract","B_structure"],
   ...LENSES.map(([id]) => ["B_structure", "C_" + id]),
   ...LENSES.map(([id]) => ["C_" + id, "V1_reconcile"]),
   ["V1_reconcile","D_champion"],["D_champion","E_judge"],
@@ -348,8 +443,16 @@ function el(tag, attrs, text) {
   return node;
 }
 
-// Orthogonal-ish connector, left to right.
+// Orthogonal-ish connector, left to right — except when the two boxes sit in the
+// same column, where a left-to-right bezier would loop backwards on itself. Then
+// it goes straight up or down between their nearest edges.
 function path(a, b) {
+  const stacked = a.x < b.x + b.w && b.x < a.x + a.w;
+  if (stacked) {
+    const cx = (Math.max(a.x, b.x) + Math.min(a.x + a.w, b.x + b.w)) / 2;
+    const down = b.y > a.y;
+    return `M${cx},${down ? a.y + a.h : a.y} V${down ? b.y : b.y + b.h}`;
+  }
   const x1 = a.x + a.w, y1 = a.y + a.h / 2;
   const x2 = b.x, y2 = b.y + b.h / 2;
   const mx = x1 + (x2 - x1) / 2;
@@ -365,6 +468,15 @@ const nodeEls = {};
     markerWidth:"4.5", markerHeight:"4.5", orient:"auto-start-reverse" });
   marker.appendChild(el("path", { d:"M0,0 L10,5 L0,10 z", fill:"var(--ink3)" }));
   defs.appendChild(marker);
+
+  // Machined diagonal hatch: the drafting convention for a solid part, used here
+  // for everything deterministic. Nothing with a model in it gets hatched.
+  const hatch = el("pattern", { id:"hatch", width:"5", height:"5",
+    patternUnits:"userSpaceOnUse", patternTransform:"rotate(45)" });
+  hatch.appendChild(el("line", { x1:"0", y1:"0", x2:"0", y2:"5",
+    stroke:"var(--ink3)", "stroke-width":"1" }));
+  defs.appendChild(hatch);
+
   chart.appendChild(defs);
 
   for (const [label, x, y] of PHASES) {
@@ -378,12 +490,35 @@ const nodeEls = {};
     chart.appendChild(p);
   }
 
+  const TAB = { cheap:"var(--ink3)", mid:"var(--orange)", deep:"var(--orange2)" };
+
   for (const n of NODES) {
     const g = el("g", { class:"node" });
+    const isData = n.kind === KIND.DATA;
     const rect = el("rect", { x:n.x, y:n.y, width:n.w, height:n.h, class:"bx",
       fill:"var(--paper2)", stroke:"var(--rule)",
+      "stroke-width": isData ? "1" : "1.5",
       "stroke-dasharray": n.audit ? "4 3" : "" });
-    const cx = n.x + n.w / 2;
+    g.appendChild(rect);
+
+    // CODE: machined hatch, at low opacity so state colour still reads through.
+    if (n.kind === KIND.CODE) {
+      g.appendChild(el("rect", { x:n.x, y:n.y, width:n.w, height:n.h,
+        fill:"url(#hatch)", opacity:"0.16", "pointer-events":"none" }));
+    }
+
+    // AGENT: a solid tier-coloured tab on the left edge, plus a doubled inner
+    // rule. Two cues rather than one, because colour alone fails in greyscale
+    // and on a projector.
+    if (n.kind === KIND.AGENT) {
+      g.appendChild(el("rect", { x:n.x, y:n.y, width:4, height:n.h,
+        fill: TAB[n.tier] ?? "var(--orange)", "pointer-events":"none" }));
+      g.appendChild(el("rect", { x:n.x + 3.5, y:n.y + 3.5,
+        width:n.w - 7, height:n.h - 7, fill:"none", stroke:"var(--orange)",
+        "stroke-width":"0.6", opacity:"0.45", "pointer-events":"none" }));
+    }
+
+    const cx = n.x + n.w / 2 + (n.kind === KIND.AGENT ? 2 : 0);
     const tall = n.h > 120;
     const label = el("text", { x:cx, y: tall ? n.y + n.h/2 - 4 : n.y + n.h/2 - 1,
       class:"nt", "text-anchor":"middle" }, n.label);
@@ -391,7 +526,14 @@ const nodeEls = {};
       class:"ns", "text-anchor":"middle" }, n.sub);
     const meta = el("text", { x:n.x + n.w - 4, y:n.y + 10, class:"nm",
       "text-anchor":"end", fill:"var(--ink3)" }, "");
-    g.append(rect, label, sub, meta);
+    g.append(label, sub, meta);
+
+    // Agents carry their tier in the corner, so the cost story is legible
+    // without switching anything.
+    if (n.kind === KIND.AGENT) {
+      g.appendChild(el("text", { x:n.x + 8, y:n.y + 10, class:"nm",
+        fill: TAB[n.tier] ?? "var(--orange)" }, n.tier.toUpperCase()));
+    }
 
     g.addEventListener("mousemove", (e) => showTip(n, e));
     g.addEventListener("mouseleave", hideTip);
@@ -517,6 +659,9 @@ const STROKE = { idle:"var(--rule)", running:"var(--orange)",
   done:"var(--green)", failed:"var(--red)" };
 
 function nodeState(n) {
+  // Built but never called, so it must never light up green at the end of a run
+  // alongside the stages that actually executed.
+  if (n.unwired) return "idle";
   if (!n.live) return state.finished ? "done" : "idle";
   // The champion box aggregates its per-lens D_* events.
   if (n.id === "D_champion") {
@@ -544,7 +689,8 @@ function render() {
     g.classList.toggle("pulse", s === "running");
 
     const live = n.live ? state.nodes[n.live] : null;
-    if (s === "failed") { meta.textContent = "dropped"; meta.setAttribute("fill","var(--red)"); }
+    if (n.unwired) { meta.textContent = "not wired"; meta.setAttribute("fill","var(--orange)"); }
+    else if (s === "failed") { meta.textContent = "dropped"; meta.setAttribute("fill","var(--red)"); }
     else if (live?.ms) {
       meta.textContent = live.ms >= 1000 ? (live.ms/1000).toFixed(1)+"s" : live.ms+"ms";
       meta.setAttribute("fill","var(--ink3)");
@@ -566,7 +712,7 @@ function render() {
 
   setChip("c-state", state.finished ? "complete" : running ? "executing" : state.started ? "idle" : "waiting",
     state.finished ? "on" : running ? "run" : "");
-  setChip("c-nodes", `<b>${done}</b>/19 nodes`, failed ? "bad" : "");
+  setChip("c-nodes", `<b>${done}</b>/${LIVE_NODE_COUNT} nodes`, failed ? "bad" : "");
   setChip("c-claims", `<b>${state.claims}</b> claims`);
   setChip("c-cost", `$<b>${(f?.total_cost_usd ?? 0).toFixed(4)}</b>`);
   setChip("c-elapsed", `<b>${elapsed.toFixed(1)}</b>s`);
@@ -641,12 +787,23 @@ function showTip(n, event) {
     ? state.build.components.find(c => c.id === n.comp) : null;
 
   const rows = [];
+
+  // The first row on every tooltip: is this an agent or not? That question is
+  // the one the whole diagram is trying to answer.
+  const KIND_ROW = {
+    [KIND.AGENT]: `<span class="hot">AGENT — reasons with a model</span>`,
+    [KIND.CODE]: `<span class="ok">NOT an agent — deterministic code</span>`,
+    [KIND.DATA]: `<span>NOT an agent — fetches data only</span>`,
+    [KIND.OUT]: `<span>the artifact, not a component</span>`,
+  };
+  rows.push(["kind", KIND_ROW[n.kind] ?? "—"]);
+
   const stateClass = s === "done" ? "ok" : s === "running" ? "hot" : s === "failed" ? "warn" : "";
   rows.push(["state", `<span class="${stateClass}">${s}</span>`]);
   if (live?.ms) rows.push(["latency", live.ms >= 1000 ? (live.ms/1000).toFixed(2)+"s" : live.ms+"ms"]);
-  if (n.tier && n.tier !== "none") rows.push(["model tier", n.tier]);
-  else if (n.comp || n.id.startsWith("C_")) rows.push(["model tier", `<span class="ok">none — pure code</span>`]);
-  if (n.audit) rows.push(["role", "audits the chain"]);
+  if (n.kind === KIND.AGENT) rows.push(["model tier", n.tier]);
+  if (n.unwired) rows.push(["wired in", `<span class="warn">no — run.py never calls it</span>`]);
+  if (n.audit) rows.push(["role", "audits the chain, has a veto"]);
 
   // Live payload detail: whatever the stage actually reported.
   for (const [k, v] of Object.entries(live?.payload ?? {})) {
@@ -696,6 +853,13 @@ function showTip(n, event) {
 function hideTip() { tip.classList.remove("show"); delete tip.dataset.node; }
 
 /* ------------------------------------------------------------------ */
+
+// Static, so it is set once rather than every 250ms. The point of putting it in
+// the header is that "10 agents, 5 of these are not agents" is a property of the
+// architecture, not of the run.
+document.getElementById("c-kinds").innerHTML =
+  `<b>${AGENT_COUNT}</b> agents · ${COUNTS[KIND.CODE] ?? 0} code · ` +
+  `${COUNTS[KIND.DATA] ?? 0} data`;
 
 loadBuild();
 drawRates();

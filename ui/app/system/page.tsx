@@ -3,8 +3,11 @@
 import { useEffect, useState } from "react";
 
 import OrgChart, {
+  AGENT_ROLES,
+  KIND_COUNTS,
   NODES,
   type BuildComponent,
+  type Kind,
   type OrgNode,
   type Overlay,
 } from "@/components/OrgChart";
@@ -57,6 +60,13 @@ interface BuildPayload {
     gates_total: number;
   };
 }
+
+const KIND_NOTE: Record<Kind, string> = {
+  agent: "reasons with a model, and is why the audit layers exist",
+  code: "deterministic — no model, cannot hallucinate",
+  data: "fetches and stages, makes no judgment",
+  output: "the artifact, not a component",
+};
 
 const OVERLAYS: Array<[Overlay, string, string]> = [
   ["build", "Built", "what exists and what a test actually covers"],
@@ -111,9 +121,15 @@ export default function SystemScreen() {
         <SheetFooter
           cells={[
             ["ranks", "8 — output down to sources"],
-            ["agents", "11, one with no model at all"],
-            ["audits", "3 verification layers, each with a veto"],
-            ["source of truth", "derived from the repo, not hand-kept"],
+            // Derived from the chart, which is in turn checked against the
+            // prompt files. The old hand-written "11" counted the Mechanical
+            // lens as an agent; it has no prompt and no model.
+            ["agents", `${AGENT_ROLES} — one prompt file each`],
+            [
+              "not agents",
+              `${KIND_COUNTS.code} deterministic · ${KIND_COUNTS.data} data`,
+            ],
+            ["audits", "3 layers with a veto — 2 of them pure code"],
           ]}
         />
       }
@@ -287,7 +303,23 @@ export default function SystemScreen() {
 
         {selected && (
           <Panel label={`selected — ${selected.label}`}>
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-4">
+              {/* First cell, deliberately: agent or not is the first thing
+                  anyone should learn about a box on this chart. */}
+              <div>
+                <div className="label">kind</div>
+                <p className="mt-1 text-[12.5px]">
+                  <Pill tone={selected.kind === "agent" ? "warn" : "good"}>
+                    {selected.kind === "agent" ? "agent" : "not an agent"}
+                  </Pill>
+                  <span className="ml-2 text-ink-2">{KIND_NOTE[selected.kind]}</span>
+                  {selected.unwired && (
+                    <span className="mt-1 block text-accent">
+                      built and tested, but run.py never calls it
+                    </span>
+                  )}
+                </p>
+              </div>
               <div>
                 <div className="label">role</div>
                 <p className="mt-1 text-[12.5px]">

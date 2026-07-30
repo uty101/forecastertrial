@@ -85,9 +85,13 @@ V3 CALIBRATE   bootstrap our own backtest residuals
 G  OUTPUT      forecast + model + trace
 ```
 
-### The eleven agents
+### Ten agents, and one component on this list that isn't one
 
 `uv run forecast agents` prints this from the prompt files themselves, so it cannot drift from what actually runs.
+
+**An agent here means one thing: a component with a versioned prompt in `llm/prompts/`.** By that definition there are ten of them, and it is checkable — `ls src/forecaster/llm/prompts/*.yaml | wc -l`. The Mechanical lens is on the roster below because it sits in layer C alongside the six that are agents, but it has no prompt and no model in it. It is arithmetic. That is the point of it, and calling it an eleventh agent would blur the only distinction on this page worth making.
+
+The same split is drawn on the `/system/` sheet and in the live monitor: agents get a coloured tab, deterministic code gets a machined hatch, data fetchers get a thin rule. Every stage that can hallucinate is checked by one that cannot.
 
 | Agent | Layer | Tier | What makes it different |
 |---|---|---|---|
@@ -187,7 +191,7 @@ src/forecaster/
   llm/
     client.py             schema-forced, cached, cost-ceilinged
     prompt.py             versioned loading; the fingerprint keys the cache
-    prompts/*.yaml        eleven agents, never inlined in Python
+    prompts/*.yaml        ten agents — one file each, never inlined in Python
   model/
     graph.py              dependency-graph evaluator; cells carry provenance
     statements.py         linked IS/BS/CF; the balance check is a hard gate
@@ -217,7 +221,9 @@ ui/                       Next.js, static export, reads out/*.json
 
 ## Status
 
-**Pipeline complete, 90 tests passing.** Every layer A→G is wired, all eleven agents are built, the UI builds clean and `make verify` is green in CI.
+**Pipeline complete, 90 tests passing.** Every layer A→G is wired, all ten agents are built, the UI builds clean and `make verify` is green in CI.
+
+One caveat visible on the `/system/` sheet and in the monitor, because drawing the agent/not-agent split is what surfaced it: **the guidance extractor is built and tested but `run.py` never calls it**, so the Guidance lens currently reads raw filing text rather than a structured guide. It is marked NOT WIRED on both screens rather than shown as complete.
 
 **Two things are still asserted rather than measured, and both need one live run to fix:**
 

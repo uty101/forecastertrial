@@ -89,7 +89,10 @@ export default function AgentsScreen() {
         <SheetFooter
           cells={[
             ["source", "read from llm/prompts/*.yaml"],
-            ["deterministic", `${tierCounts["none"] ?? 0} agent with no model`],
+            [
+              "agents",
+              `${data.agents.length - (tierCounts["none"] ?? 0)} — one prompt each`,
+            ],
             ["expensive calls", `${tierCounts["deep"] ?? 0} per run`],
             ["prepared companies", String(data.prepared_companies)],
           ]}
@@ -98,10 +101,10 @@ export default function AgentsScreen() {
     >
       <div className="space-y-6">
         <div className="grid gap-6 lg:grid-cols-[1fr_270px]">
-          <Display kicker="Eleven agents, each with a reason to exist. Read from the prompt files themselves — a roster maintained by hand drifts from what actually runs, and then this sheet is confidently describing a system that no longer exists.">
-            One system.
+          <Display kicker="Ten agents, one file each in llm/prompts/ — the only definition of “agent” here that can be checked rather than asserted. The eleventh row is the Mechanical lens: same layer, same job, no prompt and no model. Read from the prompt files themselves, because a roster maintained by hand drifts from what actually runs and then this sheet confidently describes a system that no longer exists.">
+            Ten agents.
             <br />
-            <Green>Eleven specialists.</Green>
+            <Green>One that isn&rsquo;t.</Green>
           </Display>
 
           <StatusPanel
@@ -111,8 +114,9 @@ export default function AgentsScreen() {
             fraction={1}
             tone="done"
             rows={[
-              ["agents", data.agents.length],
-              ["no model", tierCounts["none"] ?? 0],
+              // Split deliberately. "11 agents" was one number doing two jobs.
+              ["agents (prompted)", data.agents.length - (tierCounts["none"] ?? 0)],
+              ["not an agent", tierCounts["none"] ?? 0],
               ["cheap tier", tierCounts["cheap"] ?? 0],
               ["mid tier", tierCounts["mid"] ?? 0],
               ["deep tier", tierCounts["deep"] ?? 0],

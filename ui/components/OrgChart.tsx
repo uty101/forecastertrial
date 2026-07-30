@@ -23,7 +23,22 @@ import type { NodeStatus } from "@/lib/data";
  *
  * Three overlays on one chart, because the same hierarchy answers three
  * different questions: what is built, what is running, and what each part costs.
+ *
+ * And running underneath all three overlays, always on: WHICH OF THESE ARE
+ * AGENTS. Drawn as identical boxes the chart implied that everything here
+ * reasons with a model, which flatters it and is false. Ten of these are agents;
+ * the rest is deterministic code and data plumbing. That split is the load-
+ * bearing claim of the architecture — every stage that can hallucinate is
+ * checked by one that cannot — so it is encoded in the boxes themselves rather
+ * than left to an overlay the judge might not click.
  */
+
+/**
+ * An `agent` is defined here exactly as it is defined in the repo: a component
+ * with a versioned prompt in `llm/prompts/*.yaml`. That is checkable rather than
+ * asserted, and `AGENT_ROLES` below must equal that file count.
+ */
+export type Kind = "agent" | "code" | "data" | "output";
 
 export type Overlay = "build" | "live" | "tier";
 
@@ -35,6 +50,7 @@ export interface OrgNode {
   y: number;
   w: number;
   h: number;
+  kind: Kind;
   /** Component id in build.json, when one exists. */
   component?: string;
   /** Event-log node id, when one exists. */
@@ -43,6 +59,8 @@ export interface OrgNode {
   /** Verification layers are drawn as an independent function, not a step. */
   audit?: boolean;
   role?: string;
+  /** Built and tested, but `run.py` never calls it. Shown, not hidden. */
+  unwired?: boolean;
 }
 
 const W = 1520;
@@ -74,6 +92,7 @@ export const NODES: OrgNode[] = [
     label: "Forecast",
     sub: "EPS + a distribution",
     role: "deliverable",
+    kind: "output",
     x: MID - 110,
     y: 62,
     w: 220,
@@ -86,6 +105,9 @@ export const NODES: OrgNode[] = [
     role: "the decision",
     component: "lambda",
     liveId: "F_lambda",
+    // The most consequential decision in the system, and there is no model in
+    // it: arithmetic on a coefficient fitted by the backtest.
+    kind: "code",
     tier: "none",
     x: MID - 110,
     y: 156,
@@ -99,6 +121,7 @@ export const NODES: OrgNode[] = [
     role: "verdict",
     component: "judge",
     liveId: "E_judge",
+    kind: "agent",
     tier: "deep",
     x: MID - 110,
     y: 252,
@@ -112,6 +135,7 @@ export const NODES: OrgNode[] = [
     sub: "argue, then attack",
     component: "champion",
     liveId: `D_${id}`,
+    kind: "agent" as const,
     tier: "mid" as const,
     x: lensX(i),
     y: 356,
@@ -125,6 +149,9 @@ export const NODES: OrgNode[] = [
     role: "lens",
     component: id,
     liveId: `C_${id}`,
+    // Mechanical is the one lens with no prompt file, so it is code, not an
+    // agent. Deriving the kind from the tier keeps the two from drifting apart.
+    kind: (tier === "none" ? "code" : "agent") as Kind,
     tier: tier as OrgNode["tier"],
     x: lensX(i),
     y: 446,
@@ -138,6 +165,7 @@ export const NODES: OrgNode[] = [
     role: "shared, cached corpus",
     component: "evidence",
     liveId: "B_structure",
+    kind: "code",
     tier: "none",
     x: MID - 130,
     y: 556,
@@ -156,6 +184,7 @@ export const NODES: OrgNode[] = [
     sub,
     component: "acquire",
     liveId,
+    kind: "data" as const,
     tier: "none" as const,
     x: MID - 400 + i * 205,
     y: 656,
@@ -174,6 +203,7 @@ export const NODES: OrgNode[] = [
     sub,
     component,
     role: "source",
+    kind: "data" as const,
     tier: "none" as const,
     x: MID - 400 + i * 205,
     y: 748,
@@ -186,13 +216,16 @@ export const NODES: OrgNode[] = [
     sub: "written on the day",
     component: "sponsor",
     role: "source",
+    kind: "data",
     tier: "none",
     x: MID + 425,
     y: 748,
     w: 176,
     h: 50,
   },
-  // Verification — beside the chain, not in it.
+  // Verification — beside the chain, not in it. Two of the three are pure code,
+  // deliberately: the thing checking the agents must not itself be able to
+  // hallucinate.
   {
     id: "v3",
     label: "V3 Calibrate",
@@ -200,6 +233,7 @@ export const NODES: OrgNode[] = [
     component: "v3",
     liveId: "V3_calibrate",
     audit: true,
+    kind: "code",
     tier: "none",
     x: MID + 200,
     y: 156,
@@ -213,6 +247,9 @@ export const NODES: OrgNode[] = [
     component: "v2",
     liveId: "V2_comparability",
     audit: true,
+    // The only audit layer that is an agent, because the question — is this
+    // quarter comparable to the company's own history — needs reading prose.
+    kind: "agent",
     tier: "cheap",
     x: MID + 200,
     y: 252,
@@ -226,6 +263,7 @@ export const NODES: OrgNode[] = [
     component: "v1",
     liveId: "V1_reconcile",
     audit: true,
+    kind: "code",
     tier: "none",
     x: MID - 396,
     y: 446,
@@ -239,6 +277,7 @@ export const NODES: OrgNode[] = [
     sub: "linked, balance-checked",
     component: "statements",
     audit: false,
+    kind: "code",
     tier: "none",
     x: MID + 200,
     y: 556,
@@ -250,6 +289,7 @@ export const NODES: OrgNode[] = [
     label: "GAAP ↔ non-GAAP",
     sub: "cited, verify() ties",
     component: "bridge",
+    kind: "code",
     tier: "none",
     x: MID - 396,
     y: 556,
@@ -262,6 +302,8 @@ export const NODES: OrgNode[] = [
     sub: "schema-forced · cost ceiling",
     component: "llm",
     role: "infra",
+    // It calls the models; it is not one. Schema forcing, retries, cost ceiling.
+    kind: "code",
     tier: "none",
     x: MID + 425,
     y: 356,
@@ -273,7 +315,9 @@ export const NODES: OrgNode[] = [
     label: "Guidance extractor",
     sub: "8-K → structured guide",
     component: "extract_guidance",
+    kind: "agent",
     tier: "cheap",
+    unwired: true,
     x: MID + 425,
     y: 656,
     w: 176,
@@ -285,6 +329,7 @@ export const NODES: OrgNode[] = [
     sub: "cases · backtest · fit",
     component: "backtest",
     role: "wraps everything",
+    kind: "code",
     tier: "none",
     x: MID - 616,
     y: 356,
@@ -292,6 +337,30 @@ export const NODES: OrgNode[] = [
     h: 50,
   },
 ];
+
+/**
+ * Distinct COMPONENTS of each kind, not boxes — and all three counted the same
+ * way, because a legend that reports roles for one kind and boxes for another is
+ * worse than no legend. The seven champion columns are seven parallel calls of
+ * one prompt, so they count once; likewise the four acquirer boxes are one
+ * `acquire` component.
+ *
+ * The consequence worth checking: `KIND_COUNTS.agent` must equal the file count
+ * of `llm/prompts/*.yaml`. Add a prompt without a box, or a box without a
+ * prompt, and the two disagree.
+ */
+const distinct = (kind: Kind) =>
+  new Set(
+    NODES.filter((n) => n.kind === kind).map((n) => n.component ?? n.id),
+  ).size;
+
+export const KIND_COUNTS = {
+  agent: distinct("agent"),
+  code: distinct("code"),
+  data: distinct("data"),
+};
+
+export const AGENT_ROLES = KIND_COUNTS.agent;
 
 /** Solid = reports to. Dashed = audits / feeds sideways. */
 const EDGES: Array<[string, string, "reports" | "audit"]> = [
@@ -362,6 +431,14 @@ const TIER_FILL = {
 const TIER_STROKE = {
   none: "var(--color-structure)",
   cheap: "var(--color-idle)",
+  mid: "var(--color-accent)",
+  deep: "var(--color-accent-2)",
+} as const;
+
+/** The agent's left-edge tab, coloured by what the call costs. */
+const TAB = {
+  none: "var(--color-ink-3)",
+  cheap: "var(--color-ink-3)",
   mid: "var(--color-accent)",
   deep: "var(--color-accent-2)",
 } as const;
@@ -443,6 +520,26 @@ export default function OrgChart({
           >
             <path d="M0,0 L10,5 L0,10 z" fill="var(--color-ink-3)" />
           </marker>
+
+          {/* Machined diagonal hatch — the drafting convention for a solid
+              part, used here for everything deterministic. Nothing with a model
+              in it is ever hatched. */}
+          <pattern
+            id="org-hatch"
+            width="5"
+            height="5"
+            patternUnits="userSpaceOnUse"
+            patternTransform="rotate(45)"
+          >
+            <line
+              x1="0"
+              y1="0"
+              x2="0"
+              y2="5"
+              stroke="var(--color-ink-3)"
+              strokeWidth="1"
+            />
+          </pattern>
         </defs>
 
         {/* Row labels down the left edge — the layer each rank belongs to. */}
@@ -515,10 +612,52 @@ export default function OrgChart({
                 height={node.h}
                 fill={fill}
                 stroke={isSelected ? "var(--color-ink)" : stroke}
-                strokeWidth={isSelected ? 2.4 : 1.6}
+                // Data plumbing gets a lighter rule than anything that makes a
+                // judgment. Weight of line = weight of responsibility.
+                strokeWidth={isSelected ? 2.4 : node.kind === "data" ? 1 : 1.6}
                 strokeDasharray={node.audit ? "5 3" : undefined}
                 className="state-change"
               />
+
+              {node.kind === "code" && (
+                <rect
+                  x={node.x}
+                  y={node.y}
+                  width={node.w}
+                  height={node.h}
+                  fill="url(#org-hatch)"
+                  opacity={0.16}
+                  pointerEvents="none"
+                />
+              )}
+
+              {/* AGENT: a solid tab on the left edge plus a doubled inner rule.
+                  Two cues rather than one, because colour alone fails in
+                  greyscale and on a projector at the back of a room. */}
+              {node.kind === "agent" && (
+                <>
+                  <rect
+                    x={node.x}
+                    y={node.y}
+                    width={4}
+                    height={node.h}
+                    fill={TAB[node.tier ?? "mid"]}
+                    pointerEvents="none"
+                  />
+                  <rect
+                    x={node.x + 3.5}
+                    y={node.y + 3.5}
+                    width={node.w - 7}
+                    height={node.h - 7}
+                    fill="none"
+                    stroke="var(--color-accent)"
+                    strokeWidth={0.6}
+                    opacity={0.45}
+                    pointerEvents="none"
+                  />
+                </>
+              )}
+
               <text
                 x={node.x + node.w / 2}
                 y={node.y + (node.sub ? node.h / 2 - 1 : node.h / 2 + 4)}
@@ -585,19 +724,24 @@ export default function OrgChart({
                   </text>
                 )}
 
-              {overlay === "tier" && node.tier && node.tier !== "none" && (
+              {/* Agents carry their tier in the corner on every overlay, not
+                  just the tier one — the cost story should be legible without
+                  having to go looking for it. */}
+              {node.kind === "agent" && node.tier && (
                 <text
-                  x={node.x + 6}
+                  x={node.x + 9}
                   y={node.y + 12}
                   className={
-                    node.tier === "deep" ? "fill-paper" : "fill-ink-3"
+                    overlay === "tier" && node.tier === "deep"
+                      ? "fill-paper"
+                      : "fill-ink-3"
                   }
                   style={{ fontSize: 8.5, fontWeight: 700 }}
                 >
                   {node.tier.toUpperCase()}
                 </text>
               )}
-              {overlay === "tier" && node.tier === "none" && node.component && (
+              {overlay === "tier" && node.kind === "code" && node.component && (
                 <text
                   x={node.x + 6}
                   y={node.y + 12}
@@ -607,9 +751,93 @@ export default function OrgChart({
                   NO MODEL
                 </text>
               )}
+
+              {/* Built, tested, and never called. Saying so on the chart is the
+                  whole reason the chart is worth drawing. */}
+              {node.unwired && (
+                <text
+                  x={node.x + node.w / 2}
+                  y={node.y + node.h + 11}
+                  textAnchor="middle"
+                  className="fill-accent"
+                  style={{ fontSize: 8, fontWeight: 700, letterSpacing: "0.08em" }}
+                >
+                  NOT WIRED INTO run.py
+                </text>
+              )}
             </g>
           );
         })}
+
+        {/* Names the kinds. Without this the encoding is decoration; with it,
+            the best property of the architecture reads at a glance. */}
+        <g transform="translate(14, 24)">
+          <rect
+            x={0}
+            y={-13}
+            width={4}
+            height={13}
+            fill="var(--color-accent)"
+          />
+          <rect
+            x={0}
+            y={-13}
+            width={26}
+            height={13}
+            fill="none"
+            stroke="var(--color-ink-3)"
+            strokeWidth={1.4}
+          />
+          <text x={32} y={-3} className="fill-ink" style={{ fontSize: 9 }}>
+            <tspan style={{ fontWeight: 700 }}>{AGENT_ROLES} agents</tspan>
+            <tspan className="fill-ink-2"> — reason with a model</tspan>
+          </text>
+
+          <rect
+            x={182}
+            y={-13}
+            width={26}
+            height={13}
+            fill="url(#org-hatch)"
+            opacity={0.3}
+          />
+          <rect
+            x={182}
+            y={-13}
+            width={26}
+            height={13}
+            fill="none"
+            stroke="var(--color-ink-3)"
+            strokeWidth={1.4}
+          />
+          <text x={214} y={-3} className="fill-ink" style={{ fontSize: 9 }}>
+            <tspan style={{ fontWeight: 700 }}>{KIND_COUNTS.code} code</tspan>
+            <tspan className="fill-ink-2"> — deterministic, cannot hallucinate</tspan>
+          </text>
+
+          <text x={32} y={11} className="fill-ink-3" style={{ fontSize: 8 }}>
+            counts are distinct components, not boxes — the champion column is one
+            prompt run seven times, and the four acquirers are one component
+          </text>
+
+          <rect
+            x={452}
+            y={-13}
+            width={26}
+            height={13}
+            fill="none"
+            stroke="var(--color-ink-3)"
+            strokeWidth={0.9}
+          />
+          <text x={484} y={-3} className="fill-ink" style={{ fontSize: 9 }}>
+            <tspan style={{ fontWeight: 700 }}>{KIND_COUNTS.data} data</tspan>
+            <tspan className="fill-ink-2"> — fetch and stage, make no judgment</tspan>
+          </text>
+
+          <text x={730} y={-3} className="fill-ink-3" style={{ fontSize: 9 }}>
+            every stage that can hallucinate is checked by one that cannot
+          </text>
+        </g>
 
         {/* The structural point the layout exists to make. */}
         <text
