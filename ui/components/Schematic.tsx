@@ -1,13 +1,9 @@
 "use client";
 
 import {
-  BUILD_FILL,
   BUILD_STROKE,
-  LIVE_FILL,
-  LIVE_STROKE,
-  TAB,
-  TIER_FILL,
-  TIER_STROKE,
+  fillFor,
+  strokeFor,
   type BuildComponent,
   type Kind,
   type OrgNode,
@@ -419,6 +415,21 @@ interface Net {
   mark?: [number, number];
 }
 
+/**
+ * A printed reading on a conductor: how many claims are on that wire right here.
+ *
+ * Width is the fast read across a room; the number is what someone leaning in
+ * wants, and it is the difference between "that wire looks thicker" and "the
+ * store handed the lenses 24 claims and 21 of them survived reconciliation".
+ * These are annotations on existing conductors, never extra conductors.
+ */
+interface Gauge {
+  x: number;
+  y: number;
+  value: number;
+  label: string;
+}
+
 interface Junction {
   x: number;
   y: number;
@@ -601,7 +612,31 @@ function buildNets(result: RunResult | null) {
     from: "V3_calibrate",
   });
 
-  return { nets, junctions, maxVolume };
+  const keptCount = (forecast?.lenses ?? []).length;
+  const gauges: Gauge[] = forecast
+    ? [
+        {
+          x: BUS.b - 34,
+          y: cy(BY_ID.B_structure) - 12,
+          value: forecast.lenses.reduce((a, l) => a + l.claim_ids.length, 0),
+          label: "cited",
+        },
+        {
+          x: BUS.v1 - 40,
+          y: cy(BY_ID.D_champion) - 12,
+          value: totalKept,
+          label: "verified",
+        },
+        {
+          x: (right(BY_ID.D_champion) + X.e) / 2,
+          y: cy(BY_ID.E_judge) - 12,
+          value: keptCount,
+          label: "cases",
+        },
+      ]
+    : [];
+
+  return { nets, junctions, maxVolume, gauges };
 }
 
 /**
@@ -638,30 +673,57 @@ export default function Schematic({
   onSelect?: (part: OrgNode) => void;
   selected?: string | null;
 }) {
-  const { nets, junctions, maxVolume } = buildNets(result);
+  const { nets, junctions, maxVolume, gauges } = buildNets(result);
   const lambda = result?.forecast.lambda_decision.value ?? null;
+  const comparability = result?.forecast.lambda_decision.comparability_flag ?? null;
 
+  /**
+   * Kind first, always. The outline hue is what the part IS, and the overlay
+   * only modulates it — dimming what is not built, brightening what is running.
+   * Repainting the outline by state would throw away the one distinction that
+   * has to survive every overlay.
+   */
   function paint(part: Part) {
+    const kind = strokeFor(part.kind, part.tier);
+    const fill = fillFor(part.kind, part.tier);
+
     if (overlay === "live") {
       const state = part.liveId ? (live[part.liveId]?.state ?? "idle") : "idle";
+      if (state === "failed")
+        return { fill, stroke: "var(--color-failed)", pulse: false, dim: false };
       return {
-        fill: LIVE_FILL[state],
-        stroke: LIVE_STROKE[state],
+        fill,
+        stroke: kind,
         pulse: state === "running",
+        // Nothing that has not run yet competes with what is running now.
+        dim: state === "idle" && !part.ghost,
       };
     }
     if (overlay === "tier") {
-      const tier = part.tier ?? "none";
-      return { fill: TIER_FILL[tier], stroke: TIER_STROKE[tier], pulse: false };
+      return { fill, stroke: kind, pulse: false, dim: part.kind !== "agent" };
     }
-    const state = (part.component ? build[part.component]?.state : undefined) as
-      | keyof typeof BUILD_FILL
-      | undefined;
+    const state = part.component ? build[part.component]?.state : undefined;
     return {
-      fill: BUILD_FILL[state ?? "unknown"],
-      stroke: BUILD_STROKE[state ?? "unknown"],
+      fill,
+      stroke: state === "missing" ? BUILD_STROKE.missing : kind,
       pulse: false,
+      dim: state !== "built",
     };
+  }
+
+  /** The per-part readout under the label: what this call cost, and how long. */
+  function metrics(part: Part): string | null {
+    if (!part.liveId) return null;
+    const status = live[part.liveId];
+    if (!status) return null;
+    const lens = result?.forecast.lenses.find(
+      (l) => `C_${l.lens}` === part.liveId,
+    );
+    const tok = lens ? (lens.input_tokens ?? 0) + (lens.output_tokens ?? 0) : 0;
+    const ms = status.latencyMs ?? 0;
+    const t = tok >= 1000 ? `${(tok / 1000).toFixed(1)}k` : `${tok}`;
+    const d = ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
+    return `${t}tok · ${d}`;
   }
 
   /** A net is carrying now if its destination is running; solid once delivered. */
@@ -925,12 +987,38 @@ export default function Schematic({
           />
         ))}
 
+        {/* Printed gauges on the trunks. */}
+        {gauges.map((g) => (
+          <g key={g.label} pointerEvents="none">
+            <text
+              x={g.x}
+              y={g.y}
+              textAnchor="middle"
+              className="num"
+              fill="var(--color-ink)"
+              style={{ fontSize: 12, fontWeight: 700 }}
+            >
+              {g.value}
+            </text>
+            <text
+              x={g.x}
+              y={g.y + 10}
+              textAnchor="middle"
+              className="fill-ink-3"
+              style={{ fontSize: 7.5, letterSpacing: "0.1em" }}
+            >
+              {g.label.toUpperCase()}
+            </text>
+          </g>
+        ))}
+
         {/* ---- parts ------------------------------------------------------- */}
         {PARTS.map((part) => {
-          const { fill, stroke, pulse } = paint(part);
+          const { fill, stroke, pulse, dim } = paint(part);
           const component = part.component ? build[part.component] : undefined;
           const isSelected = selected === part.id;
           const vertical = part.w < 70;
+          const readout = metrics(part);
           const stubYs = Array.from(
             { length: part.stubs },
             (_, i) => part.y + (part.h * (i + 1)) / (part.stubs + 1),
@@ -940,7 +1028,11 @@ export default function Schematic({
               key={part.id}
               className={pulse ? "node-running" : undefined}
               onClick={() => onSelect?.(part)}
-              style={{ cursor: onSelect ? "pointer" : undefined }}
+              style={{
+                cursor: onSelect ? "pointer" : undefined,
+                opacity: dim && !isSelected ? 0.45 : 1,
+                transition: "opacity 180ms ease",
+              }}
             >
               <title>
                 {part.label} — {part.role ?? part.sub}
@@ -1008,85 +1100,78 @@ export default function Schematic({
                 />
               )}
 
+              {/* The agent's tab, in its own tier hue. Redundant with the
+                  outline colour on purpose: two cues, because colour alone fails
+                  in greyscale and on a projector at the back of a room. */}
               {part.kind === "agent" && (
-                <>
-                  <rect
-                    x={part.x}
-                    y={part.y}
-                    width={4}
-                    height={part.h}
-                    fill={TAB[part.tier ?? "mid"]}
-                    pointerEvents="none"
-                  />
-                  <rect
-                    x={part.x + 3.5}
-                    y={part.y + 3.5}
-                    width={part.w - 7}
-                    height={part.h - 7}
-                    fill="none"
-                    stroke="var(--color-accent)"
-                    strokeWidth={0.6}
-                    opacity={0.45}
-                    pointerEvents="none"
-                  />
-                </>
+                <rect
+                  x={part.x}
+                  y={part.y}
+                  width={3}
+                  height={part.h}
+                  fill={stroke}
+                  pointerEvents="none"
+                />
               )}
 
               {vertical ? (
                 <text
                   transform={`rotate(-90 ${part.x + part.w / 2} ${part.y + part.h / 2})`}
                   x={part.x + part.w / 2}
-                  y={part.y + part.h / 2}
+                  y={part.y + part.h / 2 + 3}
                   textAnchor="middle"
-                  className="display fill-ink"
-                  style={{ fontSize: 11.5 }}
+                  fill={stroke}
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    letterSpacing: "0.14em",
+                    fontFamily: "var(--font-mono)",
+                  }}
                 >
-                  {part.label} · {part.sub}
+                  {part.label.toUpperCase()} · {part.sub}
                 </text>
               ) : (
                 <>
+                  {/* The name, in the part's own hue: you can read the kind off
+                      the label without tracing the outline. */}
                   <text
-                    x={part.x + part.w / 2 + (part.kind === "agent" ? 2 : 0)}
-                    y={part.y + part.h / 2 - 1}
+                    x={part.x + part.w / 2 + 2}
+                    y={part.y + (readout ? part.h / 2 - 6 : part.h / 2 - 1)}
                     textAnchor="middle"
-                    className={
-                      overlay === "tier" && part.tier === "deep"
-                        ? "display fill-paper"
-                        : "display fill-ink"
-                    }
-                    style={{ fontSize: 12.5 }}
+                    fill={stroke}
+                    style={{
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      letterSpacing: "0.09em",
+                      fontFamily: "var(--font-mono)",
+                    }}
                   >
-                    {part.label}
+                    {part.label.toUpperCase()}
                   </text>
                   <text
-                    x={part.x + part.w / 2 + (part.kind === "agent" ? 2 : 0)}
-                    y={part.y + part.h / 2 + 12}
+                    x={part.x + part.w / 2 + 2}
+                    y={part.y + (readout ? part.h / 2 + 6 : part.h / 2 + 12)}
                     textAnchor="middle"
-                    className={
-                      overlay === "tier" && part.tier === "deep"
-                        ? "fill-paper"
-                        : "fill-ink-2"
-                    }
+                    className="fill-ink-2"
                     style={{ fontSize: 8.5 }}
                   >
                     {part.sub}
                   </text>
+                  {/* Cost and latency, in place, on the part that spent it. A
+                      separate cost table makes you correlate two screens; this
+                      makes the expensive call obvious while it is happening. */}
+                  {readout && (
+                    <text
+                      x={part.x + part.w / 2 + 2}
+                      y={part.y + part.h - 5}
+                      textAnchor="middle"
+                      className="num fill-ink-3"
+                      style={{ fontSize: 7.5 }}
+                    >
+                      {readout}
+                    </text>
+                  )}
                 </>
-              )}
-
-              {part.kind === "agent" && part.tier && !vertical && (
-                <text
-                  x={part.x + 9}
-                  y={part.y + 11}
-                  className={
-                    overlay === "tier" && part.tier === "deep"
-                      ? "fill-paper"
-                      : "fill-ink-3"
-                  }
-                  style={{ fontSize: 8, fontWeight: 700 }}
-                >
-                  {part.tier.toUpperCase()}
-                </text>
               )}
 
               {overlay === "build" && component && !vertical && (
@@ -1199,6 +1284,56 @@ export default function Schematic({
                   style={{ fontSize: 9 }}
                 >
                   λ {lambda == null ? "—" : lambda.toFixed(2)}
+                </text>
+              </>
+            );
+          })()}
+        </g>
+
+        {/* ---- comparability, drawn as a ground -----------------------------
+            A ground symbol is exactly the right idiom for what V2 does: when it
+            fires, λ is pulled to zero and the forecast sits on consensus. So it
+            is not a label saying "λ collapses" — it is a conductor to ground
+            that energises when the flag is set, and reads as clear when it is
+            not. The symbol lives on the control line, where it belongs. */}
+        <g pointerEvents="none">
+          {(() => {
+            const f = BY_ID.F_lambda;
+            const gx = f.x + f.w / 2;
+            const gTop = f.y + f.h;
+            const fired = Boolean(comparability);
+            const hue = fired ? "var(--color-failed)" : "var(--color-ink-3)";
+            return (
+              <>
+                {/* Stem stops short of V2's control lane at y=560 rather than
+                    running into it — two conductors meeting without a junction
+                    dot is the one ambiguity a schematic must never have. */}
+                <path
+                  d={`M${gx},${gTop} V${gTop + 24}`}
+                  stroke={hue}
+                  strokeWidth={fired ? 2.4 : 1}
+                  strokeDasharray={fired ? undefined : "3 3"}
+                  fill="none"
+                  className={fired ? "blink" : undefined}
+                />
+                {[14, 9, 4].map((halfWidth, i) => (
+                  <path
+                    key={halfWidth}
+                    d={`M${gx - halfWidth},${gTop + 24 + i * 5} H${gx + halfWidth}`}
+                    stroke={hue}
+                    strokeWidth={fired ? 2.2 : 1.2}
+                    fill="none"
+                  />
+                ))}
+                <text
+                  x={gx + 22}
+                  y={gTop + 31}
+                  fill={hue}
+                  style={{ fontSize: 8, fontWeight: 700, letterSpacing: "0.08em" }}
+                >
+                  {fired
+                    ? `COMPARABILITY FIRED — λ → 0 (${comparability})`
+                    : "COMPARABILITY — CLEAR"}
                 </text>
               </>
             );

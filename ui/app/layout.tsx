@@ -15,7 +15,10 @@ export default function RootLayout({
     <html lang="en">
       <body className="min-h-screen">
         <Nav />
-        <main className="mx-auto max-w-[1600px] px-5 py-6">{children}</main>
+        {/* Wider and tighter than before: the instrument on / wants the full
+            width, and the sheets read better dense than airy now that the
+            substrate is dark. Pages own their own internal rhythm. */}
+        <main className="mx-auto w-full max-w-[1760px] px-3 py-3">{children}</main>
       </body>
     </html>
   );

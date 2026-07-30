@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import OrgChart, {
   AGENT_ROLES,
@@ -23,6 +23,7 @@ import {
   Stat,
   StatusPanel,
 } from "@/components/blueprint";
+import { useBuild } from "@/lib/build";
 import { pct, useRun } from "@/lib/data";
 import { sheetOf } from "@/lib/sheets";
 
@@ -41,26 +42,6 @@ import { sheetOf } from "@/lib/sheets";
  * reported separately so the sheet cannot imply the thesis has been demonstrated
  * when it has not.
  */
-
-interface BuildPayload {
-  components: BuildComponent[];
-  gates: Array<{
-    id: string;
-    label: string;
-    passed: boolean;
-    detail: string;
-    blocks: string;
-  }>;
-  totals: {
-    components: number;
-    built: number;
-    partial: number;
-    missing: number;
-    tests: number;
-    gates_passed: number;
-    gates_total: number;
-  };
-}
 
 const KIND_NOTE: Record<Kind, string> = {
   agent: "reasons with a model, and is why the audit layers exist",
@@ -89,16 +70,9 @@ const OVERLAYS: Array<[Overlay, string, string]> = [
 export default function SystemScreen() {
   const [view, setView] = useState<View>("schematic");
   const [overlay, setOverlay] = useState<Overlay>("build");
-  const [build, setBuild] = useState<BuildPayload | null>(null);
   const [selected, setSelected] = useState<OrgNode | null>(null);
   const run = useRun();
-
-  useEffect(() => {
-    void fetch("/build.json")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => data && setBuild(data as BuildPayload))
-      .catch(() => setBuild(null));
-  }, []);
+  const build = useBuild();
 
   // The champion stage fans out per lens in the event log but is one rank on the
   // chart; each champion box reads its own lens's D_ event, so no folding needed.

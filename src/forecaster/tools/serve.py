@@ -67,6 +67,12 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
         return
 
 
+# Matched against the occupant's <title> to tell our own server apart from
+# someone else's. Substring rather than equality: the title carries a tagline
+# that will change, and the guard must not start lying the first time it does.
+OURS = "forecaster"
+
+
 def port_owner(port: int) -> str | None:
     """Who is on this port, if anyone. Best-effort and never raises."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
@@ -124,6 +130,20 @@ def serve(
 
     occupant = port_owner(port)
     if occupant is not None:
+        # Distinguish "someone else's app" from "this app, already up". The guard
+        # exists so nobody stares at the wrong project and concludes this one is
+        # broken — but telling you your OWN server "is not this project" is the
+        # same failure wearing the guard's uniform. A static server re-reads from
+        # disk on every request, so an already-running instance is serving the
+        # newest build and the right advice is simply "reload".
+        if OURS in occupant:
+            raise SystemExit(
+                f"\nPort {port} is already serving this project “{occupant}”.\n\n"
+                f"Nothing to do — it reads from ui/out on every request, so it is\n"
+                f"already serving the current build. Reload the page.\n\n"
+                f"To restart it anyway, stop that process first, or use another\n"
+                f"port:  uv run forecast ui --port {port + 1}"
+            )
         raise SystemExit(
             f"\nPort {port} is already serving “{occupant}”.\n\n"
             f"That is not this project. Pick another port:\n"

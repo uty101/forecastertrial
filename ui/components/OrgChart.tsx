@@ -441,10 +441,37 @@ export const TIER_STROKE = {
 /** The agent's left-edge tab, coloured by what the call costs. */
 export const TAB = {
   none: "var(--color-ink-3)",
-  cheap: "var(--color-ink-3)",
+  cheap: "var(--color-accent-2)",
   mid: "var(--color-accent)",
-  deep: "var(--color-accent-2)",
+  deep: "var(--color-deep)",
 } as const;
+
+/**
+ * Rule 1 of the design language, as code: a part's outline says what KIND of
+ * thing it is. Everything else — build state, live state, cost tier — is layered
+ * on top of this, never in place of it, so the one distinction that matters is
+ * legible on every overlay and at every zoom.
+ */
+export const KIND_STROKE = {
+  agent: "var(--color-accent)",
+  code: "var(--color-structure)",
+  data: "var(--color-data)",
+  output: "var(--color-ink)",
+} as const;
+
+export const KIND_FILL = {
+  agent: "var(--color-accent-soft)",
+  code: "var(--color-structure-soft)",
+  data: "var(--color-data-soft)",
+  output: "var(--color-paper-2)",
+} as const;
+
+/** The judge is the one deep-tier call, and it gets its own hue to say so. */
+export const strokeFor = (kind: Kind, tier?: OrgNode["tier"]) =>
+  kind === "agent" && tier === "deep" ? "var(--color-deep)" : KIND_STROKE[kind];
+
+export const fillFor = (kind: Kind, tier?: OrgNode["tier"]) =>
+  kind === "agent" && tier === "deep" ? "var(--color-deep-soft)" : KIND_FILL[kind];
 
 export interface BuildComponent {
   id: string;

@@ -1,61 +1,82 @@
 @import "tailwindcss";
 
 /*
- * TECHNICAL BLUEPRINT
+ * INSTRUMENT
  *
- * The whole screen is a drafted sheet: cream stock, near-black ink, a deep green
- * for structure and exactly one orange for the thing being claimed.
+ * The screen is an EDA workstation, not a printed sheet: near-black substrate, a
+ * faint blue grid, monospace throughout, and every part outlined in the colour of
+ * what it IS. It reads as a machine you are watching run, which is what it is.
  *
- * Three rules survive from the previous design and still do most of the work:
+ * Four rules do most of the work.
  *
- * 1. ONE ACCENT, used only for OUR forecast and for live/alert state. Consensus
- *    is always neutral. The moment a second thing is orange, the eye stops
- *    knowing which number is the claim.
- * 2. TABULAR NUMERALS EVERYWHERE. Financial figures that jitter as they update
- *    read as amateur, and the live view updates four times a second.
- * 3. MOTION ONLY FOR STATE CHANGE, 150–200ms.
+ * 1. HUE IS SEMANTIC, NEVER DECORATIVE. A part's colour says what kind of thing
+ *    it is, and nothing else:
  *
- * One rule is new and specific to this language:
+ *        cyan    data — fetches and stages, makes no judgment
+ *        green   deterministic code — no model in it, cannot hallucinate
+ *        violet  an agent, reasoning with a model
+ *        rose    an agent on the deep tier: the judge, one expensive call
+ *        amber   consensus, and only consensus
+ *        red     failed, dropped, open circuit
  *
- * 4. THE CHROME CARRIES INFORMATION. Registration marks, dimension rules and
- *    coordinate readouts are the visual grammar of a technical drawing, and it
- *    would be easy to use them as pure decoration. Everywhere it is possible,
- *    they show something real instead — the sheet number is the screen index,
- *    the "coordinates" are the ticker and lock date, the dimension rules
- *    annotate actual quantities. Decoration that lies about being data is worse
- *    than no decoration.
+ *    This is the same agent/code/data encoding the drawings already carried, in
+ *    a palette that can hold it. Six hues sounds like a lot until you notice
+ *    there are exactly six kinds of thing, and that the alternative — colouring
+ *    by stage — would have said nothing you cannot already read off the x-axis.
  *
- * Dark mode is a stepped dark-paper variant, not an inverted filter. Inverting a
- * dense financial layout produces grey-on-grey at exactly the density where
- * contrast matters most.
+ * 2. TABULAR NUMERALS EVERYWHERE. Figures that jitter as they update read as
+ *    amateur, and the live view updates four times a second.
+ *
+ * 3. MOTION ONLY FOR STATE CHANGE, 150–200ms — plus the marching dashes on a
+ *    conductor that is carrying right now, which is state, not decoration.
+ *
+ * 4. THE CHROME CARRIES INFORMATION. Designators, pin stubs, junction dots and
+ *    the ground symbol under λ are the grammar of a schematic, and it would be
+ *    easy to use them as ornament. Every one of them shows something real
+ *    instead: the designators are stable part references, the junction dots mark
+ *    genuine merges, and the ground fires when comparability does. Decoration
+ *    that lies about being data is worse than no decoration.
+ *
+ * There is no light variant. A dense instrument panel on cream stock is a
+ * different product, and committing to one look beats shipping two badly.
  */
 
 @theme {
-  /* paper and ink */
-  --color-paper: #f4f1ea;
-  --color-paper-2: #efebe1;
-  --color-sheet: #faf8f3;
-  --color-ink: #16181a;
-  --color-ink-2: #4a4f52;
-  --color-ink-3: #8b9095;
-  --color-rule: #cdc7ba;
-  --color-rule-2: #e0dad0;
+  /* substrate and ink */
+  --color-paper: #080b10;
+  --color-paper-2: #0d1219;
+  --color-sheet: #0a0e15;
+  --color-ink: #d3dcea;
+  --color-ink-2: #8592a6;
+  --color-ink-3: #4d5a6e;
+  --color-rule: #1e2733;
+  --color-rule-2: #161d27;
+  /* the faint blue graticule the whole screen sits on */
+  --color-grid: #111a26;
 
-  /* structure — deep green, for headlines and confirmed state */
-  --color-structure: #1f3d2b;
-  --color-structure-2: #2f5a3f;
-  --color-structure-soft: #dfe6dc;
+  /* structure — the deterministic green, for confirmed state and pure code */
+  --color-structure: #35d39a;
+  --color-structure-2: #22a67a;
+  --color-structure-soft: #0c211b;
 
-  /* the one accent */
-  --color-accent: #d0622b;
-  --color-accent-2: #b8501f;
-  --color-accent-soft: #f5e3d6;
+  /* the agent accent */
+  --color-accent: #a77bff;
+  --color-accent-2: #7c4dff;
+  --color-accent-soft: #17122b;
+
+  /* semantic hues — see rule 1 */
+  --color-data: #38bdf8;
+  --color-data-soft: #0a1a26;
+  --color-deep: #ff5c7a;
+  --color-deep-soft: #240f18;
+  --color-consensus: #d9a441;
+  --color-consensus-soft: #221a0c;
 
   /* node / status states */
-  --color-idle: #cdc7ba;
-  --color-running: #d0622b;
-  --color-done: #1f3d2b;
-  --color-failed: #9b2c1e;
+  --color-idle: #263041;
+  --color-running: #a77bff;
+  --color-done: #35d39a;
+  --color-failed: #ff4d5e;
 
   --font-sans: ui-sans-serif, -apple-system, "Segoe UI", Inter, system-ui, sans-serif;
   --font-mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
@@ -72,49 +93,29 @@
 }
 
 :root {
-  color-scheme: light dark;
+  /* Only dark. Telling the browser otherwise makes it paint form controls and
+     scrollbars for a light page that does not exist. */
+  color-scheme: dark;
 }
 
 /*
- * Dark paper.
- *
- * A plain `:root` override, NOT a nested `@theme` — `@theme` only runs at the top
- * level, so putting it inside a media query silently generates nothing and the
- * dark palette never applies. Overriding the custom properties directly works
- * because Tailwind v4 emits utilities that reference `var(--color-*)` rather than
- * inlining the hex, so retinting the variables retints every utility built from
- * them.
- *
- * Stepped, not inverted. Inverting a dense financial layout produces grey-on-grey
- * at exactly the density where contrast matters most.
+ * The graticule. Two sets of hairlines at 32px, laid straight onto the substrate
+ * so every panel floats on the same measured ground rather than each one owning
+ * its own background.
  */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-paper: #14161a;
-    --color-paper-2: #191c21;
-    --color-sheet: #1d2126;
-    --color-ink: #ece7dc;
-    --color-ink-2: #a8a49b;
-    --color-ink-3: #6b6f74;
-    --color-rule: #343a41;
-    --color-rule-2: #262b31;
-    --color-structure: #7fb894;
-    --color-structure-2: #5f9c76;
-    --color-structure-soft: #1b2b21;
-    --color-accent: #e4834f;
-    --color-accent-2: #d0622b;
-    --color-accent-soft: #2e1e14;
-    --color-idle: #343a41;
-    --color-done: #7fb894;
-    --color-failed: #d9705f;
-  }
-}
-
 html,
 body {
-  background: var(--color-paper);
+  background-color: var(--color-paper);
+  background-image:
+    linear-gradient(var(--color-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-grid) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-position: -1px -1px;
   color: var(--color-ink);
-  font-family: var(--font-sans);
+  /* Mono is the body face now, not just the chrome face. An instrument panel
+     that switches to a humanist sans for prose stops reading as an instrument. */
+  font-family: var(--font-mono);
+  font-size: 13px;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -131,15 +132,17 @@ body {
 
 /* ---- typography ------------------------------------------------------- */
 
+/*
+ * Headlines are mono too, opened up rather than condensed. A condensed grotesque
+ * next to monospaced data reads as two different documents stapled together; the
+ * same face at a wider tracking reads as one instrument with a loud row.
+ */
 .display {
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: -0.01em;
-  line-height: 0.92;
-  /* Condensed faces vary in width; stretch is a last-resort nudge so a fallback
-     does not blow out the grid. */
-  font-stretch: condensed;
+  letter-spacing: 0.04em;
+  line-height: 1.06;
 }
 
 .label {
@@ -163,7 +166,9 @@ body {
 
 .sheet {
   position: relative;
-  background: var(--color-sheet);
+  /* Slightly translucent so the substrate graticule shows through the panel
+     rather than being covered by it — the whole screen stays on one grid. */
+  background: color-mix(in srgb, var(--color-sheet) 88%, transparent);
   border: 1px solid var(--color-rule);
 }
 
@@ -191,10 +196,31 @@ body {
   border-right: 1.5px solid;
 }
 
-/* The dotted plate texture from the sheet margins. */
+/* The finer graticule used inside a panel — half the pitch of the page grid, so
+   the two nest instead of moiring against each other. */
 .plate {
-  background-image: radial-gradient(var(--color-rule) 0.9px, transparent 0.9px);
-  background-size: 7px 7px;
+  background-image:
+    linear-gradient(var(--color-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-grid) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+/* A part outlined in the colour of what it is. Used by the schematic legend and
+   anywhere prose needs to name a kind. */
+.kind-agent {
+  color: var(--color-accent);
+}
+.kind-code {
+  color: var(--color-structure);
+}
+.kind-data {
+  color: var(--color-data);
+}
+.kind-deep {
+  color: var(--color-deep);
+}
+.kind-consensus {
+  color: var(--color-consensus);
 }
 
 /* ---- rules and dimensions --------------------------------------------- */
