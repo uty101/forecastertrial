@@ -1,0 +1,668 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>forecaster · monitor</title>
+<!--
+  THE MONITOR WINDOW.
+
+  A standalone live view, meant to sit on a second screen while you work. It is
+  deliberately NOT a route in the Next app:
+
+  * It has no build step and no framework, so it starts instantly and keeps
+    running even if the app is mid-rebuild or broken.
+  * It is one file. If it renders at all, it works.
+  * `window.open` gives it real window chrome, so it can be sized and parked.
+
+  It reads the same three files the app does — events.ndjson, results.json,
+  build.json — and nothing else. No API, no socket.
+
+  ON MOTION. The design rule everywhere else in this repo is "motion only for
+  state change", because decorative animation reads as a template. A monitor is
+  the one place that rule needs bending: a dashboard that looks identical whether
+  it is connected or dead is a dashboard you stop trusting. So there is exactly
+  one piece of unconditional motion — the heartbeat dot, which proves the poll
+  loop is alive — and everything else moves only because something happened.
+  Edges flow when data actually flowed down them. Nodes pulse only while running.
+-->
+<style>
+  :root{
+    --paper:#f4f1ea; --paper2:#efebe1; --sheet:#faf8f3;
+    --ink:#16181a; --ink2:#4a4f52; --ink3:#8b9095;
+    --rule:#cdc7ba; --rule2:#e0dad0;
+    --green:#1f3d2b; --green-soft:#dfe6dc;
+    --orange:#d0622b; --orange2:#b8501f; --orange-soft:#f5e3d6;
+    --red:#9b2c1e;
+    --mono:ui-monospace,"Cascadia Mono","SF Mono",Menlo,Consolas,monospace;
+    --disp:"Archivo Narrow","Arial Narrow","Helvetica Neue Condensed",
+      "Roboto Condensed","Liberation Sans Narrow",Impact,system-ui,sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --paper:#14161a; --paper2:#191c21; --sheet:#1d2126;
+      --ink:#ece7dc; --ink2:#a8a49b; --ink3:#6b6f74;
+      --rule:#343a41; --rule2:#262b31;
+      --green:#7fb894; --green-soft:#1b2b21;
+      --orange:#e4834f; --orange2:#d0622b; --orange-soft:#2e1e14;
+      --red:#d9705f;
+    }
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--paper);color:var(--ink);
+    font:13px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Inter,system-ui,sans-serif;
+    font-variant-numeric:tabular-nums;
+    display:flex;flex-direction:column;overflow:hidden;
+  }
+  .disp{font-family:var(--disp);font-weight:700;text-transform:uppercase;
+    letter-spacing:-.01em;line-height:.95;font-stretch:condensed}
+  .lbl{font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--ink3)}
+  .tech{font-family:var(--mono);font-size:10px;letter-spacing:.05em;color:var(--ink2)}
+
+  /* ---- header ---- */
+  header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+    padding:8px 12px;background:var(--sheet);border-bottom:1px solid var(--rule)}
+  .brand{display:flex;align-items:center;gap:8px}
+  .reg{width:15px;height:15px;flex:none}
+  .title{font-size:15px}
+  .hb{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);
+    font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--orange)}
+  /* The one piece of unconditional motion: proof the poll loop is alive. */
+  .hb i{width:7px;height:7px;border-radius:50%;background:var(--orange);
+    animation:beat 1.15s ease-in-out infinite}
+  @keyframes beat{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.25;transform:scale(.7)}}
+  .hb.stale i{background:var(--red);animation-duration:2.4s}
+  .hb.stale{color:var(--red)}
+
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  .chip{border:1px solid var(--rule);padding:2px 7px;font-family:var(--mono);
+    font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2)}
+  .chip b{color:var(--ink);font-weight:700}
+  .chip.on{border-color:var(--green);color:var(--green)}
+  .chip.run{border-color:var(--orange);color:var(--orange);background:var(--orange-soft)}
+  .chip.bad{border-color:var(--red);color:var(--red)}
+
+  /* ---- body ---- */
+  main{flex:1;display:grid;grid-template-columns:1fr 268px;min-height:0}
+  @media (max-width:820px){main{grid-template-columns:1fr}}
+  .stage{position:relative;min-width:0;display:flex;flex-direction:column}
+  svg{width:100%;height:100%;display:block;flex:1;min-height:0}
+  aside{border-left:1px solid var(--rule);background:var(--sheet);
+    display:flex;flex-direction:column;min-height:0}
+
+  /* ---- nodes ---- */
+  .bx{stroke-width:1.5;transition:fill 200ms ease,stroke 200ms ease}
+  .nt{font-family:var(--disp);font-weight:700;text-transform:uppercase;
+    font-size:10.5px;fill:var(--ink);pointer-events:none}
+  .ns{font-size:7.6px;fill:var(--ink2);pointer-events:none}
+  .nm{font-family:var(--mono);font-size:7.2px;pointer-events:none}
+  .node{cursor:crosshair}
+  .node:hover .bx{stroke-width:2.6}
+  .pulse{animation:pulse 1.05s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+
+  /* ---- edges: flow only where data actually flowed ---- */
+  .edge{fill:none;stroke:var(--rule);stroke-width:1.1;opacity:.5}
+  .edge.flow{stroke:var(--green);stroke-width:1.5;opacity:.9;
+    stroke-dasharray:5 7;animation:flow 1s linear infinite}
+  .edge.hot{stroke:var(--orange);stroke-width:1.7;opacity:1;
+    stroke-dasharray:4 6;animation:flow .55s linear infinite}
+  @keyframes flow{to{stroke-dashoffset:-12}}
+
+  .ph{font-family:var(--mono);font-size:7.6px;font-weight:700;letter-spacing:.12em;
+    fill:var(--ink3)}
+
+  /* ---- tooltip ---- */
+  #tip{position:absolute;pointer-events:none;z-index:20;max-width:330px;
+    background:var(--sheet);border:1px solid var(--ink);
+    box-shadow:3px 3px 0 rgba(0,0,0,.14);padding:9px 11px;display:none}
+  #tip.show{display:block}
+  #tip .tname{font-family:var(--disp);font-weight:700;text-transform:uppercase;
+    font-size:14px;line-height:1}
+  #tip .trole{margin-top:3px}
+  #tip .tbody{margin-top:7px;padding-top:7px;border-top:1px solid var(--rule2);
+    font-size:11.5px;line-height:1.45;color:var(--ink2)}
+  #tip dl{margin-top:7px;padding-top:7px;border-top:1px solid var(--rule2)}
+  #tip dl>div{display:flex;justify-content:space-between;gap:12px;padding:1.5px 0}
+  #tip dt{font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;
+    text-transform:uppercase;color:var(--ink3)}
+  #tip dd{font-size:11.5px;font-weight:600;text-align:right}
+  #tip .warn{color:var(--red)}
+  #tip .ok{color:var(--green)}
+  #tip .hot{color:var(--orange)}
+
+  /* ---- ticker ---- */
+  .panel{border-bottom:1px solid var(--rule);padding:7px 10px}
+  .panel h2{font-family:var(--mono);font-size:9px;font-weight:600;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)}
+  #ticker{flex:1;overflow-y:auto;padding:4px 0;min-height:0}
+  .ev{display:grid;grid-template-columns:38px 1fr;gap:6px;padding:2.5px 10px;
+    font-size:11px;border-bottom:1px solid var(--rule2);
+    animation:slide 240ms ease}
+  @keyframes slide{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+  .ev time{font-family:var(--mono);font-size:9.5px;color:var(--ink3)}
+  .ev .n{font-weight:600}
+  .ev.done .n{color:var(--green)}
+  .ev.fail .n{color:var(--red)}
+  .ev.start .n{color:var(--orange)}
+  .ev .d{color:var(--ink2);font-size:10.5px}
+
+  .rates{display:flex;gap:10px;align-items:flex-end;height:34px;padding:0 10px 6px}
+  .rates i{flex:1;background:var(--orange);opacity:.75;min-height:1px;
+    transition:height 220ms ease}
+
+  footer{display:flex;flex-wrap:wrap;gap:0;border-top:1px solid var(--rule);
+    background:var(--sheet)}
+  footer .cell{flex:1;min-width:96px;padding:5px 10px;border-left:1px solid var(--rule)}
+  footer .cell:first-child{border-left:0}
+  footer .v{font-family:var(--mono);font-size:11px;font-weight:700;margin-top:1px}
+
+  .empty{position:absolute;inset:0;display:flex;align-items:center;
+    justify-content:center;text-align:center;padding:24px;pointer-events:none}
+  .empty div{max-width:420px}
+  .empty code{font-family:var(--mono);font-size:11px;background:var(--paper2);
+    border:1px solid var(--rule);padding:2px 6px;display:inline-block;margin-top:8px}
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <svg class="reg" viewBox="0 0 16 16" aria-hidden>
+      <circle cx="8" cy="8" r="4.4" fill="none" stroke="var(--orange)" stroke-width="1"/>
+      <path d="M8 .5V5.2M8 10.8V15.5M.5 8H5.2M10.8 8H15.5" stroke="var(--orange)" stroke-width="1"/>
+    </svg>
+    <span class="disp title">forecaster · monitor</span>
+  </div>
+  <span class="hb" id="hb"><i></i><span id="hbtext">connecting</span></span>
+  <div class="chips">
+    <span class="chip" id="c-state">idle</span>
+    <span class="chip" id="c-nodes"><b>0</b>/19 nodes</span>
+    <span class="chip" id="c-claims"><b>0</b> claims</span>
+    <span class="chip" id="c-cost">$<b>0</b></span>
+    <span class="chip" id="c-elapsed"><b>0.0</b>s</span>
+  </div>
+</header>
+
+<main>
+  <div class="stage">
+    <svg id="chart" viewBox="0 0 1020 560" preserveAspectRatio="xMidYMid meet"></svg>
+    <div id="tip"></div>
+    <div class="empty" id="empty">
+      <div>
+        <p class="disp" style="font-size:19px">Waiting for a run</p>
+        <p class="tech" style="margin-top:8px;line-height:1.6">
+          Polling <b>events.ndjson</b> four times a second. Hover any component for
+          its live detail; it works before a run too, showing what each part does
+          and whether it is built.
+        </p>
+        <code>uv run forecast run --ticker NVDA --as-of 2026-08-16</code>
+      </div>
+    </div>
+  </div>
+
+  <aside>
+    <div class="panel">
+      <h2>event rate</h2>
+      <div class="rates" id="rates"></div>
+    </div>
+    <div class="panel"><h2>event stream</h2></div>
+    <div id="ticker"></div>
+  </aside>
+</main>
+
+<footer>
+  <div class="cell"><div class="lbl">run</div><div class="v" id="f-run">—</div></div>
+  <div class="cell"><div class="lbl">forecast</div><div class="v" id="f-eps">—</div></div>
+  <div class="cell"><div class="lbl">consensus</div><div class="v" id="f-cons">—</div></div>
+  <div class="cell"><div class="lbl">λ</div><div class="v" id="f-lam">—</div></div>
+  <div class="cell"><div class="lbl">dropped</div><div class="v" id="f-drop">—</div></div>
+  <div class="cell"><div class="lbl">gates</div><div class="v" id="f-gates">—</div></div>
+</footer>
+
+<script>
+"use strict";
+
+/* ------------------------------------------------------------------ *
+ * The graph. Coordinates are hand-placed: the shape is fixed, so a
+ * layout engine would buy nothing and cost a dependency.
+ *
+ * `what` is the standing description — what this component IS, shown on
+ * hover even before a run, so the window is useful while idle.
+ * ------------------------------------------------------------------ */
+
+const N = (id, label, sub, x, y, w, h, extra) => Object.assign(
+  { id, label, sub, x, y, w, h, live: id, tier: "none" }, extra || {});
+
+const LENSES = [
+  ["mechanical", "Mechanical", "FX · shares · interest", "none",
+   "Pure arithmetic, no model at all: FX translation, diluted share count from buyback pace, net interest, calendar effects. Four things that move EPS, are fully disclosed, and change AFTER consensus is set. Cannot hallucinate."],
+  ["guidance", "Guidance", "guide + landing CDF", "mid",
+   "Anchors on what management guided for this quarter, then adjusts for where this company historically lands INSIDE its own range. Everyone reads the guide; almost nobody builds the landing distribution."],
+  ["drivers", "Drivers", "units × ASP", "mid",
+   "Builds revenue bottom-up — units × ASP, subs × ARPU, comps × stores, backlog conversion — rather than extrapolating the revenue line. Segment figures must sum to the total or the reconciler drops it."],
+  ["margins", "Margins", "GM mix · opex · tax", "mid",
+   "Revenue to EPS: gross margin MIX, opex trajectory, tax rate, below-the-line. Its working top line comes from prior-year actuals and the Street, NOT from the Drivers lens — otherwise the two would agree by construction."],
+  ["forensics", "Forensics", "accruals · exclusions", "mid",
+   "Reads as an auditor, not a forecaster. Accruals vs cash conversion, DSO, inventory — and changes in the non-GAAP exclusion mix, which move what the reported number MEANS. Most likely lens to disagree with the others."],
+  ["peer_read", "Peer read", "who already reported", "mid",
+   "Who in the value chain has ALREADY reported this cycle. Estimates are sticky, so a supplier's disclosure can sit un-priced for weeks. Requires a specific transmission mechanism, not a sector adjective."],
+  ["macro", "Macro", "series vs assumed", "mid",
+   "Sector series against what estimates appear to assume. A Fed paper puts that gap at roughly half of current-quarter analyst error. Stays off FX translation — the Mechanical lens already does that arithmetically."],
+];
+
+const LX = 322, LW = 150, LH = 40, LGAP = 6, LY0 = 96;
+
+const NODES = [
+  N("A1_numbers", "A1 Numbers", "XBRL · consensus", 30, 108, 132, 40, {
+    what: "Point-in-time actuals from SEC XBRL plus forward consensus. Every fact carries a filed date, so nothing published after the lock date is visible.",
+  }),
+  N("A2_filings", "A2 Filings", "8-K · 10-Q · text", 30, 156, 132, 40, {
+    what: "Ranked filings AND their body text. The text is not optional: citation verification string-matches every prose quote against its source, so a filing acquired as a bare URL drops every lens that cites it.",
+  }),
+  N("A3_industry", "A3 Industry", "peers · chain", 30, 204, 132, 40, {
+    what: "Peers, suppliers and customers who already reported inside a 100-day window. Older prints are fully in consensus and tell you nothing new.",
+  }),
+  N("A4_macro", "A4 Macro", "FRED, point-in-time", 30, 252, 132, 40, {
+    what: "Sector macro series with realtime_start pinned to the lock date. Macro data is revised for months; pulling today's value for last year's quarter leaks the future invisibly.",
+  }),
+
+  N("B_structure", "B Evidence", "claims + quotes", 186, 176, 112, 52, {
+    what: "One byte-identical corpus, cached once and read by every lens. Claims are renumbered to short citable ids (c1, c2 …) because a model asked to cite sec:NVDA:2026Q1:Diluted EPS will get it wrong and lose its lens.",
+  }),
+
+  ...LENSES.map(([id, label, sub, tier, what], i) => N(
+    "C_" + id, label, sub, LX, LY0 + i * (LH + LGAP), LW, LH,
+    { tier, what, comp: id })),
+
+  N("V1_reconcile", "V1", "arithmetic + cites", 486, 96, 74, 320, {
+    audit: true, what: "Arithmetic and citations, in plain code. Recomputes EPS from the inputs a lens claimed and string-matches every prose quote against its filing. A lens that fails either is DROPPED and logged — never silently averaged in.",
+  }),
+
+  N("D_champion", "D Champion", "argue, then attack", 578, 96, 116, 320, {
+    tier: "mid", comp: "champion",
+    what: "Develops each case into its strongest honest form, then attacks it in good faith — before anything is compared. This is the step that took the reference system from failing to ~92%. Replaces self-reported confidence with what survived.",
+  }),
+
+  N("E_judge", "E Judge", "materiality", 712, 216, 108, 56, {
+    tier: "deep", comp: "judge",
+    what: "One expensive call. Weighs by MATERIALITY, never by vote count — six lenses agreeing on a weak signal lose to one carrying the company's own guidance with a quote. Outputs a distribution, not a point.",
+  }),
+
+  N("V2_comparability", "V2", "→ λ collapses", 712, 320, 108, 46, {
+    audit: true, tier: "cheap", comp: "v2",
+    what: "Is this quarter comparable to the company's own history? M&A mid-quarter, an accounting change, a 53rd week. When it fires λ collapses — the system gets least confident exactly where it would otherwise be most.",
+  }),
+
+  N("F_lambda", "F λ", "fitted, not guessed", 838, 216, 104, 56, {
+    comp: "lambda",
+    what: "forecast = consensus + λ · (own − consensus). Everything upstream produces an estimate; λ decides how far to trust it against sixty-one analysts. Fitted on backtest and conditioned on regime.",
+  }),
+
+  N("V3_calibrate", "V3", "own residuals", 838, 320, 104, 46, {
+    audit: true, comp: "v3",
+    what: "Rebuilds the interval from bootstrapped residuals of our own backtest, by regime. Preserves the centre and replaces only the width — how wrong we HAVE been, not how wrong the model thinks it might be.",
+  }),
+
+  N("G_output", "Forecast", "a distribution", 838, 128, 104, 50, {
+    live: null, comp: null,
+    what: "EPS on both bases, a full set of quantiles, every lens's trace, and the cost. Written to out/results.json — which is the only interface between the pipeline and any screen.",
+  }),
+];
+
+const NODE_BY_ID = Object.fromEntries(NODES.map(n => [n.id, n]));
+
+const EDGES = [
+  ["A1_numbers","B_structure"],["A2_filings","B_structure"],
+  ["A3_industry","B_structure"],["A4_macro","B_structure"],
+  ...LENSES.map(([id]) => ["B_structure", "C_" + id]),
+  ...LENSES.map(([id]) => ["C_" + id, "V1_reconcile"]),
+  ["V1_reconcile","D_champion"],["D_champion","E_judge"],
+  ["E_judge","F_lambda"],["V2_comparability","F_lambda"],
+  ["F_lambda","V3_calibrate"],["F_lambda","G_output"],
+];
+
+const PHASES = [
+  ["A · ACQUIRE", 96, 88], ["B · STRUCTURE", 242, 88], ["C · ANALYSE", 397, 88],
+  ["CHECK", 523, 88], ["D · CHALLENGE", 636, 88], ["E · JUDGE", 766, 88],
+  ["F · POSITION", 890, 88],
+];
+
+/* ------------------------------------------------------------------ *
+ * Render the static skeleton once.
+ * ------------------------------------------------------------------ */
+
+const SVG = "http://www.w3.org/2000/svg";
+const chart = document.getElementById("chart");
+const tip = document.getElementById("tip");
+const stage = document.querySelector(".stage");
+
+function el(tag, attrs, text) {
+  const node = document.createElementNS(SVG, tag);
+  for (const k in attrs) node.setAttribute(k, attrs[k]);
+  if (text != null) node.textContent = text;
+  return node;
+}
+
+// Orthogonal-ish connector, left to right.
+function path(a, b) {
+  const x1 = a.x + a.w, y1 = a.y + a.h / 2;
+  const x2 = b.x, y2 = b.y + b.h / 2;
+  const mx = x1 + (x2 - x1) / 2;
+  return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
+}
+
+const edgeEls = {};
+const nodeEls = {};
+
+(function build() {
+  const defs = el("defs");
+  const marker = el("marker", { id:"arw", viewBox:"0 0 10 10", refX:"9", refY:"5",
+    markerWidth:"4.5", markerHeight:"4.5", orient:"auto-start-reverse" });
+  marker.appendChild(el("path", { d:"M0,0 L10,5 L0,10 z", fill:"var(--ink3)" }));
+  defs.appendChild(marker);
+  chart.appendChild(defs);
+
+  for (const [label, x, y] of PHASES) {
+    chart.appendChild(el("text", { x, y, class:"ph", "text-anchor":"middle" }, label));
+  }
+
+  for (const [a, b] of EDGES) {
+    const p = el("path", { d: path(NODE_BY_ID[a], NODE_BY_ID[b]), class:"edge",
+      "marker-end":"url(#arw)" });
+    edgeEls[a + ">" + b] = p;
+    chart.appendChild(p);
+  }
+
+  for (const n of NODES) {
+    const g = el("g", { class:"node" });
+    const rect = el("rect", { x:n.x, y:n.y, width:n.w, height:n.h, class:"bx",
+      fill:"var(--paper2)", stroke:"var(--rule)",
+      "stroke-dasharray": n.audit ? "4 3" : "" });
+    const cx = n.x + n.w / 2;
+    const tall = n.h > 120;
+    const label = el("text", { x:cx, y: tall ? n.y + n.h/2 - 4 : n.y + n.h/2 - 1,
+      class:"nt", "text-anchor":"middle" }, n.label);
+    const sub = el("text", { x:cx, y: tall ? n.y + n.h/2 + 8 : n.y + n.h/2 + 11,
+      class:"ns", "text-anchor":"middle" }, n.sub);
+    const meta = el("text", { x:n.x + n.w - 4, y:n.y + 10, class:"nm",
+      "text-anchor":"end", fill:"var(--ink3)" }, "");
+    g.append(rect, label, sub, meta);
+
+    g.addEventListener("mousemove", (e) => showTip(n, e));
+    g.addEventListener("mouseleave", hideTip);
+    chart.appendChild(g);
+    nodeEls[n.id] = { g, rect, meta };
+  }
+})();
+
+/* ------------------------------------------------------------------ *
+ * State, polled from the same three files the app reads.
+ * ------------------------------------------------------------------ */
+
+const state = {
+  events: [], nodes: {}, claims: 0, started: false, finished: false,
+  result: null, build: null, lastOk: 0, seen: 0, rate: new Array(24).fill(0),
+};
+
+function reduce(events) {
+  const nodes = {};
+  let claims = 0, started = false, finished = false;
+  for (const ev of events) {
+    if (ev.type === "run_start") started = true;
+    else if (ev.type === "run_done") finished = true;
+    else if (ev.type === "claim_added") claims += Number(ev.payload?.n ?? 0);
+    else if (ev.node) {
+      if (ev.type === "node_start") nodes[ev.node] = { state:"running", payload:ev.payload };
+      else if (ev.type === "node_done")
+        nodes[ev.node] = { state:"done", ms:Number(ev.payload?.latency_ms ?? 0), payload:ev.payload };
+      else if (ev.type === "node_failed")
+        nodes[ev.node] = { state:"failed", ms:Number(ev.payload?.latency_ms ?? 0),
+          error:String(ev.payload?.error ?? "failed"), payload:ev.payload };
+    }
+  }
+  return { nodes, claims, started, finished };
+}
+
+async function poll() {
+  try {
+    const res = await fetch("events.ndjson?t=" + Date.now(), { cache:"no-store" });
+    if (res.ok) {
+      const lines = (await res.text()).split("\n").filter(l => l.trim());
+      const events = [];
+      for (const line of lines) {
+        // The last line can be half-written: we are reading a file the pipeline
+        // is still appending to. Skip it; the next poll gets it whole.
+        try { events.push(JSON.parse(line)); } catch { /* partial */ }
+      }
+      const fresh = events.length - state.seen;
+      if (fresh > 0) {
+        state.rate[state.rate.length - 1] += fresh;
+        for (const ev of events.slice(state.seen)) pushTicker(ev);
+        state.seen = events.length;
+      }
+      state.events = events;
+      Object.assign(state, reduce(events));
+      state.lastOk = Date.now();
+    }
+  } catch { /* file may not exist yet — that is the waiting state */ }
+
+  try {
+    const res = await fetch("results.json?t=" + Date.now(), { cache:"no-store" });
+    if (res.ok) state.result = await res.json();
+  } catch { /* not finished */ }
+
+  render();
+}
+
+async function loadBuild() {
+  try {
+    const res = await fetch("build.json");
+    if (res.ok) state.build = await res.json();
+  } catch { /* optional */ }
+}
+
+// Roll the rate histogram once a second, so the bars mean events-per-second.
+setInterval(() => { state.rate.push(0); state.rate.shift(); drawRates(); }, 1000);
+
+/* ------------------------------------------------------------------ *
+ * Render
+ * ------------------------------------------------------------------ */
+
+const FILL = { idle:"var(--paper2)", running:"var(--orange-soft)",
+  done:"var(--green-soft)", failed:"var(--orange-soft)" };
+const STROKE = { idle:"var(--rule)", running:"var(--orange)",
+  done:"var(--green)", failed:"var(--red)" };
+
+function nodeState(n) {
+  if (!n.live) return state.finished ? "done" : "idle";
+  // The champion box aggregates its per-lens D_* events.
+  if (n.id === "D_champion") {
+    const kids = Object.entries(state.nodes).filter(([k]) => k.startsWith("D_"));
+    if (!kids.length) return "idle";
+    const s = kids.map(([, v]) => v.state);
+    if (s.includes("running")) return "running";
+    return s.every(x => x === "failed") ? "failed" : "done";
+  }
+  return state.nodes[n.live]?.state ?? "idle";
+}
+
+function render() {
+  const done = Object.values(state.nodes).filter(n => n.state === "done").length;
+  const failed = Object.values(state.nodes).filter(n => n.state === "failed").length;
+  const running = Object.values(state.nodes).filter(n => n.state === "running").length;
+
+  document.getElementById("empty").classList.toggle("hidden", state.started);
+
+  for (const n of NODES) {
+    const s = nodeState(n);
+    const { g, rect, meta } = nodeEls[n.id];
+    rect.setAttribute("fill", FILL[s]);
+    rect.setAttribute("stroke", STROKE[s]);
+    g.classList.toggle("pulse", s === "running");
+
+    const live = n.live ? state.nodes[n.live] : null;
+    if (s === "failed") { meta.textContent = "dropped"; meta.setAttribute("fill","var(--red)"); }
+    else if (live?.ms) {
+      meta.textContent = live.ms >= 1000 ? (live.ms/1000).toFixed(1)+"s" : live.ms+"ms";
+      meta.setAttribute("fill","var(--ink3)");
+    } else { meta.textContent = ""; }
+  }
+
+  // Edges flow only where data actually flowed. Hot (fast, orange) when the
+  // downstream node is still working; green once it has landed.
+  for (const [a, b] of EDGES) {
+    const p = edgeEls[a + ">" + b];
+    const from = nodeState(NODE_BY_ID[a]);
+    const to = nodeState(NODE_BY_ID[b]);
+    p.classList.toggle("hot", from === "done" && to === "running");
+    p.classList.toggle("flow", from === "done" && to === "done");
+  }
+
+  const f = state.result?.forecast;
+  const elapsed = state.events.length ? state.events[state.events.length-1].ts_ms/1000 : 0;
+
+  setChip("c-state", state.finished ? "complete" : running ? "executing" : state.started ? "idle" : "waiting",
+    state.finished ? "on" : running ? "run" : "");
+  setChip("c-nodes", `<b>${done}</b>/19 nodes`, failed ? "bad" : "");
+  setChip("c-claims", `<b>${state.claims}</b> claims`);
+  setChip("c-cost", `$<b>${(f?.total_cost_usd ?? 0).toFixed(4)}</b>`);
+  setChip("c-elapsed", `<b>${elapsed.toFixed(1)}</b>s`);
+
+  set("f-run", f ? `${f.ticker} ${f.period}` : "—");
+  set("f-eps", f ? "$" + f.eps_non_gaap.toFixed(2) : "—");
+  set("f-cons", f?.consensus ? "$" + f.consensus.eps.toFixed(2) : "—");
+  set("f-lam", f?.lambda_decision ? f.lambda_decision.value.toFixed(3) : "—");
+  set("f-drop", f ? String(Object.keys(f.dropped_lenses ?? {}).length) : String(failed));
+  set("f-gates", state.build
+    ? `${state.build.totals.gates_passed}/${state.build.totals.gates_total}`
+    : "—");
+
+  const stale = Date.now() - state.lastOk > 4000;
+  const hb = document.getElementById("hb");
+  hb.classList.toggle("stale", stale && state.lastOk > 0);
+  document.getElementById("hbtext").textContent =
+    state.lastOk === 0 ? "connecting" : stale ? "stream stale" : "live · 250ms";
+
+  if (tip.dataset.node) showTip(NODE_BY_ID[tip.dataset.node], null);
+}
+
+const set = (id, v) => { document.getElementById(id).textContent = v; };
+function setChip(id, html, cls) {
+  const node = document.getElementById(id);
+  node.innerHTML = html;
+  node.className = "chip" + (cls ? " " + cls : "");
+}
+
+function drawRates() {
+  const box = document.getElementById("rates");
+  if (!box.children.length)
+    for (let i = 0; i < state.rate.length; i++) box.appendChild(document.createElement("i"));
+  const max = Math.max(1, ...state.rate);
+  [...box.children].forEach((bar, i) => {
+    bar.style.height = Math.max(1, (state.rate[i] / max) * 28) + "px";
+    bar.style.opacity = state.rate[i] ? .8 : .18;
+  });
+}
+
+function pushTicker(ev) {
+  const box = document.getElementById("ticker");
+  const row = document.createElement("div");
+  const kind = ev.type === "node_done" ? "done"
+    : ev.type === "node_failed" ? "fail"
+    : ev.type === "node_start" ? "start" : "";
+  row.className = "ev " + kind;
+  const detail = Object.entries(ev.payload ?? {})
+    .filter(([k]) => k !== "error")
+    .map(([k, v]) => `${k}=${v}`).join(" ");
+  row.innerHTML =
+    `<time>${(ev.ts_ms/1000).toFixed(2)}s</time>` +
+    `<span><span class="n">${ev.node ?? ev.type}</span>` +
+    (detail ? `<span class="d"> ${detail}</span>` : "") +
+    (ev.payload?.error ? `<span class="d" style="color:var(--red)"> ${ev.payload.error}</span>` : "") +
+    `</span>`;
+  box.prepend(row);
+  while (box.children.length > 220) box.lastChild.remove();
+}
+
+/* ------------------------------------------------------------------ *
+ * Hover detail. The reason this window exists: everything known about
+ * one component, pulled from all three files at once.
+ * ------------------------------------------------------------------ */
+
+function showTip(n, event) {
+  if (!n) return;
+  tip.dataset.node = n.id;
+  const s = nodeState(n);
+  const live = n.live ? state.nodes[n.live] : null;
+  const comp = n.comp && state.build
+    ? state.build.components.find(c => c.id === n.comp) : null;
+
+  const rows = [];
+  const stateClass = s === "done" ? "ok" : s === "running" ? "hot" : s === "failed" ? "warn" : "";
+  rows.push(["state", `<span class="${stateClass}">${s}</span>`]);
+  if (live?.ms) rows.push(["latency", live.ms >= 1000 ? (live.ms/1000).toFixed(2)+"s" : live.ms+"ms"]);
+  if (n.tier && n.tier !== "none") rows.push(["model tier", n.tier]);
+  else if (n.comp || n.id.startsWith("C_")) rows.push(["model tier", `<span class="ok">none — pure code</span>`]);
+  if (n.audit) rows.push(["role", "audits the chain"]);
+
+  // Live payload detail: whatever the stage actually reported.
+  for (const [k, v] of Object.entries(live?.payload ?? {})) {
+    if (k === "error" || k === "latency_ms") continue;
+    rows.push([k.replace(/_/g, " "), typeof v === "number" ? (Number.isInteger(v) ? v : v.toFixed(4)) : String(v)]);
+  }
+
+  // Lens outputs from results.json, matched by name.
+  const f = state.result?.forecast;
+  if (f && n.id.startsWith("C_")) {
+    const name = n.id.slice(2);
+    const lens = (f.lenses ?? []).find(l => l.lens === name);
+    if (lens) {
+      if (lens.eps != null) rows.push(["its EPS", "$" + lens.eps.toFixed(4)]);
+      rows.push(["survived conf.", (lens.confidence * 100).toFixed(0) + "%"]);
+      rows.push(["claims cited", (lens.claim_ids ?? []).length]);
+      if (lens.output_tokens) rows.push(["tokens out", lens.output_tokens.toLocaleString()]);
+    }
+    const why = (f.dropped_lenses ?? {})[name];
+    if (why) rows.push(["dropped because", `<span class="warn">${why}</span>`]);
+  }
+  if (comp) {
+    rows.push(["built", comp.state === "built"
+      ? `<span class="ok">tested — ${comp.tests} tests</span>`
+      : `<span class="warn">${comp.state}</span>`]);
+  }
+
+  tip.innerHTML =
+    `<div class="tname">${n.label}</div>` +
+    `<div class="trole tech">${n.sub}</div>` +
+    `<div class="tbody">${n.what ?? ""}</div>` +
+    (live?.error ? `<div class="tbody warn">${live.error}</div>` : "") +
+    `<dl>${rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>`;
+
+  tip.classList.add("show");
+  if (event) {
+    const box = stage.getBoundingClientRect();
+    let x = event.clientX - box.left + 14;
+    let y = event.clientY - box.top + 12;
+    if (x + tip.offsetWidth > box.width - 6) x = event.clientX - box.left - tip.offsetWidth - 14;
+    if (y + tip.offsetHeight > box.height - 6) y = box.height - tip.offsetHeight - 6;
+    tip.style.left = Math.max(4, x) + "px";
+    tip.style.top = Math.max(4, y) + "px";
+  }
+}
+
+function hideTip() { tip.classList.remove("show"); delete tip.dataset.node; }
+
+/* ------------------------------------------------------------------ */
+
+loadBuild();
+drawRates();
+poll();
+setInterval(poll, 250);
+</script>
+</body>
+</html>
