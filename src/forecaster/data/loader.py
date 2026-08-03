@@ -128,6 +128,24 @@ class Loader:
             ),
         )
 
+    def peers(self, ticker: str, as_of: date, limit: int = 12):
+        return self.resolve(
+            f"peers:{ticker}",
+            lambda s: getattr(s, "get_peers", lambda *_, **__: None)(
+                ticker, as_of, limit
+            ),
+        )
+
+    def prices(self, ticker: str, start: date, end: date):
+        """Daily bars, unadjusted. Keyed on the window, not just the ticker —
+        two different windows are two different questions."""
+        return self.resolve(
+            f"prices:{ticker}:{start}:{end}",
+            lambda s: getattr(s, "get_prices", lambda *_, **__: None)(
+                ticker, start, end
+            ),
+        )
+
     def guidance(self, ticker: str, as_of: date):
         return self.resolve(f"guidance:{ticker}", lambda s: s.get_guidance(ticker, as_of))
 

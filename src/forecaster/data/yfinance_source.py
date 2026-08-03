@@ -28,6 +28,7 @@ from datetime import date, timedelta
 import structlog
 
 from forecaster.data.cache import Cache
+from forecaster.data.prices import PriceBar
 from forecaster.data.protocol import assert_point_in_time
 from forecaster.schemas import Basis, Consensus
 
@@ -203,6 +204,114 @@ class YFinanceSource:
 
     def get_transcript(self, ticker: str, as_of: date):
         return None
+
+    def get_prices(
+        self, ticker: str, start: date, end: date
+    ) -> list[PriceBar] | None:
+        """Daily bars over [start, end], inclusive, AS TRADED on the day.
+
+        `auto_adjust=False` is necessary and not sufficient, which is worth
+        stating precisely because the obvious reading of the parameter name is
+        wrong. It controls DIVIDEND adjustment only; yfinance applies SPLIT
+        adjustment unconditionally. Verified: NVDA closed near $1,150 on
+        2024-06-03, a week before its 10-for-1, and `history(auto_adjust=False)`
+        returns 115.0 for that session.
+
+        Left there, a buyback executed before a later split would be priced at a
+        tenth of what was paid, retiring ten times too many shares and inflating
+        EPS — no error, entirely plausible number. So the split series is fetched
+        and the adjustment is undone: each bar is multiplied by the cumulative
+        ratio of every split that happened AFTER it, and volume divided by the
+        same factor.
+
+        The result is deliberately NOT a continuous series for charting. It is
+        the price a share actually changed hands at, which is the only thing
+        "average price paid per share" can mean.
+
+        Separately, yfinance treats `end` as EXCLUSIVE, so it is passed a day
+        later and the result filtered on `end` regardless. Trusting the
+        library's boundary convention would drop the last session of every
+        quarter, and the session before a print is not one to lose.
+        """
+        # Namespace carries the payload version. The shape changed when split
+        # un-adjustment was added, and an entry written by the old code has no
+        # split data — so parsing it defensively would silently serve
+        # split-ADJUSTED prices, which is precisely the bug this method exists
+        # to avoid. A new namespace makes stale entries unreadable rather than
+        # subtly wrong.
+        key = self.cache.key(
+            "yf_prices_v2", end, ticker=ticker, start=start.isoformat()
+        )
+
+        def produce() -> dict | None:
+            import yfinance as yf
+
+            time.sleep(THROTTLE_S)
+            handle = yf.Ticker(ticker)
+            frame = handle.history(
+                start=start.isoformat(),
+                end=(end + timedelta(days=1)).isoformat(),
+                interval="1d",
+                auto_adjust=False,
+                actions=False,
+            )
+            if frame is None or frame.empty:
+                return None
+            rows = [
+                {
+                    "date": stamp.date().isoformat(),
+                    "open": float(row["Open"]),
+                    "high": float(row["High"]),
+                    "low": float(row["Low"]),
+                    "close": float(row["Close"]),
+                    "volume": float(row["Volume"]),
+                }
+                for stamp, row in frame.iterrows()
+            ]
+            # The whole split history, not just the window: a split AFTER the
+            # window is exactly the one that adjusted these prices.
+            try:
+                splits = [
+                    [stamp.date().isoformat(), float(ratio)]
+                    for stamp, ratio in handle.splits.items()
+                    if ratio
+                ]
+            except Exception as exc:  # noqa: BLE001
+                log.warning("yf_splits_failed", ticker=ticker, error=str(exc))
+                splits = []
+            return {"bars": rows, "splits": splits} if rows else None
+
+        payload = self.cache.fetch(key, produce)
+        if not payload:
+            return None
+
+        splits = [
+            (date.fromisoformat(day), ratio) for day, ratio in payload.get("splits", [])
+        ]
+
+        bars = []
+        for row in payload["bars"]:
+            stamp = date.fromisoformat(row["date"])
+            if stamp < start or stamp > end:
+                continue
+            factor = 1.0
+            for split_day, ratio in splits:
+                if split_day > stamp:
+                    factor *= ratio
+            bars.append(
+                PriceBar(
+                    date=stamp,
+                    open=row["open"] * factor,
+                    high=row["high"] * factor,
+                    low=row["low"] * factor,
+                    close=row["close"] * factor,
+                    # Shares move the other way: a 10-for-1 multiplies the share
+                    # count, so the adjusted volume is ten times the shares that
+                    # actually traded.
+                    volume=row["volume"] / factor if factor else row["volume"],
+                )
+            )
+        return bars or None
 
     def get_fx_rates(self, currencies: list[str], start: date, end: date):
         return None

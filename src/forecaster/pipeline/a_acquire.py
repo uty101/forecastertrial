@@ -220,7 +220,20 @@ def acquire(
         budget = Budget()
         peer_claims, peer_lines = [], []
 
-        for peer in company.peers:
+        # A curated peer list beats a derived one — it can encode a supplier or
+        # a customer that shares no industry code. But it only exists for a
+        # company somebody prepared for, and on the day the ticker arrives at
+        # 10am. Falling back to SIC means an unprepared company still gets an
+        # industry read instead of an empty one.
+        peer_tickers = list(company.peers)
+        if not peer_tickers:
+            peer_tickers = loader.peers(ticker, as_of) or []
+            log.info(
+                "peers_derived",
+                ticker=ticker, n=len(peer_tickers), why="no prepared peer list",
+            )
+
+        for peer in peer_tickers:
             if budget.exhausted():
                 budget.skip(f"peer {peer}")
                 continue
@@ -236,16 +249,16 @@ def acquire(
 
         out.claims.extend(peer_claims)
         out.peer_block = "\n\n".join(peer_lines)
-        if not out.peer_block and company.peers:
+        if not out.peer_block and peer_tickers:
             out.peer_block = (
-                f"(none of {', '.join(company.peers)} has reported within "
+                f"(none of {', '.join(peer_tickers)} has reported within "
                 f"{PEER_LOOKBACK_DAYS} days of {as_of}. Early in a reporting "
                 "cycle this is the correct and common situation.)"
             )
         out.budgets["A3"] = budget.report()
         events.emit(
             EventType.NODE_DONE, "A3_industry",
-            peers_checked=len(company.peers), peers_with_prints=len(peer_lines),
+            peers_checked=len(peer_tickers), peers_with_prints=len(peer_lines),
         )
 
     # ---- A4: macro ------------------------------------------------------ #

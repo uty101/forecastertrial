@@ -25,8 +25,8 @@ source layer went to some trouble to prevent it.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
-from datetime import date, datetime
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta
 
 import structlog
 
@@ -70,6 +70,26 @@ class History:
     """Carried so a consumer can build a resolvable EDGAR URI from an
     Observation's accession without going back to the source layer for it."""
     cik: str = ""
+    """Every source tag as its own series, keyed `"<item>::<XBRL tag>"`.
+
+    The merged series in `series` keeps one value per period, so where two tags
+    disagree about the same quarter that choice is invisible. AMD disagrees on
+    21 of 69 overlapping revenue periods and MSFT on 31 of 48 — the tags are not
+    always alternative spellings of one measure. This holds the unmerged truth
+    so the sourcing layer outputs everything it saw; deciding which reading is
+    right belongs downstream, not here. Kept OUT of `series` so `periods()`,
+    `coverage()` and `latest_period()` continue to describe the canonical set.
+    """
+    variants: dict[str, list[Observation]] = field(default_factory=dict)
+    """Fiscal years whose quarters do not sum to the annual figure the filer
+    reported, as `{item: {fy: (sum of quarters, filed annual)}}`. Not an error —
+    a company can restate a year without re-tagging each quarter, leaving
+    as-filed quarters beside a restated annual. Surfaced rather than reconciled,
+    because closing the gap would mean inventing a number neither filing
+    contains."""
+    annual_gaps: dict[str, dict[int, tuple[float, float]]] = field(
+        default_factory=dict
+    )
 
     def get(self, key: str, period: str) -> Observation | None:
         return next((o for o in self.series.get(key, []) if o.period == period), None)
@@ -157,8 +177,10 @@ def fiscal_year_end_month(facts: list[dict]) -> int:
     return max(months, key=lambda m: months[m])
 
 
-def label_for(period_end: date, fye_month: int) -> tuple[int, str]:
-    """Fiscal (year, quarter) for a period ending on this date.
+def label_for(
+    period_end: date, fye_month: int, period_start: date | None = None
+) -> tuple[int, str]:
+    """Fiscal (year, quarter) for a period.
 
     DERIVED FROM DATES, NEVER FROM `fy`/`fp`.
 
@@ -167,11 +189,28 @@ def label_for(period_end: date, fye_month: int) -> tuple[int, str]:
     FY2025 and FY2026 figures alike; and a ninety-day quarter lifted into a 10-K
     is tagged `fp='FY'` too. Trusting them produced a Q4 with negative gross
     profit sorted before Q1, and silently dropped every quarter of revenue.
+
+    The QUARTER comes from the period's MIDPOINT, not its end. Filers on a
+    52/53-week calendar have quarter-ends that drift across month boundaries:
+    NVDA's first quarter usually ends in late April but ended 2010-05-02, and
+    bucketing on the end month called that Q2 — colliding with the real Q2,
+    which ended 2010-07-31. Six NVDA quarters collide that way. The midpoint
+    sits mid-quarter and cannot drift a whole bucket, so it is stable across the
+    extra week.
+
+    The YEAR still comes from the end date, which is what defines which fiscal
+    year a period closes in.
     """
     fiscal_year = (
         period_end.year if period_end.month <= fye_month else period_end.year + 1
     )
-    offset = (period_end.month - fye_month - 1) % 12
+    if period_start is not None:
+        middle = period_start + (period_end - period_start) / 2
+    else:
+        # A balance-sheet instant has no duration; step back into the quarter it
+        # closes so the same month arithmetic applies.
+        middle = period_end - timedelta(days=45)
+    offset = (middle.month - fye_month - 1) % 12
     return fiscal_year, f"Q{offset // 3 + 1}"
 
 
@@ -221,7 +260,10 @@ def build_series(
     for candidates in quarterly.values():
         fact = _pick_latest(candidates)
         end = _as_date(fact["end"])
-        fy, fp = label_for(end, fye_month)
+        fy, fp = label_for(
+            end, fye_month,
+            _as_date(fact["start"]) if fact.get("start") else None,
+        )
         out.append(
             Observation(
                 key=item.key,
@@ -266,7 +308,7 @@ def build_series(
                     continue
                 if not 80 <= (end - _as_date(previous["end"])).days <= 100:
                     continue
-                fy, fp = label_for(end, fye_month)
+                fy, fp = label_for(end, fye_month, _as_date(previous["end"]))
                 out.append(
                     Observation(
                         key=item.key,
@@ -303,7 +345,9 @@ def build_series(
             parts = [o for o in out if year_start <= o.period_end < year_end]
             if len(parts) != 3:
                 continue
-            fy, fp = label_for(year_end, fye_month)
+            fy, fp = label_for(
+                year_end, fye_month, max(p.period_end for p in parts)
+            )
             out.append(
                 Observation(
                     key=item.key,
@@ -322,7 +366,35 @@ def build_series(
             )
 
     out.sort(key=lambda o: o.period_end)
-    return out
+    return _one_per_quarter(out)
+
+
+def _one_per_quarter(rows: list[Observation]) -> list[Observation]:
+    """Collapse observations that describe the same fiscal quarter.
+
+    `_pick_latest` resolves facts whose dates match EXACTLY, which is not the
+    same thing. A company that restates a quarter can tag the restated figure
+    with a slightly different start date, so both facts survive the (start, end)
+    key and `label_for` then gives them the same fiscal label.
+
+    Observed on MSFT: 2017Q1 appears twice, ending 2016-09-30 both times, at
+    21,928m from a 2018 accession and 20,453m from the original 2016 one — the
+    ASC 606 restatement beside the figure it replaced. `History.get` returned
+    whichever came first, arbitrarily, and summing the year double-counted the
+    quarter: our FY2017 revenue came out 21.2% above the 10-K, over by exactly
+    the duplicate row.
+
+    The winner is the most recently FILED — the newest restatement we were
+    entitled to see at `as_of`, the same rule `_pick_latest` applies one level
+    down. A directly reported figure beats a derived one on a filing-date tie,
+    because a derived quarter is arithmetic and a reported one is a disclosure.
+    """
+    best: dict[str, Observation] = {}
+    for row in rows:
+        held = best.get(row.period)
+        if held is None or (row.filed, not row.derived) > (held.filed, not held.derived):
+            best[row.period] = row
+    return sorted(best.values(), key=lambda o: o.period_end)
 
 
 def _fill_from_identity(
@@ -384,6 +456,53 @@ def _fill_from_identity(
     series[target] = filled
 
 
+def _annual_gaps(
+    rows: list[Observation], facts: list[dict], tolerance: float = 0.005
+) -> dict[int, tuple[float, float]]:
+    """Fiscal years whose quarters do not sum to the filer's own annual figure.
+
+    The company publishes both halves of this identity — the quarters in its
+    10-Qs and the year in its 10-K — so it is a free self-audit and the only
+    one available without a second data provider.
+
+    Deliberately checks EVERY year with quarters, not only years with exactly
+    four. The first version of this check skipped anything that did not have
+    four, which meant it stepped over precisely the years carrying a duplicate
+    quarter — reporting 17 of 18 years clean while never looking at the worst
+    one. A check with a blind spot where the bugs are is worse than no check,
+    because it reads as reassurance.
+
+    A gap is reported, never repaired. MSFT's FY2016 quarters sum 6.4% below its
+    10-K because the annual was restated under ASC 606 and the quarters were
+    not — both figures are what the filer said, and closing the gap would mean
+    inventing a third number that appears in no filing.
+    """
+    annual: dict[str, float] = {}
+    for fact in facts:
+        if not fact.get("start"):
+            continue
+        span = (_as_date(fact["end"]) - _as_date(fact["start"])).days
+        if 350 <= span <= 380:
+            annual.setdefault(fact["end"], float(fact["val"]))
+    if not annual:
+        return {}
+
+    by_year: dict[int, list[Observation]] = {}
+    for row in rows:
+        by_year.setdefault(row.fy, []).append(row)
+
+    gaps: dict[int, tuple[float, float]] = {}
+    for fy, quarters in by_year.items():
+        year_end = max(o.period_end for o in quarters).isoformat()
+        filed = annual.get(year_end)
+        if filed is None or not filed or len(quarters) < 4:
+            continue
+        total = sum(o.value for o in quarters)
+        if abs(total - filed) / abs(filed) > tolerance:
+            gaps[fy] = (total, filed)
+    return gaps
+
+
 def build_history(
     ticker: str,
     as_of: date,
@@ -405,15 +524,44 @@ def build_history(
     fye_month = fiscal_year_end_month([f for rows in fetched.values() for f in rows])
 
     series: dict[str, list[Observation]] = {}
+    variants: dict[str, list[Observation]] = {}
     for item in items:
-        series[item.key] = build_series(item, fetched[item.key], fye_month)
+        facts = fetched[item.key]
+        series[item.key] = build_series(item, facts, fye_month)
+
+        # And every tag on its own, unmerged. Costs no request — the facts are
+        # already in hand — and it is the difference between a sourcing layer
+        # that outputs what it saw and one that outputs what it decided.
+        if len(item.tags) > 1:
+            per_tag: dict[str, list[dict]] = {}
+            for fact in facts:
+                per_tag.setdefault(fact.get("_tag", "?"), []).append(fact)
+            for tag, rows in per_tag.items():
+                built = build_series(item, rows, fye_month)
+                if built:
+                    variants[f"{item.key}::{tag}"] = built
 
     # Cross-item, so these cannot live in build_series, and they must run before
     # `missing_core` below or a derivable line still reports as missing.
     _fill_from_identity(series, "total_liabilities", "total_assets", "equity")
     _fill_from_identity(series, "opex", "gross_profit", "operating_income")
 
-    history = History(ticker=ticker, as_of=as_of, series=series, cik=cik)
+    annual_gaps = {
+        item.key: gaps
+        for item in items
+        if item.kind == "flow"
+        and item.additive
+        and (gaps := _annual_gaps(series.get(item.key, []), fetched[item.key]))
+    }
+
+    history = History(
+        ticker=ticker,
+        as_of=as_of,
+        series=series,
+        cik=cik,
+        variants=variants,
+        annual_gaps=annual_gaps,
+    )
     missing_core = [
         i.key for i in items if i.core and not series.get(i.key)
     ]
@@ -424,5 +572,10 @@ def build_history(
         items_with_data=sum(1 for v in series.values() if v),
         items_requested=len(items),
         missing_core=missing_core or None,
+        tag_variants=len(variants) or None,
+        # Not a failure. A filer restating a year without re-tagging its
+        # quarters produces this, and it is worth seeing rather than averaging
+        # away — but it must not read as an error either.
+        annual_gaps={k: sorted(v) for k, v in annual_gaps.items()} or None,
     )
     return history

@@ -190,6 +190,40 @@ def test_an_entry_written_without_the_envelope_is_refreshed(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# peers by industry code
+# --------------------------------------------------------------------------- #
+
+
+def test_ticker_index_ranks_by_size_and_picks_the_common_stock(tmp_path):
+    """`company_tickers.json` is size-ordered, and its keys are STRINGS.
+
+    So iteration runs "0", "10337", "15" — not ascending rank. Keeping the
+    first occurrence per company therefore handed Bank of America the ticker
+    BAC-PL at rank 10337 instead of BAC at 15, because a multi-class issuer
+    appears once per listed class.
+
+    The damage was downstream and silent: peers are ranked by this position, so
+    BAC, WFC, C and USB fell to the bottom of JPMorgan's industry and the peer
+    set came back as Amerant, BOK Financial and Camden National. A plausible
+    list of real banks, none of them comparable.
+    """
+    cache = Cache(tmp_path)
+    # Insertion order here mirrors the file's string-sorted keys.
+    cache.put(
+        cache.key("sec_tickers", date(2000, 1, 1)),
+        {
+            "0": {"cik_str": 320193, "ticker": "AAPL", "title": "Apple"},
+            "10337": {"cik_str": 70858, "ticker": "BAC-PL", "title": "Bank of America"},
+            "15": {"cik_str": 70858, "ticker": "BAC", "title": "Bank of America"},
+        },
+    )
+    index = SECSource("Test User test@example.com", cache)._ticker_index()
+
+    assert index[70858] == (15, "BAC")
+    assert index[320193] == (0, "AAPL")
+
+
+# --------------------------------------------------------------------------- #
 # throttling
 # --------------------------------------------------------------------------- #
 

@@ -1,5 +1,6 @@
 out/*.json
 out/*.ndjson
+out/*.html
 data/cache/
 .env
 __pycache__/

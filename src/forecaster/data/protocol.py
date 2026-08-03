@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # avoids a cycle: history imports nothing from here
     from forecaster.data.history import History
+    from forecaster.data.prices import PriceBar
 from typing import Protocol, runtime_checkable
 
 from forecaster.schemas import Claim, Consensus, Guidance
@@ -82,6 +83,35 @@ class DataSource(Protocol):
         ...
 
     def get_transcript(self, ticker: str, as_of: date) -> str | None: ...
+
+    def get_peers(
+        self, ticker: str, as_of: date, limit: int = 12
+    ) -> list[str] | None:
+        """Comparable companies, most significant first.
+
+        Defaulted so a source with no view returns nothing. The point is that
+        peers are DERIVED, not curated: a hardcoded table only works for a
+        company somebody prepared for, and on the day the ticker is handed over
+        at 10am.
+        """
+        return None
+
+    def get_prices(
+        self, ticker: str, start: date, end: date
+    ) -> list[PriceBar] | None:
+        """Daily bars over [start, end], inclusive, UNADJUSTED for splits.
+
+        Defaulted like `get_history` so a source that has no prices needs no
+        stub. Unadjusted is not a preference: adjusted prices answer "what was
+        the return", and the question here is "what did the company pay per
+        share", which is the price as traded on the day.
+
+        Point-in-time needs no vintage machinery here. A printed trade is a fact
+        at its timestamp and is never restated, so bounding by `end` is the
+        entire obligation — unlike fundamentals, where a restatement filed later
+        describes an earlier period.
+        """
+        return None
 
     def get_fx_rates(self, currencies: list[str], start: date, end: date): ...
 

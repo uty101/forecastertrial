@@ -146,6 +146,51 @@ def test_balance_sheet_items_are_instants_not_durations():
     assert all(not o.derived for o in series)
 
 
+def test_a_52_53_week_quarter_that_drifts_a_month_keeps_its_place():
+    """Quarter-ends wander across month boundaries on a 52/53-week calendar.
+
+    NVDA's first quarter usually ends in late April; in 2010 it ended 2010-05-02.
+    Bucketing on the END month called that Q2, colliding with the real Q2 that
+    ended 2010-07-31 — six NVDA quarters collide this way, and INTC and AMD do
+    too. Whichever way the collision is then resolved is wrong: leaving both
+    double-counts the year, and de-duplicating drops a real quarter. NVDA, AMD
+    and INTC between them were losing thirteen quarters.
+
+    The midpoint sits mid-quarter and cannot drift a whole bucket.
+    """
+    revenue = BY_KEY["revenue"]
+    facts = [
+        fact("2010-01-31", "2010-05-02", 1_001.8, "2010-05-14"),   # Q1, ends in MAY
+        fact("2010-05-03", "2010-07-31", 811.2, "2010-08-13"),     # Q2
+        fact("2010-08-01", "2010-10-31", 843.9, "2010-11-12"),     # Q3
+    ]
+    series = build_series(revenue, facts, NVDA_FYE)
+
+    assert [o.period for o in series] == ["2011Q1", "2011Q2", "2011Q3"]
+    assert [o.value for o in series] == [1_001.8, 811.2, 843.9]
+
+
+def test_the_same_quarter_restated_collapses_to_the_newest_filing():
+    """A restatement can carry a slightly different start date.
+
+    `_pick_latest` only resolves facts whose dates match EXACTLY, so both
+    survive the (start, end) key and then land on the same fiscal label. On MSFT
+    that put 2017Q1 in twice — 21,928m from a 2018 accession beside 20,453m from
+    the 2016 original — and summing the year came out 21.2% above the 10-K, over
+    by exactly the duplicate row.
+    """
+    revenue = BY_KEY["revenue"]
+    facts = [
+        fact("2016-07-01", "2016-09-30", 20_453.0, "2016-10-20"),  # as filed
+        fact("2016-06-30", "2016-09-30", 21_928.0, "2018-08-03"),  # restated
+    ]
+    series = build_series(revenue, facts, 6)
+
+    assert len(series) == 1
+    assert series[0].value == 21_928.0
+    assert series[0].filed == date(2018, 8, 3)
+
+
 def test_year_to_date_cash_flow_is_differenced_into_quarters():
     """Cash flow is filed YTD, so only Q1 is a quarter in its own right.
 

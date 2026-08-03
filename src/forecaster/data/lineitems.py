@@ -66,6 +66,13 @@ LINE_ITEMS: tuple[LineItem, ...] = (
             "Revenues",
             "SalesRevenueNet",
             "RevenueFromContractWithCustomerIncludingAssessedTax",
+            # The pre-ASC-606 goods tag, and the reason AMD's revenue used to
+            # start in 2012 while every other line on its income statement
+            # reached back to 2007. AMD tags it 152 times from 2008 to 2018.
+            # Ordered last on purpose: it is revenue from GOODS, so where a
+            # filer also reports a total for the same period the total wins the
+            # dedupe and this only fills the gap.
+            "SalesRevenueGoodsNet",
         ),
         core=True,
     ),

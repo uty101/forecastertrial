@@ -104,7 +104,7 @@ class SECSource:
         wait=wait_exponential(multiplier=1, min=1, max=8),
         reraise=True,
     )
-    def _http_get(self, url: str):
+    def _http_get(self, url: str, timeout: float | None = None):
         """The single network door of this module: throttled, then retried.
 
         A 404 returns None rather than raising — a company that has never filed
@@ -130,7 +130,11 @@ class SECSource:
                 time.sleep(_MIN_REQUEST_INTERVAL_S - elapsed)
             self._last_request = time.monotonic()
 
-        response = self._client.get(url)
+        response = (
+            self._client.get(url, timeout=timeout)
+            if timeout is not None
+            else self._client.get(url)
+        )
         if response.status_code == 404:
             return None
         if response.status_code in _RETRY_STATUSES:
@@ -226,7 +230,13 @@ class SECSource:
                 if stamp in seen:
                     continue
                 seen.add(stamp)
-                merged.append(fact)
+                # Which tag produced this fact. The merge is lossy by design —
+                # one value survives per period — and where two tags disagree
+                # about the same period that choice is invisible downstream.
+                # Stamping the origin lets the history layer also keep each tag
+                # as its own series, so the disagreement is inspectable rather
+                # than silently resolved.
+                merged.append({**fact, "_tag": tag})
         if merged:
             log.debug("sec_tags_used", ticker=ticker, tags=used, n=len(merged))
         return merged
@@ -343,6 +353,142 @@ class SECSource:
             cik=self._cik(ticker) or "",
         )
 
+    def _submissions(self, ticker: str, as_of: date) -> dict[str, Any] | None:
+        cik = self._cik(ticker)
+        if cik is None:
+            return None
+        key = self.cache.key("sec_subs", as_of, cik=cik)
+        return self.cache.fetch(
+            key, lambda: self._fetch_json(f"{SEC_BASE}/submissions/CIK{cik}.json")
+        )
+
+    def get_sic(self, ticker: str, as_of: date) -> tuple[str, str] | None:
+        """(SIC code, description) — the industry, from the ticker alone.
+
+        No lookup table and no prior knowledge of the company, which is the
+        whole point: on the day we are handed a ticker at 10am and a hardcoded
+        sector map covers whatever we thought to prepare.
+        """
+        subs = self._submissions(ticker, as_of)
+        if not subs or not subs.get("sic"):
+            return None
+        return str(subs["sic"]), str(subs.get("sicDescription", ""))
+
+    def _ticker_index(self) -> dict[int, tuple[int, str]]:
+        """CIK -> (rank, ticker), where rank orders companies by SIZE.
+
+        `company_tickers.json` is published in descending market-cap order —
+        Apple at 0, NVIDIA 1, Broadcom 5, Micron 12, AMD 14, Intel 23 — so the
+        position in the file is a free size ranking. Without it, peers would
+        come back in CIK order, which is registration date and puts a shell
+        company ahead of the industry leader.
+        """
+        key = self.cache.key("sec_tickers", date(2000, 1, 1))
+        mapping = self.cache.fetch(
+            key,
+            lambda: self._fetch_json(
+                "https://www.sec.gov/files/company_tickers.json"
+            ),
+        )
+        index: dict[int, tuple[int, str]] = {}
+        for rank, entry in (mapping or {}).items():
+            cik, position = int(entry["cik_str"]), int(rank)
+            # LOWEST rank wins, compared numerically. A company with several
+            # listed classes appears once per class, and iteration order is no
+            # guide: the file's keys are strings, so `"10337"` comes before
+            # `"15"` and taking the first occurrence handed Bank of America the
+            # ticker BAC-PL at rank 10337. Every multi-class issuer picked up a
+            # preferred share and a meaningless size ranking, which quietly
+            # dropped BAC, WFC, C and USB out of JPMorgan's peer set while
+            # leaving a plausible list of smaller banks in their place.
+            held = index.get(cik)
+            if held is None or position < held[0]:
+                index[cik] = (position, str(entry["ticker"]))
+        return index
+
+    def _ciks_for_sic(self, sic: str, as_of: date, pages: int = 25) -> list[int]:
+        """Every filer registered under this SIC code.
+
+        EDGAR's company browse serves this as Atom. The company NAMES in that
+        feed are corrupt — SEC's serialiser emits `ARRAY(0x558fd3327a30)` where
+        the name should be — but the CIKs are sound, and names come from the
+        ticker file anyway.
+
+        **Paginate to exhaustion.** The feed is ordered ALPHABETICALLY, not by
+        size or CIK, so a truncated read returns the beginning of the alphabet
+        rather than a sample. Stopping at 400 filers gave JPMorgan a peer set of
+        Amerant, BOK Financial and Camden National — every name A to C — while
+        Bank of America sat on page 0, Citigroup page 1, PNC page 7 and Wells
+        Fargo page 10. Wrong in the worst way: a plausible list of real banks,
+        none of them the comparable ones.
+
+        Exhausting even the most crowded code is cheap. SIC 6021, national
+        commercial banks, is 1,057 filers over 11 pages and reads in about 15
+        seconds — once, then cached.
+
+        A note on point-in-time: this returns membership as it stands TODAY, not
+        as of the date requested, so a company that listed after `as_of` can
+        appear. The leak is bounded rather than absent — every figure we then
+        pull for that peer is filtered by `as_of`, so a company with no filings
+        yet contributes nothing. Worth knowing rather than worth blocking on.
+        """
+        key = self.cache.key("sec_sic_members", as_of, sic=sic)
+
+        def produce() -> list[int] | None:
+            found: list[int] = []
+            seen: set[int] = set()
+            for page in range(pages):
+                response = self._http_get(
+                    "https://www.sec.gov/cgi-bin/browse-edgar"
+                    f"?action=getcompany&SIC={sic}&type=10-K&dateb=&owner=include"
+                    f"&count=100&start={page * 100}&output=atom",
+                    # browse-edgar is a legacy CGI endpoint and is far slower
+                    # than data.sec.gov. A crowded code — SIC 6021, national
+                    # commercial banks, runs to hundreds of filers — blew the
+                    # 30s default and lost the peer set for every bank.
+                    timeout=90.0,
+                )
+                if response is None:
+                    break
+                ciks = [int(m) for m in re.findall(r"<cik>(\d+)</cik>", response.text)]
+                fresh = [c for c in ciks if c not in seen]
+                seen.update(fresh)
+                found.extend(fresh)
+                if len(ciks) < 100:
+                    break
+            return found or None
+
+        return self.cache.fetch(key, produce) or []
+
+    def get_peers(self, ticker: str, as_of: date, limit: int = 12) -> list[str] | None:
+        """Listed companies sharing this company's SIC code, largest first.
+
+        Replaces a hardcoded peer table that could only work for companies
+        somebody thought to prepare. Everything here derives from the ticker:
+        SEC supplies the SIC, EDGAR supplies the members, and the ticker file
+        supplies both the symbol and the size ordering.
+
+        Unlisted filers are dropped — a private filer has no ticker, and every
+        downstream lookup is keyed on one.
+        """
+        sic = self.get_sic(ticker, as_of)
+        if sic is None:
+            return None
+
+        index = self._ticker_index()
+        own = int(self._cik(ticker) or 0)
+        ranked = sorted(
+            index[cik]
+            for cik in self._ciks_for_sic(sic[0], as_of)
+            if cik in index and cik != own
+        )
+        peers = [symbol for _, symbol in ranked[:limit]]
+        log.info(
+            "peers_by_sic",
+            ticker=ticker, sic=sic[0], industry=sic[1], found=len(peers),
+        )
+        return peers or None
+
     def _exhibits(self, cik: str, accession: str) -> list[tuple[str, str]]:
         """(exhibit type, filename) for one accession, from the filing index.
 
@@ -394,10 +540,7 @@ class SECSource:
         cik = self._cik(ticker)
         if cik is None:
             return None
-        key = self.cache.key("sec_subs", as_of, cik=cik)
-        subs = self.cache.fetch(
-            key, lambda: self._fetch_json(f"{SEC_BASE}/submissions/CIK{cik}.json")
-        )
+        subs = self._submissions(ticker, as_of)
         if not subs:
             return None
 
