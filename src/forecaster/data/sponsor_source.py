@@ -146,7 +146,8 @@ class SponsorSource:
         return None  # guidance lives in 8-K prose; the extractor handles it
 
     def get_filings(
-        self, ticker: str, as_of: date, forms: list[str], limit: int = 10
+        self, ticker: str, as_of: date, forms: list[str],
+        limit: int = 10, items: str | None = None,
     ) -> list[Claim] | None:
         return None  # SEC is the floor for filings and is already reliable
 

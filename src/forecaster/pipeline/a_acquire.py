@@ -40,13 +40,18 @@ log = structlog.get_logger()
 
 # Ranked, highest value first. Everything below the line is optional and is the
 # first thing dropped when the budget runs out.
+# (form, 8-K item filter, why). Item 2.02 is "Results of Operations and
+# Financial Condition" — the earnings release, and the only 8-K that carries the
+# guidance paragraph, the GAAP-to-non-GAAP reconciliation and the segment table.
+# Without the filter this asked for the three most recent 8-Ks, which for NVDA
+# were a director change, a shareholder vote and a notes offering.
 FILINGS_PRIORITY = [
-    ("8-K", "last quarter's EX-99.1 — the guidance paragraph"),
-    ("10-Q", "segment table, non-GAAP reconciliation, share count"),
-    ("8-K", "anything filed since the last earnings call"),
-    ("10-K", "geographic mix, revenue drivers, buyback authorisation"),
+    ("8-K", "2.02", "the earnings release — guidance, non-GAAP bridge, segments"),
+    ("10-Q", None, "segment table, non-GAAP reconciliation, share count"),
+    ("8-K", None, "anything filed since the last earnings call"),
+    ("10-K", None, "geographic mix, revenue drivers, buyback authorisation"),
     # --- below here is optional ---
-    ("DEF 14A", "comp structure — rarely moves a quarterly forecast"),
+    ("DEF 14A", None, "comp structure — rarely moves a quarterly forecast"),
 ]
 
 INDUSTRY_PRIORITY = [
@@ -152,6 +157,21 @@ def acquire(
                 f"{ticker} {prior} actuals", prior_claims
             )
             budget.spend(docs=len(prior_claims))
+        else:
+            # The Drivers lens has no year-on-year base without this, and an
+            # empty block reads to the lens as "nothing to compare" rather than
+            # as a label that failed to match. `period` must be the FISCAL
+            # label, so list what the filer actually has and let the mismatch be
+            # obvious instead of silent.
+            history = loader.history(ticker, as_of)
+            log.warning(
+                "prior_year_missing",
+                ticker=ticker,
+                period=period,
+                prior=prior,
+                available=history.periods()[-8:] if history else [],
+                hint="periods are fiscal labels derived from period end dates",
+            )
 
         out.budgets["A1"] = budget.report()
         events.emit(EventType.CLAIM_ADDED, "A1_numbers", n=len(out.claims))
@@ -159,11 +179,11 @@ def acquire(
     # ---- A2: filings and their text ------------------------------------ #
     with events.node("A2_filings"):
         budget = Budget()
-        for form, why in FILINGS_PRIORITY:
+        for form, items, why in FILINGS_PRIORITY:
             if budget.exhausted():
                 budget.skip(f"{form}: {why}")
                 continue
-            found = loader.filings(ticker, as_of, [form], limit=3)
+            found = loader.filings(ticker, as_of, [form], limit=3, items=items)
             if not found:
                 continue
             out.claims.extend(found)
@@ -287,24 +307,33 @@ def _peer_recent_actuals(loader: Loader, peer: str, as_of: date) -> list[Claim]:
     Peers are looked up by ticker only — anything in the universe listed as a
     name rather than a ticker (a private or foreign supplier) is skipped rather
     than guessed at.
+
+    The period is READ FROM THE PEER'S OWN HISTORY rather than constructed.
+    This function used to generate `f"{as_of.year}Q{q}"` labels and try six of
+    them, which cannot match a filer whose fiscal year does not end in December:
+    NVDA's quarter ending April 2026 is fiscal 2027Q1, and 2027 was never tried.
+    The empty result was then rendered as "none of these peers has reported
+    within 100 days, which early in a reporting cycle is correct and common" —
+    a bug wearing the costume of a normal answer.
     """
     if not peer.isupper() or " " in peer:
         return []
 
-    cutoff = as_of - timedelta(days=PEER_LOOKBACK_DAYS)
-    for period in _recent_periods(as_of):
-        claims = loader.actuals(peer, period, as_of)
-        if claims and any(c.source.as_of >= cutoff for c in claims):
-            return claims
-    return []
+    history = loader.history(peer, as_of)
+    if history is None:
+        return []
 
+    period = history.latest_period()
+    if period is None:
+        return []
 
-def _recent_periods(as_of: date) -> list[str]:
-    """Fiscal period labels to try, most recent first. XBRL labels quarters
-    `2026Q1`-style, and companies disagree about which quarter that is — so try
-    a few rather than computing one and being confidently wrong."""
-    year = as_of.year
-    return [f"{year}Q{q}" for q in (4, 3, 2, 1)] + [f"{year - 1}Q{q}" for q in (4, 3)]
+    filed = history.filed_for(period)
+    if filed is None or filed < as_of - timedelta(days=PEER_LOOKBACK_DAYS):
+        # Older than the window: already fully absorbed into consensus, and it
+        # tells us nothing the Street has not had months to price.
+        return []
+
+    return loader.actuals(peer, period, as_of) or []
 
 
 def _prior_year_period(period: str) -> str | None:

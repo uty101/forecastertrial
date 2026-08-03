@@ -15,6 +15,8 @@ from __future__ import annotations
 from datetime import date
 
 from forecaster.data.history import (
+    History,
+    _fill_from_identity,
     build_series,
     fiscal_year_end_month,
     label_for,
@@ -142,6 +144,174 @@ def test_balance_sheet_items_are_instants_not_durations():
     assert [o.period for o in series] == ["2026Q1", "2026Q4"]
     # The year-end balance IS the Q4 balance — never derived by subtraction.
     assert all(not o.derived for o in series)
+
+
+def test_year_to_date_cash_flow_is_differenced_into_quarters():
+    """Cash flow is filed YTD, so only Q1 is a quarter in its own right.
+
+    A 10-Q's cash flow statement covers 0–3, then 0–6, then 0–9 months. The span
+    filter correctly refuses to call a nine-month cumulative a quarter, which
+    left the ENTIRE third statement at roughly one quarter in four — NVDA's CFO
+    had 19 observations against 69 quarters — while the income statement and
+    balance sheet sat near 100%. A three-statement model missing three quarters
+    in four of one statement is not a three-statement model.
+    """
+    cfo = BY_KEY["cfo"]
+    facts = [
+        fact("2025-01-27", "2025-04-27", 100.0, "2025-05-28"),   # Q1
+        fact("2025-01-27", "2025-07-27", 250.0, "2025-08-27"),   # H1 cumulative
+        fact("2025-01-27", "2025-10-26", 420.0, "2025-11-19"),   # 9M cumulative
+        fact("2025-01-27", "2026-01-25", 600.0, "2026-02-25", form="10-K"),
+    ]
+    series = build_series(cfo, facts, NVDA_FYE)
+
+    assert [(o.period, o.value) for o in series] == [
+        ("2026Q1", 100.0),
+        ("2026Q2", 150.0),
+        ("2026Q3", 170.0),
+        ("2026Q4", 180.0),
+    ]
+    # Q1 was read off a filing; the rest were computed.
+    assert [o.derived for o in series] == [False, True, True, True]
+    # Knowable only once BOTH rungs are filed.
+    assert series[1].filed == date(2025, 8, 27)
+
+
+def test_a_directly_tagged_quarter_beats_a_differenced_one():
+    """Filers that tag the quarter itself are trusted over our arithmetic."""
+    cfo = BY_KEY["cfo"]
+    facts = [
+        fact("2025-01-27", "2025-04-27", 100.0, "2025-05-28"),
+        fact("2025-04-28", "2025-07-27", 999.0, "2025-08-27"),   # tagged Q2
+        fact("2025-01-27", "2025-07-27", 250.0, "2025-08-27"),   # H1 cumulative
+    ]
+    series = build_series(cfo, facts, NVDA_FYE)
+
+    q2 = next(o for o in series if o.period == "2026Q2")
+    assert q2.value == 999.0
+    assert q2.derived is False
+
+
+def test_year_to_date_differencing_never_applies_to_a_ratio():
+    """Same rule as Q4: subtracting cumulative EPS is not EPS."""
+    eps = BY_KEY["eps_diluted"]
+    facts = [
+        fact("2025-01-27", "2025-04-27", 0.76, "2025-05-28"),
+        fact("2025-01-27", "2025-07-27", 1.84, "2025-08-27"),
+    ]
+    series = build_series(eps, facts, NVDA_FYE)
+
+    assert [o.period for o in series] == ["2026Q1"]
+    assert not any(o.derived for o in series)
+
+
+def test_total_liabilities_falls_back_to_the_accounting_identity():
+    """A large minority of filers never tag `Liabilities` at all.
+
+    AMD has 128 facts for `LiabilitiesAndStockholdersEquity` and none for
+    `Liabilities`, putting a core balance-sheet line at zero coverage. A = L + E
+    is exact, so L = A - E needs no estimate — whereas adopting
+    `LiabilitiesAndStockholdersEquity` as a synonym would silently yield total
+    ASSETS.
+    """
+    series = {
+        "total_liabilities": [],
+        "total_assets": build_series(
+            BY_KEY["total_assets"],
+            [{"end": "2026-01-25", "val": 100.0, "filed": "2026-02-25",
+              "form": "10-K", "fy": 2026, "fp": "FY", "accn": "a"}],
+            NVDA_FYE,
+        ),
+        "equity": build_series(
+            BY_KEY["equity"],
+            [{"end": "2026-01-25", "val": 70.0, "filed": "2026-03-02",
+              "form": "10-K/A", "fy": 2026, "fp": "FY", "accn": "b"}],
+            NVDA_FYE,
+        ),
+    }
+    _fill_from_identity(series, "total_liabilities", "total_assets", "equity")
+
+    (liabilities,) = series["total_liabilities"]
+    assert liabilities.value == 30.0
+    assert liabilities.derived is True
+    # Knowable only when the later of the two components landed.
+    assert liabilities.filed == date(2026, 3, 2)
+
+
+def test_the_identity_never_overwrites_a_reported_figure():
+    reported = build_series(
+        BY_KEY["total_liabilities"],
+        [{"end": "2026-01-25", "val": 42.0, "filed": "2026-02-25",
+          "form": "10-K", "fy": 2026, "fp": "FY", "accn": "c"}],
+        NVDA_FYE,
+    )
+    series = {
+        "total_liabilities": reported,
+        "total_assets": build_series(
+            BY_KEY["total_assets"],
+            [{"end": "2026-01-25", "val": 100.0, "filed": "2026-02-25",
+              "form": "10-K", "fy": 2026, "fp": "FY", "accn": "a"}],
+            NVDA_FYE,
+        ),
+        "equity": build_series(
+            BY_KEY["equity"],
+            [{"end": "2026-01-25", "val": 70.0, "filed": "2026-02-25",
+              "form": "10-K", "fy": 2026, "fp": "FY", "accn": "b"}],
+            NVDA_FYE,
+        ),
+    }
+    _fill_from_identity(series, "total_liabilities", "total_assets", "equity")
+
+    (liabilities,) = series["total_liabilities"]
+    assert liabilities.value == 42.0
+    assert liabilities.derived is False
+
+
+def test_latest_period_is_fiscal_and_can_lead_the_calendar():
+    """The label callers used to guess at, answered by the data instead.
+
+    A January year-end filer reporting an April 2026 quarter is in fiscal
+    2027Q1. Anything generating labels from `as_of.year` tries 2026 and 2025,
+    never 2027, and concludes the company has not reported.
+    """
+    revenue = BY_KEY["revenue"]
+    facts = [
+        fact("2025-10-27", "2026-01-25", 39.0, "2026-02-25", form="10-K"),
+        fact("2026-01-26", "2026-04-26", 44.0, "2026-05-27"),
+    ]
+    series = build_series(revenue, facts, NVDA_FYE)
+    history = History("NVDA", date(2026, 8, 16), {"revenue": series})
+
+    assert history.latest_period() == "2027Q1"
+    assert str(date(2026, 8, 16).year) not in history.latest_period()
+
+
+def test_filed_for_takes_the_last_component_to_land():
+    """A quarter is knowable when its LAST line item is filed, not its first.
+
+    Taking the earliest would date a derived Q4 to the Q1 that fed it and let a
+    staleness window admit a print that was not yet public.
+    """
+    revenue = BY_KEY["revenue"]
+    cash = BY_KEY["cash"]
+    history = History(
+        "NVDA",
+        date(2026, 8, 16),
+        {
+            "revenue": build_series(
+                revenue, [fact("2026-01-26", "2026-04-26", 44.0, "2026-05-27")], NVDA_FYE
+            ),
+            "cash": build_series(
+                cash,
+                [{"end": "2026-04-26", "val": 9.0, "filed": "2026-06-10",
+                  "form": "10-Q/A", "fy": 2027, "fp": "Q1", "accn": "z"}],
+                NVDA_FYE,
+            ),
+        },
+    )
+
+    assert history.filed_for("2027Q1") == date(2026, 6, 10)
+    assert history.filed_for("1999Q1") is None
 
 
 def test_the_latest_restatement_visible_wins():

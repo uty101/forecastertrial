@@ -131,10 +131,21 @@ class Loader:
     def guidance(self, ticker: str, as_of: date):
         return self.resolve(f"guidance:{ticker}", lambda s: s.get_guidance(ticker, as_of))
 
-    def filings(self, ticker: str, as_of: date, forms: list[str], limit: int = 10):
+    def filings(
+        self,
+        ticker: str,
+        as_of: date,
+        forms: list[str],
+        limit: int = 10,
+        items: str | None = None,
+    ):
+        # `items` is part of the cache/provenance key: "the last three 8-Ks" and
+        # "the last three earnings 8-Ks" are different questions with different
+        # answers, and collapsing them would serve one from the other's result.
+        what = f"filings:{ticker}:{','.join(forms)}"
         return self.resolve(
-            f"filings:{ticker}:{','.join(forms)}",
-            lambda s: s.get_filings(ticker, as_of, forms, limit),
+            f"{what}:items={items}" if items else what,
+            lambda s: s.get_filings(ticker, as_of, forms, limit, items),
         )
 
     def transcript(self, ticker: str, as_of: date):

@@ -67,6 +67,9 @@ class History:
     ticker: str
     as_of: date
     series: dict[str, list[Observation]]
+    """Carried so a consumer can build a resolvable EDGAR URI from an
+    Observation's accession without going back to the source layer for it."""
+    cik: str = ""
 
     def get(self, key: str, period: str) -> Observation | None:
         return next((o for o in self.series.get(key, []) if o.period == period), None)
@@ -83,6 +86,32 @@ class History:
                 seen.setdefault(o.period, o.period_end)
                 seen[o.period] = min(seen[o.period], o.period_end)
         return sorted(seen, key=lambda p: seen[p])
+
+    def latest_period(self) -> str | None:
+        """The most recent fiscal quarter with any data, or None.
+
+        Callers want this instead of constructing a label. Fiscal labels are
+        derived from period end dates, so a January year-end filer sits in
+        fiscal 2027 while the calendar reads 2026 — a guessed label is not
+        merely wrong, it fails to match anything and looks like absent data.
+        """
+        periods = self.periods()
+        return periods[-1] if periods else None
+
+    def filed_for(self, period: str) -> date | None:
+        """When this quarter became fully knowable.
+
+        The LATEST filing date across the period's line items, not the earliest:
+        the quarter is only readable once its last component has landed, and a
+        derived Q4 is not knowable until the 10-K arrives.
+        """
+        filed = [
+            o.filed
+            for rows in self.series.values()
+            for o in rows
+            if o.period == period
+        ]
+        return max(filed) if filed else None
 
     def n_quarters(self) -> int:
         return len(self.periods())
@@ -165,6 +194,9 @@ def build_series(
     # says. Flows: (start, end). Stocks: (end,) — a balance has no duration.
     quarterly: dict[tuple, list[dict]] = {}
     annual: dict[date, list[dict]] = {}
+    # Every dated flow fact, grouped by the date its period starts. Cumulative
+    # figures are kept here rather than discarded — see the ladder below.
+    ladders: dict[str, list[dict]] = {}
 
     for fact in facts:
         end = _as_date(fact["end"])
@@ -172,6 +204,8 @@ def build_series(
             days = _span_days(fact)
             if days is None:
                 continue
+            if item.additive:
+                ladders.setdefault(fact["start"], []).append(fact)
             # A quarter is 80–100 days and a year 350–380; filers wobble by a few
             # days around 52/53-week calendars. Anything else is a half-year, a
             # nine-month cumulative or a stub, and treating one of those as a
@@ -201,6 +235,58 @@ def build_series(
                 accession=str(fact.get("accn", "")),
             )
         )
+
+    # Cash flow statements are filed YEAR TO DATE, never per quarter: a 10-Q's
+    # cash flow covers 0–3, then 0–6, then 0–9 months. Only Q1 is a quarter in
+    # its own right, so the span filter above — which is correct, a nine-month
+    # cumulative really is not a quarter — left the entire third statement at
+    # roughly one quarter in four while income and balance sheet ran near 100%.
+    #
+    # Differencing consecutive rungs of the year-to-date ladder recovers the
+    # rest, and it is the same move as the Q4 rule below, one step finer:
+    #
+    #     Q2 = YTD(6m) − YTD(3m)   Q3 = YTD(9m) − YTD(6m)   Q4 = FY − YTD(9m)
+    #
+    # Only for additive items. Differencing a ratio or a weighted-average share
+    # count is the arithmetic that produced a −4.49 EPS quarter.
+    #
+    # Rungs must share a start date, so a ladder cannot span two fiscal years,
+    # and a directly tagged quarter always wins over a derived one.
+    if item.kind == "flow" and item.additive:
+        have = {o.period_end for o in out}
+        for rungs in ladders.values():
+            by_end: dict[str, list[dict]] = {}
+            for fact in rungs:
+                by_end.setdefault(fact["end"], []).append(fact)
+            ordered = [_pick_latest(by_end[end]) for end in sorted(by_end)]
+
+            for previous, current in zip(ordered, ordered[1:], strict=False):
+                end = _as_date(current["end"])
+                if end in have:
+                    continue
+                if not 80 <= (end - _as_date(previous["end"])).days <= 100:
+                    continue
+                fy, fp = label_for(end, fye_month)
+                out.append(
+                    Observation(
+                        key=item.key,
+                        fy=fy,
+                        fp=fp,
+                        value=float(current["val"]) - float(previous["val"]),
+                        unit=item.unit,
+                        period_end=end,
+                        # Knowable only once BOTH rungs are filed. The later one
+                        # is normally the current filing, but a restated opening
+                        # figure can land afterwards.
+                        filed=max(
+                            _as_date(current["filed"]), _as_date(previous["filed"])
+                        ),
+                        form=str(current.get("form", "")),
+                        accession=str(current.get("accn", "")),
+                        derived=True,
+                    )
+                )
+                have.add(end)
 
     # Q4 for flows: FY − (Q1+Q2+Q3), where the filer did not tag it directly.
     # There is no fourth 10-Q; the fourth quarter only ever appears inside the
@@ -239,11 +325,71 @@ def build_series(
     return out
 
 
+def _fill_from_identity(
+    series: dict[str, list[Observation]],
+    target: str,
+    minuend: str,
+    subtrahend: str,
+) -> None:
+    """Fill `target` as `minuend − subtrahend` wherever it has no observation.
+
+    Two line items are routinely missing not because the company lacks them but
+    because it never tagged the TOTAL — and both follow from an exact identity
+    rather than an estimate:
+
+        total_liabilities = total_assets  − equity            (A = L + E)
+        opex              = gross_profit  − operating_income
+
+    AMD has 128 facts for `LiabilitiesAndStockholdersEquity` and none at all for
+    `Liabilities`, and tags `OperatingExpenses` in 15 filings out of 67 — which
+    read as a core balance-sheet line at zero coverage and an income-statement
+    line at 13%, for a company that plainly has both.
+
+    For the first of those, the tempting shortcut is the dangerous one: adding
+    `LiabilitiesAndStockholdersEquity` to the tag list as a synonym would yield
+    total ASSETS — several times too large, internally consistent, and balancing
+    against nothing.
+
+    Derived periods are marked. A reconciler is entitled to know which numbers
+    were read off a filing and which were computed.
+    """
+    if target not in series:
+        return
+    left = {o.period: o for o in series.get(minuend, [])}
+    right = {o.period: o for o in series.get(subtrahend, [])}
+    if not left or not right:
+        return
+
+    filled = list(series[target])
+    have = {o.period for o in filled}
+    for period, base in left.items():
+        deduction = right.get(period)
+        if period in have or deduction is None:
+            continue
+        filled.append(
+            Observation(
+                key=target,
+                fy=base.fy,
+                fp=base.fp,
+                value=base.value - deduction.value,
+                unit=base.unit,
+                period_end=base.period_end,
+                filed=max(base.filed, deduction.filed),
+                form=base.form,
+                accession=base.accession,
+                derived=True,
+            )
+        )
+    filled.sort(key=lambda o: o.period_end)
+    series[target] = filled
+
+
 def build_history(
     ticker: str,
     as_of: date,
     facts_for: Callable[[LineItem], list[dict]],
     keys: tuple[str, ...] | None = None,
+    cik: str = "",
 ) -> History:
     """Assemble every requested line item into quarterly series.
 
@@ -262,7 +408,12 @@ def build_history(
     for item in items:
         series[item.key] = build_series(item, fetched[item.key], fye_month)
 
-    history = History(ticker=ticker, as_of=as_of, series=series)
+    # Cross-item, so these cannot live in build_series, and they must run before
+    # `missing_core` below or a derivable line still reports as missing.
+    _fill_from_identity(series, "total_liabilities", "total_assets", "equity")
+    _fill_from_identity(series, "opex", "gross_profit", "operating_income")
+
+    history = History(ticker=ticker, as_of=as_of, series=series, cik=cik)
     missing_core = [
         i.key for i in items if i.core and not series.get(i.key)
     ]

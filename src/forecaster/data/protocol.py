@@ -62,8 +62,24 @@ class DataSource(Protocol):
     def get_guidance(self, ticker: str, as_of: date) -> list[Guidance] | None: ...
 
     def get_filings(
-        self, ticker: str, as_of: date, forms: list[str], limit: int = 10
-    ) -> list[Claim] | None: ...
+        self,
+        ticker: str,
+        as_of: date,
+        forms: list[str],
+        limit: int = 10,
+        items: str | None = None,
+    ) -> list[Claim] | None:
+        """Filings of the given forms, most recent first.
+
+        `items` filters 8-Ks by their SEC item code. This is not a nicety: a
+        large filer publishes many 8-Ks a quarter — director changes (5.02),
+        shareholder votes (5.07), debt offerings — and the earnings release is
+        just one of them. Taking the most recent three reliably misses it. Item
+        **2.02**, "Results of Operations and Financial Condition", is the
+        earnings release and the only one carrying guidance, the non-GAAP
+        bridge and the segment table.
+        """
+        ...
 
     def get_transcript(self, ticker: str, as_of: date) -> str | None: ...
 

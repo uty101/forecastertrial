@@ -46,7 +46,13 @@ class Settings(BaseSettings):
     cost_ceiling_usd: float = 25.0
 
     # Acquisition budgets — unbounded research is how you lose the afternoon.
-    max_docs_per_source: int = 12
+    #
+    # Raised from 12 when 8-K exhibits became separately citable: one earnings
+    # 8-K is now three documents (cover page, EX-99.1 press release, EX-99.2 CFO
+    # commentary), so the doc counter started binding three times sooner for no
+    # change in how much was actually read. The token budget below is the
+    # meaningful ceiling and is the one that should bind.
+    max_docs_per_source: int = 20
     max_tokens_per_acquire: int = 60_000
     acquire_deadline_s: int = 90
 

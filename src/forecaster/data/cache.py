@@ -74,6 +74,47 @@ class Cache:
             self.put(key, value)
         return value
 
+    def fetch_dated(self, key: str, producer, not_before: date):
+        """get-or-produce, reusing a stored entry only if it was fetched on or
+        after `not_before`.
+
+        For an append-only payload — SEC `companyfacts` is the one that matters —
+        a fixed cache key is wrong in exactly one direction. A payload fetched
+        BEFORE `as_of` is missing everything filed in between, and the
+        point-in-time filter downstream can drop facts it should not see but
+        cannot restore facts that were never in the response. The result reads
+        as "this company has not filed recently", which is indistinguishable
+        from a genuine gap.
+
+        Keying on `as_of` instead would be correct and ruinous: a 200-quarter
+        backtest would refetch the same multi-megabyte payload 200 times per
+        ticker. Freshness is the weaker condition and the right one.
+
+        Read-only mode skips the check deliberately. `make verify` replays a
+        recorded cache and must never reach the network to satisfy a freshness
+        rule — that would make the golden-file test meaningless.
+        """
+        stored = self.get(key)
+        if isinstance(stored, dict) and {"fetched_at", "value"} <= stored.keys():
+            if self.read_only or date.fromisoformat(stored["fetched_at"]) >= not_before:
+                return stored["value"]
+        elif stored is not None and self.read_only:
+            # Written by an earlier build with no envelope. Replay trusts it;
+            # a live run falls through, refreshes, and writes the envelope back.
+            return stored
+
+        if self.read_only:
+            raise CacheMiss(
+                f"{key} not in cache and cache is read-only. Run without "
+                "--from-cache once to populate it."
+            )
+        value = producer()
+        if value is not None:
+            self.put(
+                key, {"fetched_at": date.today().isoformat(), "value": value}
+            )
+        return value
+
     @property
     def stats(self) -> dict[str, int | float]:
         total = self.hits + self.misses

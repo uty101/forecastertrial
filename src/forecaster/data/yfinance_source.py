@@ -197,7 +197,8 @@ class YFinanceSource:
     def get_guidance(self, ticker: str, as_of: date):
         return None
 
-    def get_filings(self, ticker: str, as_of: date, forms: list[str], limit: int = 10):
+    def get_filings(self, ticker: str, as_of: date, forms: list[str],
+                    limit: int = 10, items: str | None = None):
         return None
 
     def get_transcript(self, ticker: str, as_of: date):
