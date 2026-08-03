@@ -47,16 +47,14 @@ def build_loader(read_only: bool = False) -> Loader:
         from forecaster.data.exa_source import ExaSource
 
         sources.append(ExaSource(settings.exa_api_key, cache))
+    if settings.lse_api_key and settings.lse_base_url:
+        from forecaster.data.lse_source import LSESource
+
+        sources.append(
+            LSESource(settings.lse_api_key, settings.lse_base_url, cache)
+        )
     else:
         log.info("news_disabled", why="EXA_API_KEY unset — no industry or company news")
-    if settings.api_ninjas_key:
-        from forecaster.data.transcript_source import TranscriptSource
-
-        sources.append(TranscriptSource(settings.api_ninjas_key, cache))
-    else:
-        # Not fatal. No filer files its transcript, so the guidance numbers come
-        # from the 8-K exhibits either way; what is lost is the analyst Q&A.
-        log.info("transcripts_disabled", why="API_NINJAS_KEY unset — no call Q&A")
     return Loader(sources)
 
 
