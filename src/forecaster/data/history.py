@@ -503,6 +503,54 @@ def _annual_gaps(
     return gaps
 
 
+def _derive_share_count(series: dict[str, list[Observation]]) -> None:
+    """Diluted shares from net income over diluted EPS, where it is untagged.
+
+    A filer with several listed classes reports its weighted-average share count
+    against a class dimension, and `companyfacts` only exposes facts with no
+    dimensions — so the consolidated number is simply absent. Visa has no
+    weighted-average share tag of any kind in `companyfacts`, only preferred
+    shares outstanding, while reporting diluted EPS every quarter.
+
+    That matters more than a missing line usually would: diluted shares is the
+    EPS DENOMINATOR. Without it the model has nothing to divide by and falls
+    back to a placeholder of 1.0.
+
+    `shares = net income / diluted EPS` is the definition of diluted EPS
+    rearranged, so this is exact rather than an estimate — but it is marked
+    derived, because it comes out of two other numbers rather than off a filing.
+    """
+    if "diluted_shares" not in series:
+        return
+    income = {o.period: o for o in series.get("net_income", [])}
+    eps = {o.period: o for o in series.get("eps_diluted", [])}
+    if not income or not eps:
+        return
+
+    filled = list(series["diluted_shares"])
+    have = {o.period for o in filled}
+    for period, earnings in income.items():
+        per_share = eps.get(period)
+        if period in have or per_share is None or not per_share.value:
+            continue
+        filled.append(
+            Observation(
+                key="diluted_shares",
+                fy=earnings.fy,
+                fp=earnings.fp,
+                value=earnings.value / per_share.value,
+                unit="shares",
+                period_end=earnings.period_end,
+                filed=max(earnings.filed, per_share.filed),
+                form=earnings.form,
+                accession=earnings.accession,
+                derived=True,
+            )
+        )
+    filled.sort(key=lambda o: o.period_end)
+    series["diluted_shares"] = filled
+
+
 def build_history(
     ticker: str,
     as_of: date,
@@ -545,6 +593,7 @@ def build_history(
     # `missing_core` below or a derivable line still reports as missing.
     _fill_from_identity(series, "total_liabilities", "total_assets", "equity")
     _fill_from_identity(series, "opex", "gross_profit", "operating_income")
+    _derive_share_count(series)
 
     annual_gaps = {
         item.key: gaps

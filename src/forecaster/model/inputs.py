@@ -92,6 +92,33 @@ def claim_for(history: History, observation: Observation) -> Claim:
     )
 
 
+def _require_shares(history: History, base: str) -> float:
+    """The opening diluted share count, or a refusal naming the cause.
+
+    This used to fall back to 1.0, which divides net income by a single share
+    and reports an EPS in the billions. Absurd here, but the same fallback on a
+    company with a partial series would produce something merely wrong.
+
+    The failure has one common cause worth naming in the message. A filer with
+    several listed share classes tags its weighted-average count — and often its
+    EPS — against a class dimension, and SEC's `companyfacts` endpoint exposes
+    only facts with no dimensions. Visa has no weighted-average share tag in
+    `companyfacts` at all, and no diluted EPS either, while reporting both every
+    quarter in the filing itself. No tag list fixes that; the numbers are not in
+    the response.
+    """
+    observation = history.get("diluted_shares", base)
+    if observation is not None and observation.value:
+        return observation.value
+    raise ValueError(
+        f"{history.ticker}: no diluted share count for {base}, so EPS has no "
+        "denominator. Companies with multiple listed share classes tag the "
+        "count against a class dimension, which SEC's companyfacts endpoint "
+        "omits — the figure has to come from the filing itself or a market "
+        "data source."
+    )
+
+
 def next_period(period: str) -> str:
     """`2027Q1` -> `2027Q2`, `2026Q4` -> `2027Q1`. Fiscal labels throughout."""
     year, quarter = int(period[:4]), int(period[-1])
@@ -268,7 +295,7 @@ def inputs_for(
         delta_receivables=delta("delta_receivables", "receivables", receivables_open),
         delta_inventory=delta("delta_inventory", "inventory", inventory_open),
         delta_payables=delta("delta_payables", "payables", payables_open),
-        shares_open=level("shares_open", "diluted_shares") or 1.0,
+        shares_open=_require_shares(history, base),
         avg_price=avg_price,
         sbc_dilution=0.0,
         claims=claims,

@@ -122,6 +122,23 @@ def test_a_missing_share_price_refuses_rather_than_guessing():
             inputs_for(history(), revenue=5000, avg_price=bad)
 
 
+def test_a_missing_share_count_refuses_rather_than_dividing_by_one():
+    """EPS needs a denominator, and 1.0 is not a conservative default.
+
+    Observed on Visa: a filer with several listed share classes tags its
+    weighted-average count — and its diluted EPS — against a class dimension,
+    and SEC's `companyfacts` endpoint returns only facts with no dimensions. So
+    both are simply absent, for a company reporting them every quarter. No tag
+    list fixes it; the numbers are not in the response.
+
+    Falling back to one share reported net income as earnings per share.
+    """
+    thin = history(diluted_shares=[])
+
+    with pytest.raises(ValueError, match="denominator"):
+        inputs_for(thin, revenue=5000, avg_price=10.0)
+
+
 def test_ratios_are_medians_so_one_odd_quarter_cannot_set_them():
     """A quarter with an inventory provision must not move the assumption."""
     spiked = history(

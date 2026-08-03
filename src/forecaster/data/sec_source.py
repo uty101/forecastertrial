@@ -148,17 +148,80 @@ class SECSource:
         return response.json() if response is not None else None
 
     def _cik(self, ticker: str) -> str | None:
-        """Ticker -> zero-padded 10-digit CIK. Cached forever; it never changes."""
+        """Ticker -> the CIK that actually holds the financial history.
+
+        Not simply the ticker file's answer, because that answer can be a shell.
+        `company_tickers.json` maps XOM to CIK 2115436, "ExxonMobil Holdings
+        Corp" — a holding company created in a 2026 reorganisation, with 27
+        filings, no XBRL namespace at all, and therefore zero financial history.
+        Exxon's actual financials sit under CIK 34088 with 1,001 filings, and
+        both entities legitimately claim the ticker.
+
+        Taking the file at its word returned no history, no filings and no
+        actuals for a company with a quarter-trillion in revenue — silently,
+        because an empty result is indistinguishable from a company that has not
+        filed. EDGAR's own ticker resolution knows which entity files, so it is
+        the tie-breaker when the file's answer turns out to be empty.
+
+        The check costs nothing on the happy path: `companyfacts` is fetched
+        either way and shares its cache entry.
+        """
+        key = self.cache.key("sec_cik", date(2000, 1, 1), ticker=ticker.upper())
+
+        def produce() -> str | None:
+            candidate = self._cik_from_ticker_file(ticker)
+            if candidate and self._has_financials(candidate):
+                return candidate
+
+            resolved = self._cik_from_edgar(ticker)
+            if resolved and resolved != candidate:
+                log.info(
+                    "cik_reresolved",
+                    ticker=ticker, from_ticker_file=candidate, from_edgar=resolved,
+                    why="the ticker file's entity has no XBRL financial history",
+                )
+                return resolved
+            return candidate
+
+        return self.cache.fetch(key, produce)
+
+    def _cik_from_ticker_file(self, ticker: str) -> str | None:
+        """The lowest-ranked entry for this ticker — largest listing wins.
+
+        Lowest RANK, compared numerically. The file's keys are strings, so
+        iteration runs "0", "10337", "15" and taking the first match is taking
+        an arbitrary share class.
+        """
         key = self.cache.key("sec_tickers", date(2000, 1, 1))
         mapping = self.cache.fetch(
             key, lambda: self._fetch_json("https://www.sec.gov/files/company_tickers.json")
         )
-        if not mapping:
+        best: tuple[int, str] | None = None
+        for rank, entry in (mapping or {}).items():
+            if entry["ticker"].upper() != ticker.upper():
+                continue
+            position = int(rank)
+            if best is None or position < best[0]:
+                best = (position, str(entry["cik_str"]).zfill(10))
+        return best[1] if best else None
+
+    def _cik_from_edgar(self, ticker: str) -> str | None:
+        """EDGAR's own ticker resolution — it answers with the entity that FILES."""
+        response = self._http_get(
+            "https://www.sec.gov/cgi-bin/browse-edgar"
+            f"?action=getcompany&CIK={ticker}&type=10-K&dateb=&owner=include"
+            "&count=5&output=atom",
+            timeout=90.0,
+        )
+        if response is None:
             return None
-        for entry in mapping.values():
-            if entry["ticker"].upper() == ticker.upper():
-                return str(entry["cik_str"]).zfill(10)
-        return None
+        found = re.findall(r"<cik>(\d+)</cik>", response.text)
+        return found[0].zfill(10) if found else None
+
+    def _has_financials(self, cik: str) -> bool:
+        """Does this CIK have any tagged US-GAAP facts at all?"""
+        facts = self._facts_for_cik(cik, date.today())
+        return bool((facts or {}).get("facts", {}).get("us-gaap"))
 
     def _company_facts(self, ticker: str, as_of: date) -> dict[str, Any] | None:
         """One call gets every tag. Cheaper than N companyconcept requests.
@@ -171,8 +234,11 @@ class SECSource:
         stricter, so backtests still share one payload per ticker.
         """
         cik = self._cik(ticker)
-        if cik is None:
-            return None
+        return self._facts_for_cik(cik, as_of) if cik else None
+
+    def _facts_for_cik(self, cik: str, as_of: date) -> dict[str, Any] | None:
+        """Keyed on the CIK alone, so ticker resolution and the pipeline share
+        one payload rather than downloading several megabytes twice."""
         key = self.cache.key("sec_facts", date(2000, 1, 1), cik=cik)
         return self.cache.fetch_dated(
             key,
