@@ -84,6 +84,17 @@ class DataSource(Protocol):
 
     def get_transcript(self, ticker: str, as_of: date) -> str | None: ...
 
+    def get_news(
+        self, ticker: str, as_of: date, query: str, limit: int = 8
+    ) -> list[Claim] | None:
+        """Articles published on or before `as_of`, as citable prose claims.
+
+        Defaulted, because only a search source can answer it. The hard part is
+        not retrieval but the date bound: without one, a historical `as_of` gets
+        today's internet and the lens cannot be backtested.
+        """
+        return None
+
     def get_peers(
         self, ticker: str, as_of: date, limit: int = 12
     ) -> list[str] | None:

@@ -43,6 +43,12 @@ def build_loader(read_only: bool = False) -> Loader:
         sources.append(SECSource(settings.sec_identity, cache))
     else:
         log.warning("sec_disabled", why="SEC_IDENTITY unset — you will get 403s")
+    if settings.exa_api_key:
+        from forecaster.data.exa_source import ExaSource
+
+        sources.append(ExaSource(settings.exa_api_key, cache))
+    else:
+        log.info("news_disabled", why="EXA_API_KEY unset — no industry or company news")
     if settings.api_ninjas_key:
         from forecaster.data.transcript_source import TranscriptSource
 

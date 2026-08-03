@@ -39,6 +39,7 @@ class SourceKind(StrEnum):
     FILING_10Q = "10q"
     FILING_10K = "10k"
     TRANSCRIPT = "transcript"
+    NEWS = "news"
     XBRL = "xbrl"
     CONSENSUS = "consensus"
     MACRO = "macro"

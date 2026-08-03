@@ -48,7 +48,7 @@ class Cache:
             self.misses += 1
             return None
         self.hits += 1
-        return json.loads(path.read_text())
+        return json.loads(_read_with_retry(path))
 
     def put(self, key: str, value: Any) -> None:
         if self.read_only:
@@ -123,6 +123,31 @@ class Cache:
             "misses": self.misses,
             "hit_rate": round(self.hits / total, 3) if total else 0.0,
         }
+
+
+def _read_with_retry(path: Path, attempts: int = 4, pause: float = 0.15) -> str:
+    """Read a cache file, retrying briefly on a transient lock.
+
+    A repo living inside OneDrive (or Dropbox, or under an on-access virus
+    scanner) hands out `PermissionError` while the syncing process holds a
+    handle. It clears in milliseconds, but the Loader treats any exception as a
+    source failure — so a single sync tick silently cost a peer its entire
+    financial history and counted against the circuit breaker.
+
+    Deliberately narrow: only PermissionError, only a few attempts. A genuine
+    permissions problem still surfaces, just half a second later.
+    """
+    import time
+
+    for attempt in range(attempts):
+        try:
+            return path.read_text()
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            log.debug("cache_locked", path=str(path), attempt=attempt)
+            time.sleep(pause * (attempt + 1))
+    raise AssertionError("unreachable")
 
 
 class CacheMiss(RuntimeError):

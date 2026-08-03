@@ -128,6 +128,23 @@ class Loader:
             ),
         )
 
+    def sic(self, ticker: str, as_of: date):
+        """(code, description) — the industry, straight from the ticker."""
+        return self.resolve(
+            f"sic:{ticker}",
+            lambda s: getattr(s, "get_sic", lambda *_, **__: None)(ticker, as_of),
+        )
+
+    def news(self, ticker: str, as_of: date, query: str, **kwargs):
+        # The query is part of the key: two different questions are two
+        # different answers, and collapsing them would serve one from the other.
+        return self.resolve(
+            f"news:{ticker}:{query[:60]}",
+            lambda s: getattr(s, "get_news", lambda *_, **__: None)(
+                ticker, as_of, query, **kwargs
+            ),
+        )
+
     def peers(self, ticker: str, as_of: date, limit: int = 12):
         return self.resolve(
             f"peers:{ticker}",

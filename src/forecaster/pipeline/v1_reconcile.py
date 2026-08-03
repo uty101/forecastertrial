@@ -67,6 +67,11 @@ PROSE_SOURCES = {
     SourceKind.FILING_10Q,
     SourceKind.FILING_10K,
     SourceKind.TRANSCRIPT,
+    # News belongs here more than anywhere else. A filing is at least a
+    # document the company signed; an article is prose from an arbitrary
+    # publisher, retrieved by a search engine, and it is the likeliest place for
+    # a model to produce a quote that reads perfectly and was never written.
+    SourceKind.NEWS,
 }
 
 # Structured sources: the "quote" is the tagged fact itself, rendered by the

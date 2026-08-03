@@ -242,10 +242,54 @@ def acquire(
                 continue
             peer_claims.extend(reported)
             peer_lines.append(_render_claims(f"{peer} (already reported)", reported))
-            budget.spend(docs=len(reported))
+            # One peer is one unit of work, not one per line item it reported.
+            # Counting claims made a twelve-peer industry cost 36 "documents"
+            # and spend the whole stage budget before the narrative searches
+            # below ever ran.
+            budget.spend(docs=1)
 
-        for target in INDUSTRY_PRIORITY[1:]:
+        # ---- industry and company narrative ---------------------------- #
+        #
+        # Peer filings above give the industry's NUMBERS. This gives the reason
+        # behind them — a supply constraint, a pricing move, a customer's capex
+        # plan — which is the half no balance sheet contains.
+        #
+        # Both searches are bounded by `as_of` inside the source. An unbounded
+        # news search returns today's internet for a historical date, which does
+        # not merely add noise: it hands the model the answer.
+        sic = loader.sic(ticker, as_of)
+        industry = sic[1] if sic else company.sector
+        searches = [
+            (f"{industry} industry demand pricing outlook", "industry"),
+            (f"{ticker} {industry} earnings outlook guidance", "company"),
+        ]
+        # Its own budget, deliberately. Peers are ranked above narrative and
+        # should be — a peer's actual print beats any article about the
+        # industry — but sharing one budget meant a crowded industry starved
+        # the narrative entirely rather than merely outranking it.
+        news_budget = Budget()
+        for query, what in searches:
+            if news_budget.exhausted():
+                news_budget.skip(f"{what} news: {query}")
+                continue
+            found = loader.news(ticker, as_of, query) or []
+            for claim in found:
+                if news_budget.exhausted():
+                    news_budget.skip(f"body text for {claim.source.uri}")
+                    continue
+                # Same rule as filings: without the body, every quote from this
+                # article fails verification and the lens citing it is dropped.
+                body = _fetch_document(loader, claim.source.uri)
+                if not body:
+                    continue
+                out.documents[claim.source.uri] = body
+                out.claims.append(claim)
+                news_budget.spend(docs=1, tokens=len(body) // 4)
+            log.info("news_acquired", ticker=ticker, what=what, n=len(found))
+
+        for target in INDUSTRY_PRIORITY[2:]:
             budget.skip(f"not implemented: {target}")
+        out.budgets["A3_news"] = news_budget.report()
 
         out.claims.extend(peer_claims)
         out.peer_block = "\n\n".join(peer_lines)
