@@ -73,6 +73,13 @@ LINE_ITEMS: tuple[LineItem, ...] = (
             # filer also reports a total for the same period the total wins the
             # dedupe and this only fills the gap.
             "SalesRevenueGoodsNet",
+            # Banks and brokers do not report "revenue" — they report total net
+            # revenues, after interest expense. Goldman Sachs tags this 168
+            # times and `Revenues` not once, so it had no top line at all.
+            # JPMorgan happens to tag both, which is why the gap only showed up
+            # on a pure broker. Last again, so a filer reporting both keeps the
+            # series it already had.
+            "RevenuesNetOfInterestExpense",
         ),
         core=True,
     ),

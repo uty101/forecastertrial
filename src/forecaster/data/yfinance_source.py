@@ -36,6 +36,12 @@ log = structlog.get_logger()
 
 THROTTLE_S = 0.6  # be polite; yahoo rate-limits aggressively on repeated calls
 
+# A large accelerated filer has 40 days from quarter end to file its 10-Q.
+# yfinance reports period ends with no filing dates, so this stands in for
+# knowability — erring late, because a figure withheld a fortnight too long
+# costs coverage while one released a fortnight too early is a leak.
+REPORTING_LAG_DAYS = 45
+
 
 class YFinanceSource:
     name = "yfinance"
@@ -204,6 +210,71 @@ class YFinanceSource:
 
     def get_transcript(self, ticker: str, as_of: date):
         return None
+
+    def get_share_count(self, ticker: str, as_of: date) -> dict[str, float] | None:
+        """Quarterly diluted share counts, keyed by period end — a fallback only.
+
+        SEC is the right source for this and usually has it. The exception is a
+        filer with several listed share classes: it tags the weighted-average
+        count, and often diluted EPS too, against a class dimension, and
+        `companyfacts` returns only facts carrying no dimensions. Visa has no
+        weighted-average share tag there at all while reporting one every
+        quarter. No tag list closes that gap — the numbers are not in the
+        response — and the count is the EPS denominator.
+
+        **Point-in-time is approximated here, and that is a real weakening.**
+        yfinance gives period ends with no filing dates, so knowability is
+        inferred from the SEC deadline: a large accelerated filer must file its
+        10-Q within 40 days of quarter end. Waiting `REPORTING_LAG_DAYS` is a
+        conservative reading of that — it can hide a figure we could legally
+        have known for a fortnight, which is the safe direction to be wrong in.
+
+        Shallow, too: roughly six quarters. Enough to open a model on the day,
+        not enough to backtest on.
+        """
+        key = self.cache.key("yf_shares", as_of, ticker=ticker)
+
+        def produce() -> dict[str, float] | None:
+            import yfinance as yf
+
+            time.sleep(THROTTLE_S)
+            frame = yf.Ticker(ticker).quarterly_income_stmt
+            if frame is None or frame.empty:
+                return None
+            row = next(
+                (r for r in frame.index if str(r).strip() == "Diluted Average Shares"),
+                None,
+            )
+            if row is None:
+                return None
+            out: dict[str, float] = {}
+            for column in frame.columns:
+                value = frame.loc[row, column]
+                try:
+                    number = float(value)
+                except (TypeError, ValueError):
+                    continue
+                if number > 0:
+                    out[column.date().isoformat()] = number
+            return out or None
+
+        counts = self.cache.fetch(key, produce)
+        if not counts:
+            return None
+
+        knowable = {
+            period_end: shares
+            for period_end, shares in counts.items()
+            if date.fromisoformat(period_end) + timedelta(days=REPORTING_LAG_DAYS)
+            <= as_of
+        }
+        if len(knowable) < len(counts):
+            log.info(
+                "yf_shares_filtered",
+                ticker=ticker, kept=len(knowable), dropped=len(counts) - len(knowable),
+                why="period end plus the filing deadline is after as_of",
+            )
+        return knowable or None
 
     def get_prices(
         self, ticker: str, start: date, end: date

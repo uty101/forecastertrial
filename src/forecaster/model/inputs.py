@@ -92,7 +92,9 @@ def claim_for(history: History, observation: Observation) -> Claim:
     )
 
 
-def _require_shares(history: History, base: str) -> float:
+def _require_shares(
+    history: History, base: str, override: float | None = None
+) -> float:
     """The opening diluted share count, or a refusal naming the cause.
 
     This used to fall back to 1.0, which divides net income by a single share
@@ -110,6 +112,8 @@ def _require_shares(history: History, base: str) -> float:
     observation = history.get("diluted_shares", base)
     if observation is not None and observation.value:
         return observation.value
+    if override:
+        return override
     raise ValueError(
         f"{history.ticker}: no diluted share count for {base}, so EPS has no "
         "denominator. Companies with multiple listed share classes tag the "
@@ -162,6 +166,7 @@ def inputs_for(
     gross_margin: float | None = None,
     base_period: str | None = None,
     window: int = RATIO_WINDOW,
+    shares_open: float | None = None,
 ) -> StatementInputs:
     """Build the model's inputs for the quarter after `base_period`.
 
@@ -295,7 +300,7 @@ def inputs_for(
         delta_receivables=delta("delta_receivables", "receivables", receivables_open),
         delta_inventory=delta("delta_inventory", "inventory", inventory_open),
         delta_payables=delta("delta_payables", "payables", payables_open),
-        shares_open=_require_shares(history, base),
+        shares_open=_require_shares(history, base, shares_open),
         avg_price=avg_price,
         sbc_dilution=0.0,
         claims=claims,
