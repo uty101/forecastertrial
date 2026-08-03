@@ -26,6 +26,10 @@ class _FakeResponse:
     def __init__(self, payload, status_code: int = 200) -> None:
         self._payload = payload
         self.status_code = status_code
+        # The real 400 body is what tells you WHY the source cannot answer —
+        # a bad key and a plan that excludes the endpoint look identical
+        # without it — so the fake has to carry one.
+        self.text = '{"error": "This endpoint is available to premium subscribers only."}'
 
     def json(self):
         return self._payload
@@ -119,6 +123,24 @@ def test_a_rejected_key_does_not_retry(tmp_path):
 
     assert source.get_quarter("NVDA", 2027, 1, AS_OF) is None
     assert len(client.calls) == 1
+
+
+def test_a_plan_that_excludes_the_endpoint_degrades_rather_than_raising(tmp_path):
+    """Observed live: a free api-ninjas key returns 400, not 402 or 403.
+
+        {"error": "This endpoint is available to premium subscribers only."}
+
+    Handling only 401/403 let that escape as an HTTPStatusError. A raising
+    source spends the Loader's three-failure budget and trips the breaker,
+    which turns "we have no transcripts" into "this source is dead for the rest
+    of the run" — and on the day the difference is one lens versus the ensemble.
+    """
+    source, client = _source(tmp_path, {"earningstranscript": None}, status=400)
+
+    assert source.get_quarter("NVDA", 2027, 1, AS_OF) is None
+    assert source.available("NVDA", AS_OF) == []
+    # Permanent, so attempted once per call and never retried.
+    assert len(client.calls) == 2
 
 
 def test_no_key_refuses_to_construct(tmp_path):

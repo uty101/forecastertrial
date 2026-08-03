@@ -107,9 +107,27 @@ class TranscriptSource:
             return None
         if response.status_code in _RETRY_STATUSES:
             raise _TransientTranscript(f"{response.status_code} from {path}")
-        if response.status_code in (401, 403):
-            log.error("transcript_auth_failed", status=response.status_code)
+
+        # Anything else in the 4xx range means this source cannot answer: a bad
+        # key, or a plan that does not include the endpoint. Both are permanent
+        # for the run, and neither should raise — a raising source burns the
+        # Loader's three-failure budget and trips the breaker, turning "no
+        # transcripts" into a dead source. Log the server's own words once and
+        # return absence.
+        #
+        # Note the entitlement case arrives as 400, not 402 or 403: a free
+        # api-ninjas key returns `{"error": "This endpoint is available to
+        # premium subscribers only."}` with a 400. Handling only 401/403 let it
+        # escape as an HTTPStatusError.
+        if 400 <= response.status_code < 500:
+            log.error(
+                "transcript_source_unavailable",
+                status=response.status_code,
+                path=path,
+                detail=response.text[:200],
+            )
             return None
+
         response.raise_for_status()
         return response.json()
 

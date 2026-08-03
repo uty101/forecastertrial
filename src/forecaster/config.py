@@ -34,6 +34,18 @@ class Settings(BaseSettings):
     # registered and the Guidance lens works from the 8-K exhibits alone.
     api_ninjas_key: str = Field(default="", validation_alias="API_NINJAS_KEY")
 
+    # Every credential below must be DECLARED even while unused, because the
+    # model forbids extra inputs: a key pasted into .env for a field that does
+    # not exist here stops the CLI from starting at all, with a pydantic
+    # traceback rather than anything resembling a config error. Declaring them
+    # up front means adding a key is a one-line edit to .env and nothing else.
+    lse_api_key: str = Field(default="", validation_alias="LSE_API_KEY")
+    lse_base_url: str = Field(default="", validation_alias="LSE_BASE_URL")
+    exa_api_key: str = Field(default="", validation_alias="EXA_API_KEY")
+    tavily_api_key: str = Field(default="", validation_alias="TAVILY_API_KEY")
+    polygon_api_key: str = Field(default="", validation_alias="POLYGON_API_KEY")
+    fmp_api_key: str = Field(default="", validation_alias="FMP_API_KEY")
+
     # Model tiering — tokens are a variable cost, allocated by leverage.
     model_cheap: str = "claude-haiku-4-5"   # retrieval, extraction
     model_mid: str = "claude-sonnet-5"      # the seven lenses, the advocate
