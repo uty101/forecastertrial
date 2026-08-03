@@ -91,7 +91,34 @@ def extract_guidance(
     claims: list[Claim] = []
     rejections: list[str] = []
 
+    seen: set[tuple] = set()
     for i, extracted in enumerate(result.guides):
+        if extracted.metric not in ("eps", "revenue"):
+            rejections.append(f"unrecognised metric {extracted.metric!r}")
+            continue
+
+        # A guide with no number is not guidance. The extractor emits these for
+        # companies that decline to guide a metric — NVDA gives revenue and
+        # margin but no EPS — and an empty range downstream reads as "guidance
+        # exists and is unknown" rather than "none was given".
+        if extracted.low is extracted.high is extracted.point is None:
+            rejections.append(
+                f"{extracted.metric} {extracted.period}: no low, high or point"
+            )
+            continue
+
+        _rescale(extracted)
+
+        signature = (
+            extracted.metric, extracted.period, extracted.basis,
+            extracted.low, extracted.high, extracted.point,
+        )
+        if signature in seen:
+            # The same sentence appears in both EX-99.1 and EX-99.2, and the
+            # model reports it under each basis. Four copies of one fact.
+            continue
+        seen.add(signature)
+
         claim_id = f"guide:{ticker}:{extracted.period}:{extracted.metric}:{i}"
         claim = Claim(
             id=claim_id,
@@ -118,10 +145,6 @@ def extract_guidance(
             )
             continue
 
-        if extracted.metric not in ("eps", "revenue"):
-            rejections.append(f"unrecognised metric {extracted.metric!r}")
-            continue
-
         claims.append(claim)
         guides.append(
             Guidance(
@@ -144,6 +167,45 @@ def extract_guidance(
         uri=source_uri,
     )
     return guides, claims, rejections
+
+
+SCALES = (("trillion", 1e12), ("billion", 1e9), ("million", 1e6), ("thousand", 1e3))
+
+
+def _rescale(guide: ExtractedGuide) -> None:
+    """Put revenue guidance into absolute dollars, using the sentence's own units.
+
+    "Millions vs thousands is the error that will actually bite" — and this is
+    where it bites. The release says "Revenue is expected to be $91.0 billion,
+    plus or minus 2%", and the extractor faithfully returns 89.18 to 92.82,
+    because that is what the sentence says. Stored against a claim whose unit is
+    USD, ninety-one billion dollars becomes ninety-one dollars, and every
+    comparison downstream is off by nine orders of magnitude while every number
+    stays internally consistent.
+
+    The scale is read from the quote we have ALREADY string-matched against the
+    filing, so it is the company's own word rather than an inference.
+
+    EPS is deliberately untouched. It is dollars per share, never billions, and
+    a release mentioning both in one sentence would otherwise multiply it.
+    """
+    if guide.metric != "revenue":
+        return
+    lowered = guide.quote.lower()
+    factor = next((mult for word, mult in SCALES if word in lowered), None)
+    if factor is None:
+        return
+
+    values = [v for v in (guide.low, guide.high, guide.point) if v is not None]
+    # Only when the figures are plainly quoted in that scale. A release already
+    # reporting absolute dollars must not be multiplied a second time.
+    if not values or max(abs(v) for v in values) >= 1e6:
+        return
+
+    for field_name in ("low", "high", "point"):
+        value = getattr(guide, field_name)
+        if value is not None:
+            setattr(guide, field_name, value * factor)
 
 
 def _representative(guide: ExtractedGuide) -> float | None:

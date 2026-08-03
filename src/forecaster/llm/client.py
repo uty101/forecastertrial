@@ -44,6 +44,30 @@ from forecaster.llm.prompt import Prompt, load
 
 log = structlog.get_logger()
 
+# Adaptive thinking and the `effort` parameter are NOT universal, and sending
+# them to a model that lacks them is a hard 400, not a warning:
+#
+#   anthropic.BadRequestError: adaptive thinking is not supported on this model
+#
+# Haiku 4.5 is the one in our tier set that accepts neither, and it is the CHEAP
+# tier — which every extraction prompt runs on. So this took down guidance
+# extraction outright, and would have taken down any cheap-tier prompt on the
+# day, at the point where there is no time to debug an SDK error.
+#
+# Prefix-matched rather than listed exactly, because a dated snapshot id
+# (`claude-haiku-4-5-20251001`) is the same model with the same limitation.
+_NO_REASONING_CONTROLS = ("claude-haiku",)
+
+
+def _reasoning_kwargs(model: str, effort: str) -> dict:
+    """Thinking and effort, for models that have them."""
+    if model.startswith(_NO_REASONING_CONTROLS):
+        return {}
+    return {
+        "thinking": {"type": "adaptive"},
+        "output_config": {"effort": effort},
+    }
+
 T = TypeVar("T", bound=BaseModel)
 
 
@@ -155,6 +179,11 @@ class LLMClient:
     @property
     def spent_usd(self) -> float:
         return sum(c.usage.cost_usd for c in self.calls)
+
+    @staticmethod
+    def supports_reasoning_controls(model: str) -> str:
+        """Exposed for the manifest, so the UI can say which tier thinks."""
+        return "" if model.startswith(_NO_REASONING_CONTROLS) else "adaptive"
 
     def model_for(self, tier: str) -> str:
         return {
@@ -330,11 +359,10 @@ class LLMClient:
             lambda: self._sdk().messages.parse(
                 model=model,
                 max_tokens=max_tokens,
-                thinking={"type": "adaptive"},
-                output_config={"effort": self.settings.effort},
                 system=system_blocks,
                 messages=[{"role": "user", "content": user_text}],
                 output_format=schema,
+                **_reasoning_kwargs(model, self.settings.effort),
             )
         )
         latency_ms = int((time.monotonic() - started) * 1000)

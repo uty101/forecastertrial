@@ -40,6 +40,7 @@ from forecaster.pipeline import (
     c_lenses,
     d_champion,
     e_judge,
+    extract,
     f_lambda,
     v1_reconcile,
     v2_comparability,
@@ -108,12 +109,32 @@ def forecast(
     )
     consensus: Consensus | None = acquired.consensus  # type: ignore[assignment]
 
+    # ---- A5: extract guidance ------------------------------------------ #
+    #
+    # Acquisition brings back the earnings release as TEXT. Until something
+    # reads it, the guidance paragraph, the non-GAAP bridge and the segment
+    # table sit in the corpus as prose that no claim points at — so no lens can
+    # cite them, `EvidenceStore.guidance` stays empty, and the forecast comes
+    # out on a GAAP basis while consensus is quoted non-GAAP. Different units,
+    # a median 31% apart.
+    #
+    # This is the one extraction that needs a model, because guidance lives in
+    # sentences rather than in XBRL. Every extracted quote is string-matched
+    # back against its source inside `extract_guidance`, and one that cannot be
+    # found is dropped — a range assembled from two different sentences reads
+    # perfectly and is not what the company said.
+    with events.node("A5_extract"):
+        guides, guide_claims, rejections = _extract_guidance(
+            client, config.ticker, acquired, events
+        )
+
     # ---- B: structure ------------------------------------------------- #
     with events.node("B_structure"):
         store = b_structure.build(
-            claims=acquired.claims,
+            claims=acquired.claims + guide_claims,
             documents=acquired.documents,
             consensus=consensus,
+            guidance=guides,
         )
         events.emit(EventType.CLAIM_ADDED, "B_structure", n=store.n_claims)
 
@@ -297,6 +318,91 @@ def forecast(
         "cost": cost,
     }
     return RunResult(forecast=result, trace=trace)
+
+
+def _unique_guides(guides: list) -> list:
+    """Collapse guides carrying identical figures for the same metric and period."""
+    seen: set[tuple] = set()
+    unique = []
+    for guide in guides:
+        signature = (guide.metric, guide.period, guide.low, guide.high, guide.point)
+        if signature in seen:
+            continue
+        seen.add(signature)
+        unique.append(guide)
+    return unique
+
+
+def _extract_guidance(
+    client: LLMClient,
+    ticker: str,
+    acquired: a_acquire.Acquired,
+    events: EventLog,
+) -> tuple[list, list, list[str]]:
+    """Run the extractor over the earnings-release exhibits, newest first.
+
+    Only the EX-99 exhibits, and only the most recent earnings 8-K's. An 8-K's
+    primary document is a cover page with no guidance in it, a 10-Q body is
+    150k characters of footnotes, and older releases carry guidance for
+    quarters that have already been reported — historical sandbagging is a
+    lens's question, not a model input. Extraction is the one step here that
+    costs a model call per document, so it is pointed at the two documents that
+    contain the answer.
+    """
+    exhibits = [
+        claim
+        for claim in acquired.claims
+        if (claim.source.page_or_section or "").startswith("EX-99")
+        and claim.source.uri in acquired.documents
+    ]
+    # Newest filing first; within it EX-99.1 before EX-99.2.
+    exhibits.sort(
+        key=lambda c: (c.source.as_of, c.source.page_or_section or ""), reverse=True
+    )
+    latest = exhibits[0].source.as_of if exhibits else None
+    targets = [c for c in exhibits if c.source.as_of == latest]
+
+    guides, guide_claims, rejections = [], [], []
+    for claim in targets:
+        found, claims, rejected = extract.extract_guidance(
+            client,
+            ticker,
+            acquired.documents[claim.source.uri],
+            claim.source.uri,
+            claim.source.as_of,
+            source_kind=claim.source.kind,
+        )
+        guides.extend(found)
+        guide_claims.extend(claims)
+        rejections.extend(rejected)
+
+    # One fact, once. The guidance sentence appears in BOTH the press release
+    # and the CFO commentary, and the extractor reports it under each basis —
+    # so NVDA's single revenue range arrived four times. Deduplicated on the
+    # NUMBERS rather than including the basis: revenue has no GAAP/non-GAAP
+    # distinction, and two entries carrying identical figures are one fact
+    # labelled twice. Where the bases genuinely differ, the figures differ too
+    # and both survive.
+    guides = _unique_guides(guides)
+
+    skipped = len(exhibits) - len(targets)
+    log.info(
+        "guidance_extraction",
+        ticker=ticker,
+        documents=len(targets),
+        guides=len(guides),
+        rejected=len(rejections),
+        # Never silent. A dropped source has to be visible in the manifest.
+        skipped_older_exhibits=skipped or None,
+    )
+    events.emit(
+        EventType.NODE_DONE,
+        "A5_extract",
+        documents=len(targets),
+        guides=len(guides),
+        rejected=len(rejections),
+    )
+    return guides, guide_claims, rejections
 
 
 def _working_revenue(acquired: a_acquire.Acquired, consensus: Consensus | None) -> str:

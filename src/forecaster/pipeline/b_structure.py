@@ -159,17 +159,34 @@ def build(
     # Deduplicate on (label, period, value) — acquisition hits the same fact
     # from several sources and seven copies of the share count is seven times
     # the cost for no extra information.
-    seen: set[tuple] = set()
+    seen: dict[tuple, str] = {}
+    remap: dict[str, str] = {}
     ordinal = 0
     for claim in claims:
         signature = (claim.label, claim.period, claim.value)
         if signature in seen:
             store.dropped.append(f"{claim.id} (duplicate of an earlier claim)")
+            # Point the dropped id at the survivor rather than nowhere: a
+            # Guidance whose claim was deduplicated still has a real quote
+            # behind it, just under a different short id.
+            remap[claim.id] = seen[signature]
             continue
-        seen.add(signature)
         ordinal += 1
         short = f"c{ordinal}"
+        seen[signature] = short
+        remap[claim.id] = short
         store.claims[short] = claim.model_copy(update={"id": short})
+
+    # Guidance carries the id of the claim holding its quote, and renumbering
+    # would leave every one of them dangling — the guide would survive with a
+    # citation pointing at a claim that no longer exists under that name, which
+    # the reconciler reads as a fabricated citation and drops the lens for.
+    store.guidance = [
+        guide.model_copy(update={"claim_id": remap[guide.claim_id]})
+        if guide.claim_id in remap
+        else guide
+        for guide in store.guidance
+    ]
 
     log.info(
         "evidence_store_built",
