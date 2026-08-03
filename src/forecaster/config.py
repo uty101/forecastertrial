@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     anthropic_api_key: str = Field(default="", validation_alias="ANTHROPIC_API_KEY")
     sec_identity: str = Field(default="", validation_alias="SEC_IDENTITY")
     fred_api_key: str = Field(default="", validation_alias="FRED_API_KEY")
+    # Earnings call transcripts. Unset simply means the transcript source is not
+    # registered and the Guidance lens works from the 8-K exhibits alone.
+    api_ninjas_key: str = Field(default="", validation_alias="API_NINJAS_KEY")
 
     # Model tiering — tokens are a variable cost, allocated by leverage.
     model_cheap: str = "claude-haiku-4-5"   # retrieval, extraction

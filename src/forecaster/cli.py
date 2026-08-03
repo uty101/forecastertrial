@@ -43,6 +43,14 @@ def build_loader(read_only: bool = False) -> Loader:
         sources.append(SECSource(settings.sec_identity, cache))
     else:
         log.warning("sec_disabled", why="SEC_IDENTITY unset — you will get 403s")
+    if settings.api_ninjas_key:
+        from forecaster.data.transcript_source import TranscriptSource
+
+        sources.append(TranscriptSource(settings.api_ninjas_key, cache))
+    else:
+        # Not fatal. No filer files its transcript, so the guidance numbers come
+        # from the 8-K exhibits either way; what is lost is the analyst Q&A.
+        log.info("transcripts_disabled", why="API_NINJAS_KEY unset — no call Q&A")
     return Loader(sources)
 
 
