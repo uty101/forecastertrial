@@ -61,6 +61,12 @@ def _history(overrides: dict[str, dict[str, float]] | None = None) -> History:
             "payables": revenue * 0.25,
             "ppe_net": revenue * 1.2,
             "long_term_debt": 500.0,
+            # Totals, so the forecast scaffold has an opening sheet that ties.
+            "total_assets": revenue * 2.0 + revenue * 0.5 + revenue * 0.4
+                            + revenue * 1.2,
+            "total_liabilities": revenue * 0.25 + 500.0,
+            "equity": revenue * 2.0 + revenue * 0.5 + revenue * 0.4
+                      + revenue * 1.2 - revenue * 0.25 - 500.0,
             "eps_diluted": (revenue * 0.30 * 0.85) / 100.0,
         }
         for key, value in values.items():

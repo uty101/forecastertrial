@@ -197,6 +197,24 @@ def project(
     needs the cash the cash flow produced. Anything else creates a circular
     reference.
     """
+    # An opening sheet that does not tie can never produce a forecast year that
+    # does: the articulation preserves the gap exactly, so it turns up as the
+    # SAME residual in every projected column. That is a confusing symptom —
+    # NVDA showed −42.7bn in all nine years and it read as broken projection
+    # logic when the logic was fine and the opening was short three line items.
+    # Failing here names the actual problem.
+    opening_gap = opening.total_assets() - (
+        opening.total_liabilities() + opening.equity
+    )
+    if abs(opening_gap) > max(abs(opening.total_assets()), 1.0) * 1e-6:
+        raise ValueError(
+            f"the opening balance sheet does not tie: assets "
+            f"{opening.total_assets():,.0f} against liabilities and equity "
+            f"{opening.total_liabilities() + opening.equity:,.0f}, a gap of "
+            f"{opening_gap:,.0f}. Every projected year would carry this same "
+            "residual and none of them would be the projection's fault."
+        )
+
     years: list[ProjectedYear] = []
     revenue = base_revenue
     balances = OpeningBalances(**asdict(opening))

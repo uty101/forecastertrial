@@ -145,6 +145,15 @@
       "tier": "none"
     },
     {
+      "detail": "covered by test_from_lenses.py",
+      "id": "from_lenses",
+      "label": "Ensemble view \u2192 drivers",
+      "layer": "model",
+      "state": "built",
+      "tests": 11,
+      "tier": "none"
+    },
+    {
       "detail": "covered by test_d_model.py",
       "id": "model",
       "label": "3-statement stage + backtest",
@@ -406,13 +415,13 @@
     }
   ],
   "totals": {
-    "built": 27,
-    "components": 40,
+    "built": 28,
+    "components": 41,
     "gates_passed": 2,
     "gates_total": 6,
     "missing": 0,
     "partial": 13,
-    "tests": 256,
+    "tests": 267,
     "tests_by_file": {
       "tests/test_config.py": 4,
       "tests/test_d_model.py": 15,
@@ -420,6 +429,7 @@
       "tests/test_dossier.py": 5,
       "tests/test_exa_source.py": 6,
       "tests/test_extract.py": 6,
+      "tests/test_from_lenses.py": 11,
       "tests/test_grid.py": 20,
       "tests/test_history.py": 16,
       "tests/test_llm_layer.py": 25,

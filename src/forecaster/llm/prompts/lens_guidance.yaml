@@ -6,7 +6,7 @@
 # shared `corpus` and lands in a cached system block, so seven lenses write it
 # once and read it six times instead of paying full price seven times.
 id: lens_guidance
-version: 4
+version: 5
 model_tier: mid
 description: >
   Anchors on what management guided for THIS quarter at the last earnings call,
@@ -56,3 +56,14 @@ user: |
   ids you relied on, and your confidence in [0,1]. In `reasoning`, state the
   guided anchor, the landing adjustment you applied, and why — in a few
   sentences, no preamble.
+
+  The model these feed is a linked three-statement model, so answer in its
+  language as well as your own. Alongside the EPS and revenue, fill in ONLY the
+  drivers your evidence actually speaks to and leave every other one null:
+
+    - `revenue_growth`, if the company guided a top line you can convert to one against the prior-year quarter
+    - `gross_margin`, if the company guided it
+
+  All of them are FRACTIONS, never percentages: 0.62 for 62%. A percentage here
+  produces a company with 6200% margins whose balance sheet still ties, so it is
+  caught by range and the lens is ignored on that driver.

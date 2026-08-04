@@ -1,5 +1,5 @@
 id: lens_macro
-version: 1
+version: 2
 model_tier: mid
 description: >
   Sector-relevant macro series against what analyst estimates appear to assume.
@@ -53,3 +53,13 @@ user: |
   Give your point estimate for EPS and revenue, the claim ids you relied on, and
   your confidence in [0,1]. In `reasoning`, name each series, its move, the
   sensitivity you applied, and the resulting adjustment. Compact, no preamble.
+
+  The model these feed is a linked three-statement model, so answer in its
+  language as well as your own. Alongside the EPS and revenue, fill in ONLY the
+  drivers your evidence actually speaks to and leave every other one null:
+
+    - `revenue_growth`, if the macro series you used imply a top-line effect
+
+  All of them are FRACTIONS, never percentages: 0.62 for 62%. A percentage here
+  produces a company with 6200% margins whose balance sheet still ties, so it is
+  caught by range and the lens is ignored on that driver.

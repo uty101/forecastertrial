@@ -50,6 +50,19 @@ class EvidenceStore:
     guidance: list[Guidance] = field(default_factory=list)
     landing: LandingDistribution | None = None
     dropped: list[str] = field(default_factory=list)
+    # Stage D's model, as prose. It goes in the CORPUS rather than in each lens's
+    # own question, for two reasons in that order of importance.
+    #
+    # CORRECTNESS: all six lenses then read a byte-identical model. Give one lens
+    # a different version and their disagreement becomes partly an artefact of
+    # their inputs, which is exactly what an ensemble must not have.
+    #
+    # COST: the corpus sits behind the cache breakpoint, so the block is written
+    # once and read six times at a tenth of the price rather than paid for in
+    # full in six separate user turns. The champions do NOT read the corpus —
+    # they get  for the one case they are arguing — so the multiple
+    # is six, not thirteen.
+    model: str = ""
 
     # ---------------------------------------------------------------- #
 
@@ -82,7 +95,14 @@ class EvidenceStore:
         iteration would produce a different prefix on some runs and quietly
         halve the cache hit rate.
         """
-        lines = [
+        lines: list[str] = []
+        if self.model:
+            # First, and before the claims. The model is what the claims add up
+            # to, and a lens that reads the arithmetic before the line items is
+            # reasoning about a company rather than about a list.
+            lines += [self.model, "", "-" * 70, ""]
+
+        lines += [
             "EVIDENCE",
             "",
             "Every figure below carries an id. Cite the ids you rely on. Do not",
@@ -140,6 +160,7 @@ def build(
     consensus: Consensus | None = None,
     guidance: list[Guidance] | None = None,
     landing: LandingDistribution | None = None,
+    model: str = "",
 ) -> EvidenceStore:
     """Assemble the store, renumbering claims to short citable ids.
 
@@ -154,6 +175,7 @@ def build(
         consensus=consensus,
         guidance=list(guidance or []),
         landing=landing,
+        model=model,
     )
 
     # Deduplicate on (label, period, value) — acquisition hits the same fact

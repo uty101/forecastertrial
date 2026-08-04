@@ -210,6 +210,17 @@ class LensOutput(BaseModel):
     )
     confidence: Annotated[float, Field(ge=0, le=1)]
 
+    # The drivers this lens is arguing about, in the three-statement model's own
+    # language. A lens returning only an EPS has said what it concludes and not
+    # what it believes — two lenses can reach the same number through opposite
+    # views, and an ensemble seeing only outputs cannot tell agreement from
+    # coincidence. All optional: a lens should speak only to what its evidence
+    # covers.
+    revenue_growth: float | None = None
+    gross_margin: float | None = None
+    opex_pct_revenue: float | None = None
+    tax_rate: float | None = None
+
     # populated by v1_reconcile
     reconciled: bool | None = None
     reconcile_errors: list[str] = Field(default_factory=list)

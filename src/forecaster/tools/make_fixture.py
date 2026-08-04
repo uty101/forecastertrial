@@ -275,8 +275,8 @@ def main(out: Path = Path("out"), ticker: str = "DEMO") -> None:
         events.emit(EventType.NODE_DONE, node, latency_ms=900)
     events.emit(EventType.CLAIM_ADDED, "C_structure", n=N_CLAIMS)
     for name, _, confidence, _, _, cites in LENSES:
-        events.emit(EventType.NODE_START, f"C_{name.value}")
-        events.emit(EventType.NODE_DONE, f"C_{name.value}",
+        events.emit(EventType.NODE_START, f"E_{name.value}")
+        events.emit(EventType.NODE_DONE, f"E_{name.value}",
                     latency_ms=7800, confidence=confidence, cited=cites)
     events.emit(EventType.NODE_START, "E_macro")
     events.emit(EventType.NODE_FAILED, "E_macro", error=DROPPED["macro"])

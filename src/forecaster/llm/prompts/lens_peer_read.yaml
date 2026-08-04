@@ -1,5 +1,5 @@
 id: lens_peer_read
-version: 1
+version: 2
 model_tier: mid
 description: >
   Who in the same value chain has ALREADY reported this cycle, and what did they
@@ -50,3 +50,13 @@ user: |
   claim ids you relied on, and your confidence in [0,1]. In `reasoning`, state
   each peer, what they disclosed, and the transmission mechanism. Compact, no
   preamble.
+
+  The model these feed is a linked three-statement model, so answer in its
+  language as well as your own. Alongside the EPS and revenue, fill in ONLY the
+  drivers your evidence actually speaks to and leave every other one null:
+
+    - `revenue_growth`, if a peer's disclosure implies one for this company
+
+  All of them are FRACTIONS, never percentages: 0.62 for 62%. A percentage here
+  produces a company with 6200% margins whose balance sheet still ties, so it is
+  caught by range and the lens is ignored on that driver.

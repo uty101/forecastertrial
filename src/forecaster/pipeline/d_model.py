@@ -140,6 +140,7 @@ class ModelResult:
     # with every driver held at its historical level. Articulation without a
     # view — the slot the real forecast drops into.
     projected: list[Any] = field(default_factory=list)
+    projected_drivers: list[Any] = field(default_factory=list)
     base_fiscal_year: int | None = None
 
     @property
@@ -531,15 +532,26 @@ def build(
         skipped=skipped,
     )
 
+    # The forecast scaffold. Not fatal if it cannot be built — the statements,
+    # the reproduction check and the valuation are all still valid without it,
+    # and a filer whose balance sheet we cannot reassemble is a finding about the
+    # data rather than a reason to lose the rest of the stage.
     result.base_fiscal_year = project.last_complete_fiscal_year(history)
     if result.base_fiscal_year is not None:
         base_revenue_fy = project._fy_totals(history, result.base_fiscal_year, "revenue")
         if base_revenue_fy:
-            result.projected = project.project(
-                project.opening_from(history, result.base_fiscal_year),
-                base_revenue_fy,
-                project.seed_drivers(history, result.base_fiscal_year),
-            )
+            try:
+                result.projected_drivers = project.seed_drivers(
+                    history, result.base_fiscal_year
+                )
+                result.projected = project.project(
+                    project.opening_from(history, result.base_fiscal_year),
+                    base_revenue_fy,
+                    result.projected_drivers,
+                )
+            except ValueError as exc:
+                result.skipped.append(f"forecast columns: {exc}")
+                log.warning("projection_skipped", error=str(exc))
 
     result.dcf, result.dcf_note = _valuation(
         history, base, ratios, prices, inputs.shares_open, risk_free=risk_free

@@ -217,8 +217,14 @@ def test_a_cash_pile_earns_and_it_reaches_pre_tax_income():
     """A company sitting on tens of billions earns real money on it, and holding
     that at a guess moves pre-tax income by more than most lines an analyst
     argues about."""
+    # Equity moves with the cash: a company cannot acquire $49.5bn without the
+    # other side of the entry, and the projection now refuses an opening sheet
+    # that does not tie.
     rich = project.project(
-        project.OpeningBalances(**{**vars(OPENING), "cash": 50_000.0}),
+        project.OpeningBalances(
+            **{**vars(OPENING), "cash": 50_000.0,
+               "equity": OPENING.equity + 49_500.0}
+        ),
         1000.0, [_drivers(2027)],
     )[0]
     poor = _project(1)[0]

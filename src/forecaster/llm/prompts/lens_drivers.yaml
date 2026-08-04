@@ -1,5 +1,5 @@
 id: lens_drivers
-version: 1
+version: 2
 model_tier: mid
 description: >
   Bottom-up revenue build: units x ASP, subscribers x ARPU, comps x stores,
@@ -47,3 +47,13 @@ user: |
   and revenue, the claim ids you relied on, and your confidence in [0,1]. In
   `reasoning`, state the decomposition you used and each driver's assumed value
   and growth — compactly, no preamble.
+
+  The model these feed is a linked three-statement model, so answer in its
+  language as well as your own. Alongside the EPS and revenue, fill in ONLY the
+  drivers your evidence actually speaks to and leave every other one null:
+
+    - `revenue_growth` — year-over-year growth for the forecast period, which is the driver this lens exists to argue about
+
+  All of them are FRACTIONS, never percentages: 0.62 for 62%. A percentage here
+  produces a company with 6200% margins whose balance sheet still ties, so it is
+  caught by range and the lens is ignored on that driver.

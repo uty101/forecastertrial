@@ -35,6 +35,7 @@ from forecaster.data.loader import Loader
 from forecaster.eval import baseline as baseline_mod
 from forecaster.events import EventLog
 from forecaster.llm.client import LLMClient
+from forecaster.model import from_lenses, project
 from forecaster.pipeline import (
     b_acquire,
     c_structure,
@@ -191,6 +192,15 @@ def forecast(
             except (ValueError, KeyError) as exc:
                 log.warning("model_failed", error=f"{type(exc).__name__}: {exc}")
 
+    # The model joins the CORPUS rather than each lens's own question, so all six
+    # lenses read a byte-identical copy and it is charged once at write rates
+    # instead of six times at full rates. Attached here rather than passed to
+    # `c_structure.build` because the store is assembled at C and the model is
+    # not built until D — and the corpus is only materialised when a lens first
+    # asks for it, which is after both.
+    if model is not None:
+        store.model = d_model.to_block(model)
+
     ctx = LensContext(
         ticker=config.ticker,
         period=config.period,
@@ -204,7 +214,6 @@ def forecast(
         peers=acquired.peer_block,
         macro=acquired.macro_block,
         working_revenue=_working_revenue(acquired, consensus),
-        model=d_model.to_block(model) if model else "",
     )
 
     # ---- C: analyse --------------------------------------------------- #
@@ -239,6 +248,35 @@ def forecast(
         raise RuntimeError(
             f"every lens was dropped for {config.ticker} {config.period}. "
             f"Reasons: {dropped}. This is a pipeline failure, not a forecast."
+        )
+
+    # ---- E → D: the ensemble's view, folded back into the model --------- #
+    #
+    # The return leg. Stage D handed the lenses a model; this puts what they
+    # concluded back into it, so their view becomes a forecast column rather than
+    # a number sitting beside one.
+    #
+    # Deliberately AFTER V1: a lens whose citations failed has been dropped, and
+    # a dropped lens must not vote on a driver any more than it votes on the
+    # forecast. Deliberately BEFORE the judge, because the judge decides how far
+    # to move off consensus while the model needs the shape of the view
+    # underneath — different questions, different stages.
+    driver_report: dict = {}
+    if model is not None and model.projected:
+        model.projected_drivers, driver_report = from_lenses.apply(
+            [year.drivers for year in model.projected], lenses
+        )
+        model.projected = project.project(
+            project.opening_from(acquired.history, model.base_fiscal_year),
+            project._fy_totals(acquired.history, model.base_fiscal_year, "revenue"),
+            model.projected_drivers,
+        )
+        events.emit(
+            EventType.NODE_DONE, "D_model",
+            drivers_applied=sorted(driver_report.get("applied", {})),
+            drivers_silent=driver_report.get("silent", []),
+            drivers_rejected=len(driver_report.get("rejected", [])),
+            balanced=all(year.balanced for year in model.projected),
         )
 
     # ---- D: challenge -------------------------------------------------- #
@@ -365,6 +403,11 @@ def forecast(
         # because the model sheet has read them from there since before the
         # stage existed — it was rendering a key nothing ever wrote.
         "model": d_model.to_json(model) if model else None,
+        # What the ensemble actually moved, what it stayed silent on, and what
+        # was rejected out of range. Silence is not agreement with the historical
+        # ratio, and a model with one forecast driver and fifteen extrapolated
+        # ones must not read as a fully-formed view.
+        "model_drivers": driver_report,
         "statements": model.statements if model else None,
         "balance_check": model.balance_detail if model else None,
         "judge_rationale": judge_rationale,

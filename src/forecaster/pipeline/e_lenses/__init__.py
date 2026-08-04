@@ -1,4 +1,4 @@
-"""Layer C — seven lenses, blind to each other, fanned out in parallel.
+"""Layer E — seven lenses, blind to each other, fanned out in parallel.
 
 They share one cached prefix (the evidence corpus) and nothing else. The fan-out
 is threaded rather than async because the SDK call is blocking and the pool is
@@ -85,7 +85,7 @@ def run_all(
     def _one(item):
         name, fn = item
         if events:
-            events.emit(EventType.NODE_START, f"C_{name.value}")
+            events.emit(EventType.NODE_START, f"E_{name.value}")
         try:
             return name, fn(client, store, ctx, run_index), None
         except LensFailure as exc:
@@ -99,13 +99,13 @@ def run_all(
                 results.dropped[name.value] = error
                 log.warning("lens_dropped", lens=name.value, why=error)
                 if events:
-                    events.emit(EventType.NODE_FAILED, f"C_{name.value}", error=error)
+                    events.emit(EventType.NODE_FAILED, f"E_{name.value}", error=error)
             else:
                 outputs[name] = output
                 if events:
                     events.emit(
                         EventType.NODE_DONE,
-                        f"C_{name.value}",
+                        f"E_{name.value}",
                         eps=output.eps,
                         confidence=output.confidence,
                         latency_ms=output.latency_ms,
