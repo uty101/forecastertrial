@@ -59,6 +59,84 @@ export function ModelTabs({ active }: { active: StatementKey | "overview" }) {
   return <Tabs active={active} />;
 }
 
+function Toggle<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: ReadonlyArray<{ value: T; label: string }>;
+  value: T;
+  onChange: (next: T) => void;
+}) {
+  return (
+    <div className="flex items-center gap-px">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          onClick={() => onChange(option.value)}
+          className={[
+            "tech border px-3 py-1 text-[11px] transition-colors",
+            value === option.value
+              ? "border-accent bg-accent-soft text-ink"
+              : "border-rule text-ink-3 hover:text-ink-2",
+          ].join(" ")}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * All three statements on one screen, switched rather than stacked.
+ *
+ * The sub-pages exist so a cross-statement link has somewhere to land and so a
+ * statement can be deep-linked on its own. This is the other half: the model
+ * page should show the model, not three cards promising it behind a click.
+ *
+ * Switched, not stacked, for the same reason the sub-pages exist — three
+ * statements scrolling past each other is not how anyone reads one.
+ */
+export function StatementBrowser() {
+  const model = useModel();
+  const [statement, setStatement] = useState<StatementKey>("income");
+  const [view, setView] = useState<"annual" | "quarter">("annual");
+
+  if (!model?.grids) return null;
+  const grid = model.grids[view][statement];
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Toggle
+          value={statement}
+          onChange={setStatement}
+          options={STATEMENTS.map((s) => ({ value: s.key, label: s.nav }))}
+        />
+        <div className="flex items-center gap-3">
+          <Toggle
+            value={view}
+            onChange={setView}
+            options={[
+              { value: "annual", label: "fiscal years" },
+              { value: "quarter", label: "quarters" },
+            ]}
+          />
+          <Link
+            href={`/model/${STATEMENTS.find((s) => s.key === statement)!.slug}/`}
+            className="tech text-[11px] text-ink-3 no-underline hover:text-accent"
+          >
+            open as a sheet →
+          </Link>
+        </div>
+      </div>
+      <StatementGrid grid={grid} href="/model" />
+    </div>
+  );
+}
+
 export default function StatementSheet({
   statement,
 }: {

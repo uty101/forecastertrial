@@ -21,9 +21,8 @@ import {
   usd4,
   type QuarterCheck,
 } from "@/lib/data";
-import { ModelTabs, STATEMENTS } from "@/components/StatementSheet";
+import { ModelTabs, StatementBrowser } from "@/components/StatementSheet";
 import { sheetOf } from "@/lib/sheets";
-import Link from "next/link";
 
 /**
  * SHEET 04 — the model.
@@ -353,36 +352,11 @@ export default function ModelScreen() {
           />
         </div>
 
-        {model?.grids && (
-          // The three statements are their own sheets, because that is how a
-          // model is built: separate worksheets, and a reader navigates between
-          // them following a link. Stacking them on one page would turn the
-          // cross-statement links into scroll positions.
-          <div className="grid gap-3 sm:grid-cols-3">
-            {STATEMENTS.map((s) => {
-              const g = model.grids!.annual[s.key];
-              return (
-                <Link
-                  key={s.key}
-                  href={`/model/${s.slug}/`}
-                  className="group border border-rule bg-paper-2 px-4 py-3 no-underline transition-colors hover:border-accent"
-                >
-                  <div className="text-[13px] font-semibold text-ink group-hover:text-accent">
-                    {s.nav}
-                  </div>
-                  <div className="tech mt-1 text-[10.5px] text-ink-3">
-                    {g.rows.filter((r) => r.style !== "header").length} lines ·{" "}
-                    {g.periods.length} fiscal years ·{" "}
-                    {model.grids!.quarter[s.key].periods.length} quarters
-                  </div>
-                  <div className="tech mt-0.5 text-[10.5px] text-ink-3">
-                    {g.periods[0]?.label} → {g.periods[g.periods.length - 1]?.label}
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        )}
+        {/* The model page shows the model. The three sub-sheets exist so a
+            cross-statement link has somewhere to land and so a statement can be
+            deep-linked; they are not a click standing between a reader and the
+            numbers. */}
+        <StatementBrowser />
 
         {model && (
           <div className="grid gap-3 lg:grid-cols-[320px_minmax(0,1fr)]">
