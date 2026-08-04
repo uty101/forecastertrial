@@ -127,6 +127,15 @@
       "tier": "none"
     },
     {
+      "detail": "covered by test_dcf.py",
+      "id": "dcf",
+      "label": "DCF + reverse DCF",
+      "layer": "model",
+      "state": "built",
+      "tests": 19,
+      "tier": "none"
+    },
+    {
       "detail": "covered by test_d_model.py",
       "id": "model",
       "label": "3-statement stage + backtest",
@@ -388,16 +397,17 @@
     }
   ],
   "totals": {
-    "built": 25,
-    "components": 38,
+    "built": 26,
+    "components": 39,
     "gates_passed": 2,
     "gates_total": 6,
     "missing": 0,
     "partial": 13,
-    "tests": 217,
+    "tests": 236,
     "tests_by_file": {
       "tests/test_config.py": 4,
       "tests/test_d_model.py": 15,
+      "tests/test_dcf.py": 19,
       "tests/test_dossier.py": 5,
       "tests/test_exa_source.py": 6,
       "tests/test_extract.py": 6,

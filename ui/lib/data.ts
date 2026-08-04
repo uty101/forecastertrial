@@ -289,6 +289,66 @@ export interface GridPayload {
 
 export type GridSet = Record<"income" | "cashflow" | "balance", GridPayload>;
 
+/**
+ * The valuation.
+ *
+ * `provenance` is the field that matters. A DCF where the reader cannot tell the
+ * measured inputs from the invented ones is a number-shaped opinion, and the
+ * sheet colours every assumption by which it is.
+ */
+export interface DcfInput {
+  value: number;
+  provenance: "measured" | "assumed" | "market";
+  note: string;
+}
+
+export interface DcfYear {
+  year: number;
+  label: string;
+  growth: number;
+  revenue: number;
+  ebit: number;
+  nopat: number;
+  da: number;
+  capex: number;
+  delta_nwc: number;
+  fcf: number;
+  discount_factor: number;
+  present_value: number;
+}
+
+export interface DcfPayload {
+  ticker: string;
+  wacc: number;
+  cost_of_equity: number | null;
+  terminal_growth: number;
+  forecast_years: number | null;
+  mid_year: boolean | null;
+  rows: DcfYear[];
+  terminal_value: number;
+  pv_terminal: number;
+  pv_explicit: number;
+  terminal_share: number;
+  enterprise_value: number;
+  net_debt: number;
+  equity_value: number;
+  shares: number;
+  value_per_share: number;
+  market_price: number | null;
+  upside: number | null;
+  /** The reverse DCF: the growth the current price requires. The only output
+   *  here that makes no claim about fair value. */
+  implied_growth: number | null;
+  implied_note: string;
+  sensitivity: {
+    wacc_steps: number[];
+    growth_steps: number[];
+    values: Array<Array<number | null>>;
+  };
+  assumptions: Record<string, DcfInput>;
+  warnings: string[];
+}
+
 export interface ModelPayload {
   ticker: string;
   base_period: string;
@@ -310,6 +370,10 @@ export interface ModelPayload {
    *  commingling them is how the SUM(Q1:Q4) rule gets applied to a balance
    *  sheet, which produces a plausible number that means nothing. */
   grids?: Record<"quarter" | "annual", GridSet>;
+  /** Absent when the history is too thin to build one honestly; `dcf_note` then
+   *  says why, because a missing valuation is a finding rather than a blank. */
+  dcf?: DcfPayload | null;
+  dcf_note?: string;
 }
 
 export function useModel(): ModelPayload | null {

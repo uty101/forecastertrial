@@ -389,8 +389,21 @@ def model(
         typer.secho("this dossier carries no history", fg=typer.colors.RED)
         raise typer.Exit(1)
 
+    # The 10-year Treasury is the risk-free leg of the DCF's discount rate, and
+    # it is the one input in that build-up that can be measured rather than
+    # assumed. Without FRED the model says so instead of quietly standing one in.
+    risk_free = None
+    macro = build_macro_source()
+    if macro is not None:
+        lock = date.fromisoformat(manifest["as_of"])
+        series = macro.get_macro(["DGS10"], lock)
+        points = (series or {}).get("DGS10") or []
+        if points:
+            risk_free = points[-1].value / 100.0
+
     result = d_model.build(
-        acquired.history, prices=acquired.prices, shares_open=shares
+        acquired.history, prices=acquired.prices, shares_open=shares,
+        risk_free=risk_free,
     )
 
     payload = d_model.to_json(result)

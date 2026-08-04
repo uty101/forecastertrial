@@ -30,10 +30,14 @@ export const STATEMENTS = [
 
 export type StatementKey = (typeof STATEMENTS)[number]["key"];
 
-function Tabs({ active }: { active: StatementKey | "overview" }) {
+function Tabs({ active }: { active: StatementKey | "overview" | "dcf" }) {
   const tabs = [
     { slug: "", nav: "Overview", key: "overview" as const },
     ...STATEMENTS.map((s) => ({ slug: s.slug, nav: s.nav, key: s.key })),
+    // Not a statement. It sits here because it is built from the same three and
+    // because the reverse figure is the only thing on any of these sheets that
+    // states what the market is assuming rather than what the company reported.
+    { slug: "dcf", nav: "DCF", key: "dcf" as const },
   ];
   return (
     <nav className="flex flex-wrap items-center gap-px border-b border-rule">
@@ -55,7 +59,11 @@ function Tabs({ active }: { active: StatementKey | "overview" }) {
   );
 }
 
-export function ModelTabs({ active }: { active: StatementKey | "overview" }) {
+export function ModelTabs({
+  active,
+}: {
+  active: StatementKey | "overview" | "dcf";
+}) {
   return <Tabs active={active} />;
 }
 

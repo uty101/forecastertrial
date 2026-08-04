@@ -51,6 +51,7 @@ import structlog
 
 from forecaster.data.history import History
 from forecaster.data.prices import PriceBar, vwap
+from forecaster.model import dcf
 from forecaster.model.inputs import (
     RATIO_WINDOW,
     claim_for,
@@ -130,6 +131,11 @@ class ModelResult:
     claims: list[Claim] = field(default_factory=list)
     checks: list[QuarterCheck] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
+    # The valuation, and why it is here: run backwards it states what the current
+    # price assumes over a decade, which is a claim about consensus rather than
+    # about fair value. None when the history is too thin to build one honestly.
+    dcf: dict[str, Any] | None = None
+    dcf_note: str = ""
 
     @property
     def median_abs_eps_error(self) -> float | None:
@@ -173,6 +179,140 @@ def _avg_price(prices: list[PriceBar] | None, fallback: float | None = None) -> 
 def _actual(history: History, key: str, period: str) -> float | None:
     observation = history.get(key, period)
     return observation.value if observation else None
+
+
+def _trailing(history: History, key: str, base: str, quarters: int = 4
+              ) -> float | None:
+    """The last N quarters of a flow, summed. None unless all N are present.
+
+    A partial trailing year understates every ratio built on it, and the DCF
+    multiplies that error by ten years and a terminal value.
+    """
+    periods = history.periods()
+    if base not in periods:
+        return None
+    window = periods[max(0, periods.index(base) - quarters + 1): periods.index(base) + 1]
+    values = [_actual(history, key, p) for p in window]
+    if len(values) < quarters or any(v is None for v in values):
+        return None
+    return sum(values)
+
+
+def _dcf_assumptions(
+    history: History,
+    base: str,
+    ratios: dict[str, float],
+    risk_free: float | None = None,
+    beta: float | None = None,
+    equity_risk_premium: float | None = None,
+    terminal_growth: float | None = None,
+    growth_override: float | None = None,
+) -> tuple[dcf.Assumptions, float] | None:
+    """Build the DCF's inputs from filings, declaring what could not be measured.
+
+    Returns (assumptions, trailing revenue) or None when the history is too thin
+    to build one honestly. Thin means thin — a DCF assembled from three quarters
+    and four assumptions is not a cheaper DCF, it is a different number.
+    """
+    revenue = _trailing(history, "revenue", base)
+    if not revenue:
+        return None
+
+    operating_income = _trailing(history, "operating_income", base)
+    if operating_income is None:
+        return None
+
+    # Growth from the company's own realised trajectory, not from a view. The
+    # DCF's job here is to state what the price assumes; seeding it with someone's
+    # forecast would make it state that instead.
+    periods = history.periods()
+    prior_base = periods[periods.index(base) - 4] if periods.index(base) >= 4 else None
+    prior_revenue = _trailing(history, "revenue", prior_base) if prior_base else None
+    if growth_override is not None:
+        growth = dcf.Input(growth_override, "assumed", "supplied by the caller")
+    elif prior_revenue:
+        realised = revenue / prior_revenue - 1
+        # Capped. NVDA's trailing growth has been over 100%; compounding that for
+        # a decade values the company above world GDP, which is arithmetic
+        # telling you the input is wrong rather than the company being priceless.
+        capped = min(realised, 0.35)
+        growth = dcf.Input(
+            capped, "measured",
+            f"trailing-year revenue growth of {realised:.1%}"
+            + (f", capped at {capped:.0%} for a ten-year compound" if capped < realised
+               else ""),
+        )
+    else:
+        growth = dcf.Input(0.05, "assumed", "no prior year to measure growth from")
+
+    tax = _trailing(history, "tax", base)
+    pretax = _trailing(history, "pretax_income", base)
+    tax_rate = (
+        dcf.Input(max(0.0, min(tax / pretax, 0.45)), "measured",
+                  "trailing effective rate")
+        if tax is not None and pretax
+        else dcf.Input(0.21, "assumed", "no trailing tax history — US statutory")
+    )
+
+    da = _trailing(history, "depreciation", base)
+    capex = _trailing(history, "capex", base)
+    receivables = _actual(history, "receivables", base) or 0.0
+    inventory = _actual(history, "inventory", base) or 0.0
+    payables = _actual(history, "payables", base) or 0.0
+
+    interest = _trailing(history, "interest_expense", base)
+    debt = (_actual(history, "long_term_debt", base) or 0.0) + (
+        _actual(history, "short_term_debt", base) or 0.0
+    )
+    cost_of_debt = (
+        dcf.Input(min(abs(interest) / debt, 0.20), "measured",
+                  "trailing interest expense over the debt balance")
+        if interest and debt
+        else dcf.Input(0.05, "assumed", "no interest expense or no debt to measure")
+    )
+
+    assumptions = dcf.Assumptions(
+        risk_free=(
+            dcf.Input(risk_free, "market", "10-year Treasury at the lock date")
+            if risk_free is not None
+            else dcf.Input(dcf.DEFAULT_RISK_FREE, "assumed",
+                           "FRED unavailable — a standing long-rate assumption")
+        ),
+        equity_risk_premium=dcf.Input(
+            equity_risk_premium if equity_risk_premium is not None
+            else dcf.DEFAULT_EQUITY_RISK_PREMIUM,
+            "assumed", "an assumption in every model ever built",
+        ),
+        beta=dcf.Input(
+            beta if beta is not None else dcf.DEFAULT_BETA, "assumed",
+            "not measured: beta needs a regression against an index return series, "
+            "and this system's prices are deliberately unadjusted for splits, "
+            "which makes them wrong for returns",
+        ),
+        cost_of_debt=cost_of_debt,
+        tax_rate=tax_rate,
+        revenue_growth=growth,
+        ebit_margin=dcf.Input(operating_income / revenue, "measured",
+                              "trailing operating income over revenue"),
+        da_pct=dcf.Input((da or 0.0) / revenue, "measured" if da else "assumed",
+                         "trailing D&A over revenue" if da else "no D&A reported"),
+        capex_pct=dcf.Input(
+            abs(capex or 0.0) / revenue, "measured" if capex else "assumed",
+            "trailing capital expenditure over revenue" if capex
+            else "no capex reported",
+        ),
+        nwc_pct=dcf.Input(
+            (receivables + inventory - payables) / revenue, "measured",
+            "receivables plus inventory less payables, over revenue",
+        ),
+        terminal_growth=dcf.Input(
+            terminal_growth if terminal_growth is not None
+            else dcf.DEFAULT_TERMINAL_GROWTH,
+            "assumed",
+            "above long-run nominal GDP the company eventually becomes the economy",
+        ),
+    )
+    return assumptions, revenue
 
 
 def _backtest(
@@ -248,6 +388,68 @@ def _backtest(
     return checks, skipped
 
 
+def _valuation(
+    history: History,
+    base: str,
+    ratios: dict[str, float],
+    prices: list[PriceBar] | None,
+    shares: float | None,
+    risk_free: float | None = None,
+) -> tuple[dict[str, Any] | None, str]:
+    """The DCF, or a plain statement of why there isn't one.
+
+    A DCF is the one thing in this stage that does not help the forecast, and it
+    is included for the reverse figure: what the current price assumes over a
+    decade. That is a claim about consensus, which is the thing the rest of the
+    system exists to find weakness in.
+
+    Never raises. A valuation that cannot be built honestly is a note, not a
+    failure — the quarterly model behind it is unaffected either way.
+    """
+    if not shares or shares <= 0:
+        return None, "no diluted share count, so there is no per-share value"
+
+    assembled = _dcf_assumptions(history, base, ratios, risk_free=risk_free)
+    if assembled is None:
+        return None, (
+            "not enough trailing history: a DCF built from a partial year and "
+            "four assumptions is not a cheaper DCF, it is a different number"
+        )
+    assumptions, revenue = assembled
+
+    # The LAST TRADE, not the volume-weighted average. The reverse DCF asks what
+    # today's price assumes; a two-year VWAP would answer a question about 2024.
+    last = next((bar for bar in reversed(prices or []) if bar.complete()), None)
+    market_price = last.close if last else None
+
+    net_debt = (
+        (_actual(history, "long_term_debt", base) or 0.0)
+        + (_actual(history, "short_term_debt", base) or 0.0)
+        - (_actual(history, "cash", base) or 0.0)
+        - (_actual(history, "short_term_investments", base) or 0.0)
+    )
+
+    try:
+        valuation = dcf.value(
+            history.ticker, revenue, assumptions, net_debt, shares,
+            market_price=market_price,
+        )
+    except ValueError as exc:
+        return None, str(exc)
+
+    implied = (
+        dcf.implied_growth(
+            history.ticker, revenue, assumptions, net_debt, shares, market_price
+        )
+        if market_price
+        else (None, "no market price, so there is nothing to invert")
+    )
+    grid = dcf.sensitivity(
+        history.ticker, revenue, assumptions, net_debt, shares, market_price
+    )
+    return dcf.to_json(valuation, implied, grid), dcf.to_block(valuation, implied)
+
+
 def build(
     history: History,
     prices: list[PriceBar] | None = None,
@@ -255,6 +457,7 @@ def build(
     avg_price: float | None = None,
     window: int = RATIO_WINDOW,
     backtest_quarters: int = BACKTEST_QUARTERS,
+    risk_free: float | None = None,
 ) -> ModelResult:
     """Build the model and measure it. Deterministic — no model calls.
 
@@ -321,6 +524,10 @@ def build(
         claims=list((inputs.claims or {}).values()),
         checks=checks,
         skipped=skipped,
+    )
+
+    result.dcf, result.dcf_note = _valuation(
+        history, base, ratios, prices, inputs.shares_open, risk_free=risk_free
     )
 
     log.info(
@@ -403,6 +610,8 @@ def to_json(result: ModelResult) -> dict[str, Any]:
         ],
         "median_abs_eps_error": result.median_abs_eps_error,
         "bias": result.bias,
+        "dcf": result.dcf,
+        "dcf_note": result.dcf_note,
         # As prominent as what worked.
         "skipped": result.skipped,
     }
