@@ -10,7 +10,6 @@ import {
   SheetFooter,
   Stat,
   StatusPanel,
-  SyntheticBanner,
 } from "@/components/blueprint";
 import {
   money,
@@ -339,15 +338,13 @@ export default function ModelScreen() {
       }
     >
       <div className="space-y-6">
+        {/* No fixture banner here. The statements on this sheet are built from
+            filings, so a warning across the top of it was describing a file the
+            reader is not looking at. What the fixture would have contaminated —
+            the readout, the claim counts, the GAAP bridge — is withheld instead,
+            and each absence says why where the absence is. That is a more useful
+            place for the warning than a strip above everything. */}
         <ModelTabs active="overview" />
-        <SyntheticBanner
-          trace={result?.trace}
-          scope={
-            mixed
-              ? `The statements below are ${model?.ticker} as filed. Only the GAAP bridge and the citation counts come from the fixture, and they are withheld here rather than shown against another company's numbers.`
-              : undefined
-          }
-        />
 
         <div className="grid gap-6 lg:grid-cols-[1fr_270px]">
           <Lede>
