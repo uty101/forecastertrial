@@ -275,6 +275,10 @@ export interface GridPeriod {
   fp: string;
   quarters: number;
   complete: boolean;
+  /** A projected column. The A/E boundary is the single most important division
+   *  on a model sheet — a reader has to know without looking twice where the
+   *  filings stop and the assumptions start. */
+  estimate?: boolean;
 }
 
 export interface GridPayload {
@@ -374,6 +378,21 @@ export interface ModelPayload {
    *  says why, because a missing valuation is a finding rather than a blank. */
   dcf?: DcfPayload | null;
   dcf_note?: string;
+  base_fiscal_year?: number | null;
+  /** The forecast side: linked, balance-checked fiscal years with every driver
+   *  held at its historical level. Articulation without a view. */
+  projected?: ProjectedYear[];
+}
+
+export interface ProjectedYear {
+  fy: number;
+  label: string;
+  balanced: boolean;
+  balance_residual: number;
+  income: Record<string, number>;
+  cashflow: Record<string, number>;
+  balance: Record<string, number>;
+  drivers: Record<string, { value: number; origin: string; note: string }>;
 }
 
 export function useModel(): ModelPayload | null {

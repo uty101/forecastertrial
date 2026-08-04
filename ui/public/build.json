@@ -136,6 +136,15 @@
       "tier": "none"
     },
     {
+      "detail": "covered by test_project.py",
+      "id": "project",
+      "label": "Forecast scaffold to 2035",
+      "layer": "model",
+      "state": "built",
+      "tests": 20,
+      "tier": "none"
+    },
+    {
       "detail": "covered by test_d_model.py",
       "id": "model",
       "label": "3-statement stage + backtest",
@@ -397,13 +406,13 @@
     }
   ],
   "totals": {
-    "built": 26,
-    "components": 39,
+    "built": 27,
+    "components": 40,
     "gates_passed": 2,
     "gates_total": 6,
     "missing": 0,
     "partial": 13,
-    "tests": 236,
+    "tests": 256,
     "tests_by_file": {
       "tests/test_config.py": 4,
       "tests/test_d_model.py": 15,
@@ -419,6 +428,7 @@
       "tests/test_model_inputs.py": 9,
       "tests/test_point_in_time.py": 5,
       "tests/test_prices.py": 8,
+      "tests/test_project.py": 20,
       "tests/test_reconciler.py": 17,
       "tests/test_sec_acquisition.py": 13,
       "tests/test_sponsor_source.py": 14,

@@ -96,17 +96,28 @@ function Cell({
   row,
   period,
   filings,
+  boundary,
 }: {
   cell: GridCell | undefined;
   row: GridRow;
   period: GridPeriod;
   filings: GridPayload["filings"];
+  /** First forecast column: carries the rule dividing reported from projected. */
+  boundary: boolean;
 }) {
-  if (row.style === "header") return <td />;
+  const zone = [
+    boundary ? "border-l-2 border-l-accent" : "",
+    period.estimate ? "bg-accent-soft/40" : "",
+  ].join(" ");
+  if (row.style === "header") return <td className={zone} />;
   if (!cell || cell.v == null) {
     // A dash, not a zero. "Not reported" and "reported as nothing" are different
     // facts and a model that renders them identically has lost one of them.
-    return <td className="num px-2 py-[3px] text-right text-ink-3">&mdash;</td>;
+    return (
+      <td className={`num px-2 py-[3px] text-right text-ink-3 ${zone}`}>
+        &mdash;
+      </td>
+    );
   }
 
   const origin = cell.o ?? "derived";
@@ -137,6 +148,7 @@ function Cell({
             : "text-ink-3"
           : ORIGIN_CLASS[origin],
         period.kind === "annual" && !period.complete ? "opacity-55" : "",
+        zone,
       ].join(" ")}
       title={title}
     >
@@ -171,6 +183,11 @@ export default function StatementGrid({
           <span className="text-model-actual">as reported</span>
           <span className="text-ink">calculated</span>
           <span className="text-model-link">linked</span>
+          {grid.periods.some((p) => p.estimate) && (
+            <span className="border-l border-accent pl-2 text-accent">
+              projected
+            </span>
+          )}
         </div>
       </div>
 
@@ -181,7 +198,7 @@ export default function StatementGrid({
               <th className="sticky left-0 z-10 min-w-[280px] bg-paper-2 px-3 py-1.5 text-left font-normal tech text-[10px] text-ink-3">
                 {grid.periods[0]?.kind === "annual" ? "fiscal year" : "quarter"}
               </th>
-              {grid.periods.map((period) => (
+              {grid.periods.map((period, i) => (
                 <th
                   key={period.id}
                   className={[
@@ -189,6 +206,13 @@ export default function StatementGrid({
                     period.kind === "annual" && !period.complete
                       ? "text-ink-3 italic"
                       : "text-ink",
+                    // The A/E boundary. A model sheet has exactly one division
+                    // that matters more than the others, and this is it: where
+                    // the filings stop and the assumptions start.
+                    period.estimate && !grid.periods[i - 1]?.estimate
+                      ? "border-l-2 border-l-accent"
+                      : "",
+                    period.estimate ? "bg-accent-soft/40" : "",
                   ].join(" ")}
                   // A part-finished year that renders identically to a full one
                   // is how a 25% figure gets read as a 100% one.
@@ -249,13 +273,16 @@ export default function StatementGrid({
                     </Link>
                   ))}
                 </th>
-                {grid.periods.map((period) => (
+                {grid.periods.map((period, i) => (
                   <Cell
                     key={period.id}
                     cell={row.cells[period.id]}
                     row={row}
                     period={period}
                     filings={grid.filings}
+                    boundary={
+                      Boolean(period.estimate) && !grid.periods[i - 1]?.estimate
+                    }
                   />
                 ))}
               </tr>

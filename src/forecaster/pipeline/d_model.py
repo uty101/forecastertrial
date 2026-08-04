@@ -51,7 +51,7 @@ import structlog
 
 from forecaster.data.history import History
 from forecaster.data.prices import PriceBar, vwap
-from forecaster.model import dcf
+from forecaster.model import dcf, project
 from forecaster.model.inputs import (
     RATIO_WINDOW,
     claim_for,
@@ -136,6 +136,11 @@ class ModelResult:
     # about fair value. None when the history is too thin to build one honestly.
     dcf: dict[str, Any] | None = None
     dcf_note: str = ""
+    # The forecast side of the model: nine linked, balance-checked fiscal years
+    # with every driver held at its historical level. Articulation without a
+    # view — the slot the real forecast drops into.
+    projected: list[Any] = field(default_factory=list)
+    base_fiscal_year: int | None = None
 
     @property
     def median_abs_eps_error(self) -> float | None:
@@ -526,6 +531,16 @@ def build(
         skipped=skipped,
     )
 
+    result.base_fiscal_year = project.last_complete_fiscal_year(history)
+    if result.base_fiscal_year is not None:
+        base_revenue_fy = project._fy_totals(history, result.base_fiscal_year, "revenue")
+        if base_revenue_fy:
+            result.projected = project.project(
+                project.opening_from(history, result.base_fiscal_year),
+                base_revenue_fy,
+                project.seed_drivers(history, result.base_fiscal_year),
+            )
+
     result.dcf, result.dcf_note = _valuation(
         history, base, ratios, prices, inputs.shares_open, risk_free=risk_free
     )
@@ -612,6 +627,8 @@ def to_json(result: ModelResult) -> dict[str, Any]:
         "bias": result.bias,
         "dcf": result.dcf,
         "dcf_note": result.dcf_note,
+        "base_fiscal_year": result.base_fiscal_year,
+        "projected": project.to_json(result.projected),
         # As prominent as what worked.
         "skipped": result.skipped,
     }

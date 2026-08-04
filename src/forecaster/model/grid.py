@@ -341,6 +341,10 @@ class Period:
     # error that survives every other check.
     quarters: int = 4
     complete: bool = True
+    # A projected column, not a reported one. The A/E boundary is the single
+    # most important division on a model sheet — a reader has to know without
+    # looking twice where the filings stop and the assumptions start.
+    estimate: bool = False
 
 
 _PERIOD = re.compile(r"^(\d{4})Q([1-4])$")
@@ -503,9 +507,63 @@ def _days(balance: float | None, flow: float | None, period: Period) -> float | 
     return abs(balance) / abs(flow) * days
 
 
-def build(history: History, kind: Literal["quarter", "annual"] = "quarter") -> dict[
-    str, Grid
-]:
+def _append_forecast(
+    grids: dict[str, Grid],
+    projected: list[Any],
+) -> None:
+    """Bolt the forecast columns onto the right of the reported ones.
+
+    Same rows, same order, same sheet. That is the point: a forecast column is a
+    formula over the identical line items, and putting it on a separate table
+    would break the one comparison a reader makes constantly — this year against
+    last year, across the boundary.
+
+    Projected cells are `derived`, never `actual`. Nothing here was reported by
+    anybody, and the colour code has to keep meaning what it means or the
+    historical columns stop being trustworthy too.
+    """
+    statement_key = {"income": "income", "balance": "balance", "cashflow": "cashflow"}
+    forecast_years = {year.fy for year in projected}
+    for name, grid in grids.items():
+        index = {row.id: row for row in grid.rows}
+        # The current fiscal year is usually BOTH: a quarter or two reported and
+        # the rest forecast. Two columns labelled FY2027 is worse than either
+        # choice, so the estimate supersedes the part-finished actual — whose
+        # flow lines were one quarter of a year anyway. The reported quarter is
+        # still there on the quarterly view, which is where it belongs.
+        grid.periods = [
+            period for period in grid.periods
+            if not (period.kind == "annual" and period.fy in forecast_years)
+        ]
+        for year in projected:
+            period = Period(
+                # A distinct id, so a forecast column can never overwrite a
+                # reported one by key collision.
+                id=f"FY{year.fy}E", label=year.label, kind="annual",
+                fy=year.fy, fp="FY", quarters=4, complete=True, estimate=True,
+            )
+            grid.periods.append(period)
+            values: dict[str, float] = getattr(year, statement_key[name])
+            for row_id, value in values.items():
+                row = index.get(row_id)
+                if row is None:
+                    continue
+                row.cells[period.id] = Cell(
+                    value=value,
+                    origin="derived",
+                    note=(
+                        "projected — every driver held at its historical level"
+                        if year.drivers.all_held()
+                        else "projected"
+                    ),
+                )
+
+
+def build(
+    history: History,
+    kind: Literal["quarter", "annual"] = "quarter",
+    projected: list[Any] | None = None,
+) -> dict[str, Grid]:
     """The three statements as laid-out grids, from reported history alone.
 
     No forecast, no assumptions, no model call — this is what the company filed,
@@ -568,7 +626,9 @@ def build(history: History, kind: Literal["quarter", "annual"] = "quarter") -> d
             statement=statement,
             title=TITLES[statement],
             ticker=history.ticker,
-            periods=periods,
+            # A COPY. All three grids shared one list, so appending forecast
+            # columns to each in turn appended them three times over.
+            periods=list(periods),
             rows=[r for r in rows if r.style in ("header", "check") or not r.empty()],
             annual_variances={
                 item: {fy: tuple(pair) for fy, pair in years.items()}
@@ -577,8 +637,16 @@ def build(history: History, kind: Literal["quarter", "annual"] = "quarter") -> d
             },
         )
 
+    # Forecast columns only make sense against fiscal years. Bolting nine annual
+    # projections onto seventy-four quarterly columns would put a year and a
+    # quarter side by side in the same row, which is the one comparison a
+    # statement layout must never invite.
+    if projected and kind == "annual":
+        _append_forecast(grids, projected)
+
     log.info(
         "grid_built", ticker=history.ticker, kind=kind, periods=len(periods),
+        forecast=len(projected or []) if kind == "annual" else 0,
         rows={k: len(g.rows) for k, g in grids.items()},
     )
     return grids

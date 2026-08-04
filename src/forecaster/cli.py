@@ -414,7 +414,9 @@ def model(
     # balance sheet.
     payload["grids"] = {
         "quarter": grid.to_json(grid.build(acquired.history, "quarter")),
-        "annual": grid.to_json(grid.build(acquired.history, "annual")),
+        "annual": grid.to_json(
+            grid.build(acquired.history, "annual", projected=result.projected)
+        ),
     }
     out.parent.mkdir(parents=True, exist_ok=True)
     # Compact, not indented. The UI fetches this whole file on page load and

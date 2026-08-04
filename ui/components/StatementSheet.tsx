@@ -210,7 +210,11 @@ export default function StatementSheet({
                 balance-sheet lines are the closing balance. Never both. Which is
                 why almost nothing on an annual income statement is{" "}
                 <span className="text-model-actual">as reported</span> — we hold
-                the quarters, so the year is reconstructed from them.
+                the quarters, so the year is reconstructed from them. Columns
+                right of the rule are{" "}
+                <span className="text-accent">projected</span>: linked and
+                balance-checked, with every driver held at its historical level
+                until a forecast replaces it.
               </>
             ) : (
               `${grid.periods.length} quarters, as filed. Oldest left.`
