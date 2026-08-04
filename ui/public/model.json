@@ -1,0 +1,416 @@
+{
+  "ticker": "NVDA",
+  "base_period": "2027Q1",
+  "forecast_period": "2027Q2",
+  "balanced": true,
+  "balance_detail": "balance sheet balances (residual 0.00 on 126,135,817,294)",
+  "statements": {
+    "income_statement": [
+      {
+        "key": "revenue",
+        "label": "Revenue",
+        "unit": "USD",
+        "value": 81615000000.0,
+        "is_input": true,
+        "sourced": true,
+        "source_uri": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000052/",
+        "quote": "Revenue=81615000000.0 for the quarter ended 2026-04-26 (form 10-Q, accn 0001045810-26-000052)",
+        "note": null
+      },
+      {
+        "key": "gross_profit",
+        "label": "Gross profit",
+        "unit": "USD",
+        "value": 60382173596.981415,
+        "is_input": false,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": null
+      },
+      {
+        "key": "opex",
+        "label": "Operating expense",
+        "unit": "USD",
+        "value": 9384123696.54535,
+        "is_input": true,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": "median opex/revenue of 0.1150 over 8 quarters to 2027Q1, applied to forecast revenue"
+      },
+      {
+        "key": "operating_income",
+        "label": "Operating income",
+        "unit": "USD",
+        "value": 50998049900.436066,
+        "is_input": false,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": null
+      },
+      {
+        "key": "other_income",
+        "label": "Other income",
+        "unit": "USD",
+        "value": 1554500000.0,
+        "is_input": true,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": "median level over 8 quarters to 2027Q1"
+      },
+      {
+        "key": "pretax_income",
+        "label": "Pre-tax income",
+        "unit": "USD",
+        "value": 52552549900.436066,
+        "is_input": false,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": null
+      },
+      {
+        "key": "tax",
+        "label": "Tax",
+        "unit": "USD",
+        "value": 7637739838.052059,
+        "is_input": false,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": null
+      },
+      {
+        "key": "net_income",
+        "label": "Net income",
+        "unit": "USD",
+        "value": 44914810062.384,
+        "is_input": false,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": null
+      },
+      {
+        "key": "shares_diluted",
+        "label": "Diluted shares, weighted average",
+        "unit": "shares",
+        "value": 24357068958.97981,
+        "is_input": false,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": null
+      },
+      {
+        "key": "eps",
+        "label": "Diluted EPS",
+        "unit": "USD/share",
+        "value": 1.844015391918702,
+        "is_input": false,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": null
+      }
+    ],
+    "cash_flow": [
+      {
+        "key": "net_income",
+        "label": "Net income",
+        "unit": "USD",
+        "value": 44914810062.384,
+        "is_input": false,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": null
+      },
+      {
+        "key": "da",
+        "label": "Depreciation & amortisation",
+        "unit": "USD",
+        "value": 1119395619.1981666,
+        "is_input": true,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": "median depreciation/revenue of 0.0137 over 8 quarters to 2027Q1, applied to forecast revenue"
+      },
+      {
+        "key": "working_capital_change",
+        "label": "Change in working capital",
+        "unit": "USD",
+        "value": -754001002.4228115,
+        "is_input": false,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": null
+      },
+      {
+        "key": "cfo",
+        "label": "Cash from operations",
+        "unit": "USD",
+        "value": 45280204679.159355,
+        "is_input": false,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": null
+      },
+      {
+        "key": "capex",
+        "label": "Capital expenditure",
+        "unit": "USD",
+        "value": 2253802503.7752943,
+        "is_input": true,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": "median capex/revenue of 0.0276 over 8 quarters to 2027Q1, applied to forecast revenue"
+      },
+      {
+        "key": "cfi",
+        "label": "Cash from investing",
+        "unit": "USD",
+        "value": -2253802503.7752943,
+        "is_input": false,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": null
+      },
+      {
+        "key": "buyback_spend",
+        "label": "Buyback spend",
+        "unit": "USD",
+        "value": 10358500000.0,
+        "is_input": true,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": "median spend over 8 quarters to 2027Q1"
+      },
+      {
+        "key": "dividends",
+        "label": "Dividends paid",
+        "unit": "USD",
+        "value": 244000000.0,
+        "is_input": true,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": "median paid over 8 quarters to 2027Q1"
+      },
+      {
+        "key": "cff",
+        "label": "Cash from financing",
+        "unit": "USD",
+        "value": -10602500000.0,
+        "is_input": false,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": null
+      },
+      {
+        "key": "cash_open",
+        "label": "Cash, opening",
+        "unit": "USD",
+        "value": 13237000000.0,
+        "is_input": true,
+        "sourced": true,
+        "source_uri": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000052/",
+        "quote": "Cash and equivalents=13237000000.0 for the quarter ended 2026-04-26 (form 10-Q, accn 0001045810-26-000052)",
+        "note": null
+      },
+      {
+        "key": "cash_close",
+        "label": "Cash, closing",
+        "unit": "USD",
+        "value": 45660902175.38406,
+        "is_input": false,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": null
+      }
+    ],
+    "balance_sheet": [
+      {
+        "key": "cash_close",
+        "label": "Cash, closing",
+        "unit": "USD",
+        "value": 45660902175.38406,
+        "is_input": false,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": null
+      },
+      {
+        "key": "receivables_close",
+        "label": "Receivables, closing",
+        "unit": "USD",
+        "value": 43621367381.14543,
+        "is_input": false,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": null
+      },
+      {
+        "key": "inventory_close",
+        "label": "Inventory, closing",
+        "unit": "USD",
+        "value": 23316140853.095146,
+        "is_input": false,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": null
+      },
+      {
+        "key": "ppe_net_close",
+        "label": "Net PP&E, closing",
+        "unit": "USD",
+        "value": 13537406884.57713,
+        "is_input": false,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": null
+      },
+      {
+        "key": "total_assets",
+        "label": "Total assets",
+        "unit": "USD",
+        "value": 126135817294.20177,
+        "is_input": false,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": null
+      },
+      {
+        "key": "payables_close",
+        "label": "Payables, closing",
+        "unit": "USD",
+        "value": 12773507231.817766,
+        "is_input": false,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": null
+      },
+      {
+        "key": "debt",
+        "label": "Debt",
+        "unit": "USD",
+        "value": 7470000000.0,
+        "is_input": true,
+        "sourced": true,
+        "source_uri": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000052/",
+        "quote": "Long-term debt=7470000000.0 for the quarter ended 2026-04-26 (form 10-Q, accn 0001045810-26-000052)",
+        "note": null
+      },
+      {
+        "key": "equity_close",
+        "label": "Equity, closing",
+        "unit": "USD",
+        "value": 105892310062.384,
+        "is_input": false,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": null
+      },
+      {
+        "key": "total_liabilities_equity",
+        "label": "Total liabilities & equity",
+        "unit": "USD",
+        "value": 126135817294.20177,
+        "is_input": false,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": null
+      },
+      {
+        "key": "balance_check",
+        "label": "Assets less liabilities & equity",
+        "unit": "USD",
+        "value": 0.0,
+        "is_input": false,
+        "sourced": false,
+        "source_uri": null,
+        "quote": null,
+        "note": "must be zero \u2014 a non-zero value means one of the statement links is broken, and a broken link produces a plausible-looking EPS"
+      }
+    ]
+  },
+  "ratios": {
+    "gross_margin": 0.7398416173127662,
+    "tax_rate": 0.14533528539570795,
+    "opex": 9384123696.54535,
+    "da": 1119395619.1981666,
+    "capex": 2253802503.7752943,
+    "opex_pct_revenue": 0.11498037978981007,
+    "da_pct_revenue": 0.013715562325530437,
+    "capex_pct_revenue": 0.02761505242633455
+  },
+  "notes": {
+    "gross_margin": "median of 8 quarters to 2027Q1; no caller view supplied",
+    "opex": "median opex/revenue of 0.1150 over 8 quarters to 2027Q1, applied to forecast revenue",
+    "da": "median depreciation/revenue of 0.0137 over 8 quarters to 2027Q1, applied to forecast revenue",
+    "tax_rate": "median effective rate over 8 quarters to 2027Q1",
+    "other_income": "median level over 8 quarters to 2027Q1",
+    "equity_open": "residual: the model's balance sheet carries cash, receivables, inventory and net PP&E against payables, debt and equity, so equity absorbs every line it does not carry. Reported equity was 195,474,000,000",
+    "capex": "median capex/revenue of 0.0276 over 8 quarters to 2027Q1, applied to forecast revenue",
+    "delta_receivables": "receivables held at 0.5345 of revenue (median of 8 quarters to 2027Q1); the change follows from forecast revenue",
+    "delta_inventory": "inventory held at 0.2857 of revenue (median of 8 quarters to 2027Q1); the change follows from forecast revenue",
+    "delta_payables": "payables held at 0.1565 of revenue (median of 8 quarters to 2027Q1); the change follows from forecast revenue",
+    "buyback_spend": "median spend over 8 quarters to 2027Q1",
+    "dividends": "median paid over 8 quarters to 2027Q1",
+    "avg_price": "caller-supplied average execution price of 152.64. Not derivable from filings \u2014 a market data source owns this number",
+    "sbc_dilution": "assumed zero \u2014 not derivable from the cash flow statement"
+  },
+  "checks": [
+    {
+      "period": "2026Q4",
+      "modelled_eps": 1.5065395852064454,
+      "actual_eps": null,
+      "modelled_net_income": 36841351549.18373,
+      "actual_net_income": 42960000000.0,
+      "eps_error": null,
+      "balanced": true
+    },
+    {
+      "period": "2026Q3",
+      "modelled_eps": 1.2554172385304683,
+      "actual_eps": 1.3,
+      "modelled_net_income": 30765920241.051846,
+      "actual_net_income": 31910000000.0,
+      "eps_error": -0.03429443189963982,
+      "balanced": true
+    },
+    {
+      "period": "2026Q2",
+      "modelled_eps": 1.0210718764109477,
+      "actual_eps": 1.08,
+      "modelled_net_income": 25104685311.13517,
+      "actual_net_income": 26422000000.0,
+      "eps_error": -0.05456307739727075,
+      "balanced": true
+    }
+  ],
+  "median_abs_eps_error": 0.04442875464845529,
+  "bias": -0.04442875464845529,
+  "skipped": [
+    "2027Q1: ValueError: NVDA: no diluted share count for 2026Q4, so EPS has no denominator. Companies with multiple listed share classes tag the count against a class dimension, which SEC's companyfacts endpoint omits \u2014 the figure has to come from the filing itself or a market data source."
+  ]
+}

@@ -30,8 +30,8 @@ from pydantic import BaseModel, Field, model_validator
 
 from forecaster.events import EventLog
 from forecaster.llm.client import LLMClient
-from forecaster.pipeline.b_structure import consensus_block, dropped_block
-from forecaster.pipeline.d_champion import cases_block
+from forecaster.pipeline.c_structure import consensus_block, dropped_block
+from forecaster.pipeline.f_champion import cases_block
 from forecaster.schemas import Basis, Consensus, Distribution, EventType, LensOutput
 
 log = structlog.get_logger()
@@ -95,7 +95,7 @@ def judge(
     silently substituting a weaker method is how a demo lies.
     """
     if events:
-        events.emit(EventType.NODE_START, "E_judge")
+        events.emit(EventType.NODE_START, "G_judge")
 
     if not lenses:
         raise RuntimeError(
@@ -121,7 +121,7 @@ def judge(
     except Exception as exc:  # noqa: BLE001
         log.error("judge_failed_using_fallback", error=str(exc))
         if events:
-            events.emit(EventType.NODE_FAILED, "E_judge", error=str(exc))
+            events.emit(EventType.NODE_FAILED, "G_judge", error=str(exc))
         return _fallback(lenses), (
             f"JUDGE CALL FAILED ({exc}). Fell back to a robust spread over the "
             f"{len(lenses)} surviving lens estimates — this is a median, not an "
@@ -139,7 +139,7 @@ def judge(
     if events:
         events.emit(
             EventType.NODE_DONE,
-            "E_judge",
+            "G_judge",
             median=distribution.median,
             p10=response.quantiles["0.1"],
             p90=response.quantiles["0.9"],

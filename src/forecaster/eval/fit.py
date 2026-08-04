@@ -11,7 +11,7 @@ repo is built around.
 Then fit it again per regime, because consensus is much weaker on a four-analyst
 name with stale estimates than on a sixty-one-analyst mega-cap with segment-level
 models. That per-bucket table is the thesis as a statistical model rather than a
-vibe, and it is what replaces the placeholder constants in `f_lambda`.
+vibe, and it is what replaces the placeholder constants in `h_lambda`.
 
 Constrained so α + β = 1 and both are non-negative. Unconstrained OLS on two
 highly collinear regressors happily returns β = 2.4 and α = −1.4, which fits the
@@ -116,7 +116,7 @@ def fit_by_regime(observations: list[Observation]) -> dict[str, Fit]:
     """Per-bucket β, falling back to pooled where a bucket is thin.
 
     The output of this is what replaces `FITTED_BETA` and the regime multipliers
-    in `f_lambda` — at which point the thesis stops being asserted.
+    in `h_lambda` — at which point the thesis stops being asserted.
     """
     pooled = fit_beta(observations, "pooled")
     buckets: dict[str, list[Observation]] = {}
@@ -141,7 +141,7 @@ def fit_by_regime(observations: list[Observation]) -> dict[str, Fit]:
 
 
 def report(fits: dict[str, Fit]) -> dict:
-    """The table that goes on the eval screen and into `f_lambda`.
+    """The table that goes on the eval screen and into `h_lambda`.
 
     `is_measured` is the load-bearing column: it distinguishes a coefficient
     that was fitted on its own bucket from one borrowed from the pooled fit. A

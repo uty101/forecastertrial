@@ -15,8 +15,8 @@ from pydantic import ValidationError
 
 from forecaster.llm.client import PRICING, Usage, price
 from forecaster.llm.prompt import PromptError, load, load_all
-from forecaster.pipeline import b_structure
-from forecaster.pipeline.e_judge import JudgeResponse
+from forecaster.pipeline import c_structure
+from forecaster.pipeline.g_judge import JudgeResponse
 from forecaster.pipeline.v3_calibrate import (
     MIN_BUCKET,
     Regime,
@@ -137,22 +137,22 @@ def test_corpus_is_byte_identical_across_calls():
     an unsorted dict, a timestamp — silently drops the hit rate to zero and you
     pay full price six times with no error to tell you."""
     claims = [_claim(f"raw{i}", f"Metric {i}", float(i)) for i in range(12)]
-    store = b_structure.build(claims)
+    store = c_structure.build(claims)
     assert store.corpus() == store.corpus()
-    assert b_structure.build(claims).corpus() == store.corpus()
+    assert c_structure.build(claims).corpus() == store.corpus()
 
 
 def test_claims_are_renumbered_to_short_citable_ids():
     """A model asked to cite `sec:NVDA:2026Q1:Diluted EPS (GAAP)` truncates it,
     changes the case, or drops the colon — and the reconciler then correctly but
     uselessly drops the lens for a fabricated citation."""
-    store = b_structure.build([_claim("sec:NVDA:2026Q1:Diluted EPS (GAAP)", "EPS", 2.4)])
+    store = c_structure.build([_claim("sec:NVDA:2026Q1:Diluted EPS (GAAP)", "EPS", 2.4)])
     assert list(store.claims) == ["c1"]
     assert store.claims["c1"].id == "c1"
 
 
 def test_corpus_sorts_c2_before_c10():
-    store = b_structure.build([_claim(f"r{i}", f"M{i}", float(i)) for i in range(12)])
+    store = c_structure.build([_claim(f"r{i}", f"M{i}", float(i)) for i in range(12)])
     body = store.corpus()
     assert body.index("\nc2.") < body.index("\nc10.")
 
@@ -164,7 +164,7 @@ def test_duplicate_claims_are_deduped_and_logged():
         _claim("a", "Diluted shares", 2_500.0),
         _claim("b", "Diluted shares", 2_500.0),
     ]
-    store = b_structure.build(same)
+    store = c_structure.build(same)
     assert len(store.claims) == 1
     assert len(store.dropped) == 1
 
@@ -173,7 +173,7 @@ def test_fabricated_citation_is_reported_not_skipped():
     """A lens citing evidence that does not exist must reach the reconciler as a
     failure. Quietly dropping the unknown id would let an unfalsifiable number
     through with a citation list that looks fine."""
-    store = b_structure.build([_claim("a", "Revenue", 44_000.0)])
+    store = c_structure.build([_claim("a", "Revenue", 44_000.0)])
     found, unknown = store.resolve(["c1", "c99"])
     assert [c.id for c in found] == ["c1"]
     assert unknown == ["c99"]
@@ -183,10 +183,10 @@ def test_fabricated_citation_is_reported_not_skipped():
 def test_empty_blocks_say_so_rather_than_rendering_blank():
     """A blank block invites the model to fill the gap from memory. An explicit
     'not available' invites it to abstain, which is the correct answer."""
-    assert "no guidance" in b_structure.guidance_block([])
-    assert "no guided-range history" in b_structure.landing_block(None)
-    assert "no consensus" in b_structure.consensus_block(None)
-    assert "every lens reached you" in b_structure.dropped_block({})
+    assert "no guidance" in c_structure.guidance_block([])
+    assert "no guided-range history" in c_structure.landing_block(None)
+    assert "no consensus" in c_structure.consensus_block(None)
+    assert "every lens reached you" in c_structure.dropped_block({})
 
 
 # --------------------------------------------------------------------------- #
@@ -347,7 +347,7 @@ def test_lenses_cannot_see_each_other():
     """
     import inspect
 
-    from forecaster.pipeline.c_lenses.base import LensContext, run_lens
+    from forecaster.pipeline.e_lenses.base import LensContext, run_lens
 
     params = set(inspect.signature(run_lens).parameters)
     assert not {"lenses", "other_lenses", "peers_output", "prior_estimates"} & params

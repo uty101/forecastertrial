@@ -93,7 +93,7 @@ export default function IntegrityScreen() {
   const failed = citations.failed ?? 0;
   const total = verified + failed;
   const rate = total ? verified / total : 0;
-  const dropped = Object.entries(f.dropped_lenses ?? {});
+  const dropped = Object.entries(f.droppee_lenses ?? {});
   const skipped = Object.entries(budgets).flatMap(([stage, b]) =>
     (b.skipped ?? []).map((s) => [stage, s] as const),
   );

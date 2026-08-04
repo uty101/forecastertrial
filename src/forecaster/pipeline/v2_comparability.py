@@ -52,7 +52,7 @@ def check(
 ) -> tuple[str | None, str]:
     """Returns (comparability_flag, rationale).
 
-    The flag is what `f_lambda` reads; None means the quarter is comparable.
+    The flag is what `h_lambda` reads; None means the quarter is comparable.
 
     A failed call returns None — treating a broken check as "not comparable"
     would collapse lambda on every run whenever the API hiccuped, which is a

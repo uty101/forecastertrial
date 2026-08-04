@@ -30,7 +30,7 @@ from pydantic import BaseModel, Field
 
 from forecaster.events import EventLog
 from forecaster.llm.client import LLMClient, LLMError
-from forecaster.pipeline.b_structure import EvidenceStore
+from forecaster.pipeline.c_structure import EvidenceStore
 from forecaster.schemas import EventType, LensOutput
 
 log = structlog.get_logger()
@@ -75,7 +75,7 @@ def develop(
 
     def _one(lens: LensOutput):
         if events:
-            events.emit(EventType.NODE_START, f"D_{lens.lens.value}")
+            events.emit(EventType.NODE_START, f"F_{lens.lens.value}")
         try:
             response, _ = client.call(
                 "champion",
@@ -94,14 +94,14 @@ def develop(
         except LLMError as exc:
             log.warning("champion_failed", lens=lens.lens.value, error=str(exc))
             if events:
-                events.emit(EventType.NODE_FAILED, f"D_{lens.lens.value}",
+                events.emit(EventType.NODE_FAILED, f"F_{lens.lens.value}",
                             error=str(exc))
             return lens
 
         if events:
             events.emit(
                 EventType.NODE_DONE,
-                f"D_{lens.lens.value}",
+                f"F_{lens.lens.value}",
                 surviving_confidence=response.surviving_confidence,
             )
         log.info(

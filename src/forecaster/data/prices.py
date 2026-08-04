@@ -28,6 +28,7 @@ the whole of it.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import date
 
@@ -43,6 +44,20 @@ class PriceBar:
     close: float
     volume: float
 
+    def complete(self) -> bool:
+        """Every field a finite number.
+
+        The session still in progress when the data was fetched comes back with
+        a NaN close — a real bar, just not a finished one. It is kept in the
+        series because today's open and high are legitimate information; it is
+        excluded from any statistic, because NaN propagates through arithmetic
+        without raising and turns a summary into NaN silently.
+        """
+        return all(
+            math.isfinite(v)
+            for v in (self.open, self.high, self.low, self.close, self.volume)
+        )
+
 
 def vwap(bars: list[PriceBar]) -> float | None:
     """Volume-weighted average price across the bars, or None if unusable.
@@ -56,11 +71,23 @@ def vwap(bars: list[PriceBar]) -> float | None:
     The typical price `(high + low + close) / 3` stands in for each session's
     own intraday VWAP — closer to a day's real execution than the close alone,
     which is a single instant at the end of it.
+
+    **Incomplete bars are excluded, and that is not tidiness.** One unfinished
+    session — the day the data was fetched, close still NaN — turned a 500-bar
+    VWAP into NaN. Nothing raised: `bool(nan)` is True, so the None-and-zero
+    guard downstream passed it straight through, NaN became `avg_price`, which
+    became the buyback share retirement, which became the EPS denominator, and
+    the model reported an EPS of `nan` for every quarter it checked. A single
+    partial row at the end of the series silently invalidated the whole stage.
     """
-    usable = [b for b in bars if b.volume > 0]
+    usable = [b for b in bars if b.complete() and b.volume > 0]
     if not usable:
         return None
     traded = sum(b.volume for b in usable)
     if traded <= 0:
         return None
-    return sum(((b.high + b.low + b.close) / 3.0) * b.volume for b in usable) / traded
+    weighted = sum(
+        ((b.high + b.low + b.close) / 3.0) * b.volume for b in usable
+    ) / traded
+    # Belt and braces: a summary that is not a finite number is not a summary.
+    return weighted if math.isfinite(weighted) else None

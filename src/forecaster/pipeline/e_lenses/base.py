@@ -27,7 +27,7 @@ import structlog
 from pydantic import BaseModel, Field
 
 from forecaster.llm.client import LLMClient, LLMError
-from forecaster.pipeline.b_structure import EvidenceStore
+from forecaster.pipeline.c_structure import EvidenceStore
 from forecaster.schemas import Basis, LensName, LensOutput
 
 log = structlog.get_logger()
@@ -180,6 +180,13 @@ class LensContext:
     # construction.
     working_revenue: str = ""
 
+    # Stage D's output: the ratio base every lens is implicitly arguing with,
+    # and the model's own measured error. Shared by all seven rather than being
+    # per-lens context, because it is not a view — it is the arithmetic they are
+    # all reasoning about, and giving one lens a different model than another
+    # would make their disagreement partly an artefact of their inputs.
+    model: str = ""
+
     def missing(self) -> list[str]:
         """Which context blocks are empty. Surfaced in the run manifest so a
         lens that abstained for lack of input is distinguishable from one that
@@ -188,7 +195,7 @@ class LensContext:
             name
             for name in (
                 "prior_year", "drivers", "margin_history", "quality",
-                "exclusions", "peers", "macro", "working_revenue",
+                "exclusions", "peers", "macro", "working_revenue", "model",
             )
             if not getattr(self, name).strip()
         ]

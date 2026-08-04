@@ -17,9 +17,9 @@ Legend: `[x]` done & tested · `[~]` written, never run against live data ·
 - [~] `data/sec_source.py` — XBRL + filings, point-in-time filter — **UNVERIFIED**
 - [~] `data/yfinance_source.py` — consensus, trend, revisions — **UNVERIFIED**
 - [x] `model/graph.py` — topological evaluator, per-cell provenance
-- [x] `pipeline/c_lenses/mechanical.py` — FX, share count, interest, calendar
+- [x] `pipeline/e_lenses/mechanical.py` — FX, share count, interest, calendar
 - [x] `pipeline/v1_reconcile.py` — arithmetic + citation verification
-- [x] `pipeline/f_lambda.py` — three presets, regime conditioning
+- [x] `pipeline/h_lambda.py` — three presets, regime conditioning
 - [x] `eval/shrinkage.py` — James-Stein, winsorize, MAD, guide landing
 - [x] `eval/baseline.py` — consensus × shrunk company tilt
 - [x] `eval/backtest.py` — MAE, skill, Wilson CI, run spread, ablation
@@ -43,7 +43,7 @@ Legend: `[x]` done & tested · `[~]` written, never run against live data ·
 ## Block 2 · Evidence & first lenses — Mon 3 – Fri 7 Aug — 0/6
 
 - [ ] `llm/client.py` — prompt caching, cost ceiling, token accounting, seeding
-- [ ] `pipeline/b_structure.py` — evidence store assembly from acquired claims
+- [ ] `pipeline/c_structure.py` — evidence store assembly from acquired claims
 - [ ] Guidance extractor — 8-K EX-99.1 → `{metric, period, low, high, basis, quote}`
 - [ ] 3-statement model — IS/BS/CF linked on `model/graph.py`, unit-tested
 - [ ] Lens: Guidance (prompt exists at `llm/prompts/lens_guidance.yaml`)
@@ -55,8 +55,8 @@ Legend: `[x]` done & tested · `[~]` written, never run against live data ·
 - [ ] Lens: Forensics
 - [ ] Lens: Peer read
 - [ ] Lens: Macro + `data/fred_source.py`
-- [ ] `pipeline/d_champion.py` — argue for, then against
-- [ ] `pipeline/e_judge.py` — impact-weighted, outputs a distribution
+- [ ] `pipeline/f_champion.py` — argue for, then against
+- [ ] `pipeline/g_judge.py` — impact-weighted, outputs a distribution
 - [ ] **Full backtest, 5 runs per config, leave-one-out ablation**
 
 > **Checkpoint Sun 9 Aug:** do we beat `consensus × 1.02`, and on which kinds of

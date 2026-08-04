@@ -20,7 +20,7 @@ from forecaster.data.cache import Cache
 from forecaster.data.history import History, build_series
 from forecaster.data.lineitems import BY_KEY
 from forecaster.data.sec_source import _RETRY_STATUSES, SECSource, _TransientSEC
-from forecaster.pipeline.a_acquire import PEER_LOOKBACK_DAYS, _peer_recent_actuals
+from forecaster.pipeline.b_acquire import PEER_LOOKBACK_DAYS, _peer_recent_actuals
 
 NVDA_FYE = 1
 AS_OF = date(2026, 8, 16)

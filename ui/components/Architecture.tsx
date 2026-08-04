@@ -29,69 +29,77 @@ export interface NodeSpec {
 }
 
 export const NODES: NodeSpec[] = [
-  // A — acquire
-  { id: "A1_numbers", label: "Numbers", sub: "XBRL · consensus", x: 150, y: 150, w: 128, h: 46 },
-  { id: "A2_filings", label: "Filings", sub: "8-K · 10-Q · text", x: 150, y: 204, w: 128, h: 46 },
-  { id: "A3_industry", label: "Industry", sub: "peers · chain", x: 150, y: 258, w: 128, h: 46 },
-  { id: "A4_macro", label: "Macro", sub: "FRED, point-in-time", x: 150, y: 312, w: 128, h: 46 },
+  // B — acquire
+  { id: "B1_numbers", label: "Numbers", sub: "XBRL · consensus", x: 150, y: 99, w: 128, h: 46 },
+  { id: "B1b_series", label: "Series", sub: "quarters · price bars", x: 150, y: 152, w: 128, h: 46 },
+  { id: "B2_filings", label: "Filings", sub: "8-K 2.02 · EX-99", x: 150, y: 205, w: 128, h: 46 },
+  { id: "B3_industry", label: "Industry", sub: "peers by SIC · news", x: 150, y: 258, w: 128, h: 46 },
+  { id: "B4_macro", label: "Macro", sub: "FRED, point-in-time", x: 150, y: 311, w: 128, h: 46 },
+  { id: "B5_extract", label: "Extract", sub: "guidance → cited guide", x: 150, y: 364, w: 128, h: 46 },
 
-  // B — structure
-  { id: "B_structure", label: "Evidence store", sub: "claims + quotes", x: 318, y: 228, w: 132, h: 58, deterministic: true },
+  // C — structure
+  { id: "C_structure", label: "Evidence store", sub: "claims + quotes", x: 318, y: 228, w: 132, h: 58, deterministic: true },
 
-  // C — the seven lenses
-  { id: "C_mechanical", label: "Mechanical", sub: "FX · shares · interest", x: 490, y: 96, w: 142, h: 44, deterministic: true },
-  { id: "C_guidance", label: "Guidance", sub: "guide + landing CDF", x: 490, y: 148, w: 142, h: 44 },
-  { id: "C_drivers", label: "Drivers", sub: "units × ASP", x: 490, y: 200, w: 142, h: 44 },
-  { id: "C_margins", label: "Margins", sub: "GM mix · opex · tax", x: 490, y: 252, w: 142, h: 44 },
-  { id: "C_forensics", label: "Forensics", sub: "accruals · exclusions", x: 490, y: 304, w: 142, h: 44 },
-  { id: "C_peer_read", label: "Peer read", sub: "who already reported", x: 490, y: 356, w: 142, h: 44 },
-  { id: "C_macro", label: "Macro", sub: "series vs assumed", x: 490, y: 408, w: 142, h: 44 },
+  // D — the three-statement model
+  { id: "D_model", label: "3-statement model", sub: "ratio base · self-checked", x: 490, y: 228, w: 132, h: 58, deterministic: true },
+
+  // E — the seven lenses
+  { id: "E_mechanical", label: "Mechanical", sub: "FX · shares · interest", x: 640, y: 96, w: 142, h: 44, deterministic: true },
+  { id: "E_guidance", label: "Guidance", sub: "guide + landing CDF", x: 640, y: 148, w: 142, h: 44 },
+  { id: "E_drivers", label: "Drivers", sub: "units × ASP", x: 640, y: 200, w: 142, h: 44 },
+  { id: "E_margins", label: "Margins", sub: "GM mix · opex · tax", x: 640, y: 252, w: 142, h: 44 },
+  { id: "E_forensics", label: "Forensics", sub: "accruals · exclusions", x: 640, y: 304, w: 142, h: 44 },
+  { id: "E_peer_read", label: "Peer read", sub: "who already reported", x: 640, y: 356, w: 142, h: 44 },
+  { id: "E_macro", label: "Macro", sub: "series vs assumed", x: 640, y: 408, w: 142, h: 44 },
 
   // V1 — reconcile
-  { id: "V1_reconcile", label: "Reconcile", sub: "arithmetic + citations", x: 668, y: 96, w: 92, h: 356, deterministic: true },
+  { id: "V1_reconcile", label: "Reconcile", sub: "arithmetic + citations", x: 818, y: 96, w: 92, h: 356, deterministic: true },
 
   // D — champion
-  { id: "D_champion", label: "Devil's advocate", sub: "argue, then argue against", x: 796, y: 96, w: 122, h: 356 },
+  { id: "F_champion", label: "Devil's advocate", sub: "argue, then argue against", x: 946, y: 96, w: 122, h: 356 },
 
   // E — judge
-  { id: "E_judge", label: "Judge", sub: "materiality, never votes", x: 954, y: 232, w: 118, h: 88 },
+  { id: "G_judge", label: "Judge", sub: "materiality, never votes", x: 1104, y: 232, w: 118, h: 88 },
 
   // consensus + λ + V2
-  { id: "consensus", label: "Wall St consensus", sub: "coverage · dispersion", x: 1108, y: 120, w: 118, h: 56 },
-  { id: "F_lambda", label: "λ Positioning", sub: "fitted, not guessed", x: 1108, y: 232, w: 118, h: 88, deterministic: true },
-  { id: "V2_comparability", label: "Comparability", sub: "fires → λ collapses", x: 1108, y: 366, w: 118, h: 62 },
+  { id: "consensus", label: "Wall St consensus", sub: "coverage · dispersion", x: 1258, y: 120, w: 118, h: 56 },
+  { id: "H_lambda", label: "λ Positioning", sub: "fitted, not guessed", x: 1258, y: 232, w: 118, h: 88, deterministic: true },
+  { id: "V2_comparability", label: "Comparability", sub: "fires → λ collapses", x: 1258, y: 366, w: 118, h: 62 },
 
   // V3 + output
-  { id: "V3_calibrate", label: "Calibrate", sub: "own residuals", x: 1262, y: 240, w: 104, h: 72, deterministic: true },
-  { id: "G_output", label: "Forecast", sub: "as a distribution", x: 1402, y: 240, w: 122, h: 72 },
+  { id: "V3_calibrate", label: "Calibrate", sub: "own residuals", x: 1412, y: 240, w: 104, h: 72, deterministic: true },
+  { id: "I_output", label: "Forecast", sub: "as a distribution", x: 1552, y: 240, w: 122, h: 72 },
 ];
 
 const EDGES: Array<[string, string]> = [
-  ["A1_numbers", "B_structure"],
-  ["A2_filings", "B_structure"],
-  ["A3_industry", "B_structure"],
-  ["A4_macro", "B_structure"],
-  ["B_structure", "C_mechanical"],
-  ["B_structure", "C_guidance"],
-  ["B_structure", "C_drivers"],
-  ["B_structure", "C_margins"],
-  ["B_structure", "C_forensics"],
-  ["B_structure", "C_peer_read"],
-  ["B_structure", "C_macro"],
-  ["C_mechanical", "V1_reconcile"],
-  ["C_guidance", "V1_reconcile"],
-  ["C_drivers", "V1_reconcile"],
-  ["C_margins", "V1_reconcile"],
-  ["C_forensics", "V1_reconcile"],
-  ["C_peer_read", "V1_reconcile"],
-  ["C_macro", "V1_reconcile"],
-  ["V1_reconcile", "D_champion"],
-  ["D_champion", "E_judge"],
-  ["E_judge", "F_lambda"],
-  ["consensus", "F_lambda"],
-  ["V2_comparability", "F_lambda"],
-  ["F_lambda", "V3_calibrate"],
-  ["V3_calibrate", "G_output"],
+  ["C_structure", "D_model"],
+  ["B1_numbers", "C_structure"],
+  ["B1b_series", "C_structure"],
+  ["B2_filings", "C_structure"],
+  ["B3_industry", "C_structure"],
+  ["B4_macro", "C_structure"],
+  ["B5_extract", "C_structure"],
+  ["D_model", "E_mechanical"],
+  ["D_model", "E_guidance"],
+  ["D_model", "E_drivers"],
+  ["D_model", "E_margins"],
+  ["D_model", "E_forensics"],
+  ["D_model", "E_peer_read"],
+  ["D_model", "E_macro"],
+  ["E_mechanical", "V1_reconcile"],
+  ["E_guidance", "V1_reconcile"],
+  ["E_drivers", "V1_reconcile"],
+  ["E_margins", "V1_reconcile"],
+  ["E_forensics", "V1_reconcile"],
+  ["E_peer_read", "V1_reconcile"],
+  ["E_macro", "V1_reconcile"],
+  ["V1_reconcile", "F_champion"],
+  ["F_champion", "G_judge"],
+  ["G_judge", "H_lambda"],
+  ["consensus", "H_lambda"],
+  ["V2_comparability", "H_lambda"],
+  ["H_lambda", "V3_calibrate"],
+  ["V3_calibrate", "I_output"],
 ];
 
 const FILL = {
@@ -126,7 +134,7 @@ export default function Architecture({
 
   return (
     <div className="scroll-x border border-rule bg-sheet p-3">
-      <svg viewBox="0 0 1560 500" className="h-auto w-full min-w-[900px]">
+      <svg viewBox="0 0 1710 500" className="h-auto w-full min-w-[900px]">
         <defs>
           <marker
             id="arrow"

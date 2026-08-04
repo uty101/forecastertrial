@@ -103,7 +103,7 @@ export default function ForecastScreen() {
               ["our EPS", eps(f.eps_non_gaap)],
               ["consensus", eps(f.consensus?.eps)],
               ["λ", (lam?.value ?? 0).toFixed(3)],
-              ["dropped", Object.keys(f.dropped_lenses ?? {}).length],
+              ["dropped", Object.keys(f.droppee_lenses ?? {}).length],
             ]}
           />
         </div>
@@ -285,7 +285,7 @@ export default function ForecastScreen() {
                 ["output tokens", (f.total_output_tokens ?? 0).toLocaleString()],
                 ["wall clock", `${((f.wall_clock_ms ?? 0) / 1000).toFixed(1)}s`],
                 ["lenses kept", f.lenses?.length ?? 0],
-                ["lenses dropped", Object.keys(f.dropped_lenses ?? {}).length],
+                ["lenses dropped", Object.keys(f.droppee_lenses ?? {}).length],
               ].map(([label, value]) => (
                 <div key={String(label)} className="flex justify-between gap-4">
                   <dt className="tech text-ink-3">{String(label)}</dt>

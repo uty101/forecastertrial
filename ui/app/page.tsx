@@ -36,7 +36,7 @@ import { useRun, type NodeStatus } from "@/lib/data";
  */
 
 /**
- * The champion stage fans out per lens (`D_guidance`, `D_margins`, …) but is one
+ * The champion stage fans out per lens (`E_guidance`, `E_margins`, …) but is one
  * part on the drawing. Fold those into it: running if any is running, failed
  * only if all failed — one flaky champion call must not paint the whole stage
  * red when six others succeeded.
@@ -46,7 +46,7 @@ function fold(nodes: Record<string, NodeStatus>): Record<string, NodeStatus> {
   const champions = Object.entries(nodes).filter(([id]) => id.startsWith("D_"));
   if (champions.length) {
     const states = champions.map(([, s]) => s.state);
-    folded["D_champion"] = {
+    folded["F_champion"] = {
       state: states.includes("running")
         ? "running"
         : states.every((s) => s === "failed")

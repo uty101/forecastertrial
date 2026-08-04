@@ -22,7 +22,7 @@ So this system reproduces the analysis and strips the incentives, then adds the 
 
 `forecast = consensus + λ · (own_estimate − consensus)`
 
-Everything upstream of `f_lambda` produces an estimate. λ decides how much to trust it against sixty-one analysts with segment-level models. That separation is the point.
+Everything upstream of `h_lambda` produces an estimate. λ decides how much to trust it against sixty-one analysts with segment-level models. That separation is the point.
 
 **The corollary that matters:** shrinking hard to consensus on a well-covered mega-cap is the *correct* answer, not a failure to have a view.
 
@@ -80,16 +80,16 @@ Same command runs in CI on every commit, alongside a check that `ui/lib/types.ts
 ## Architecture
 
 ```
-A  ACQUIRE     numbers · filings+text · industry · macro   parallel, hard budgets
-B  STRUCTURE   3-statement model · evidence store          deterministic
-C  ANALYSE     7 lenses, blind to each other               parallel, shared cached prefix
+B  ACQUIRE     numbers · filings+text · industry · macro   parallel, hard budgets
+C  STRUCTURE   3-statement model · evidence store          deterministic
+E  ANALYSE     7 lenses, blind to each other               parallel, shared cached prefix
 V1 RECONCILE   arithmetic + citation verification          fail → drop the lens
-D  CHALLENGE   argue each case, then argue against it      ×7 parallel
-E  JUDGE       impact-weighted, never vote-weighted        one expensive call → a range
+F  CHALLENGE   argue each case, then argue against it      ×7 parallel
+G  JUDGE       impact-weighted, never vote-weighted        one expensive call → a range
 V2 COMPARABLE  M&A · accounting change · 53rd week         fires → λ collapses
-F  POSITION    λ vs consensus, fitted and conditioned
+H  POSITION    λ vs consensus, fitted and conditioned
 V3 CALIBRATE   bootstrap our own backtest residuals
-G  OUTPUT      forecast + model + trace
+I  OUTPUT      forecast + model + trace
 ```
 
 ### Ten agents, and one component on this list that isn't one
@@ -205,14 +205,14 @@ src/forecaster/
     bridge.py             GAAP ↔ non-GAAP, cited, with verify()
   pipeline/
     run.py                A→G in one readable function
-    a_acquire.py          ranked targets, hard budgets, logs what it skipped
-    b_structure.py        the evidence store and the cached corpus
-    c_lenses/             seven lenses, blind to each other
+    b_acquire.py          ranked targets, hard budgets, logs what it skipped
+    c_structure.py        the evidence store and the cached corpus
+    e_lenses/             seven lenses, blind to each other
     v1_reconcile.py       arithmetic + citations
-    d_champion.py         argue for, then against
-    e_judge.py            impact-weighted → a distribution
+    f_champion.py         argue for, then against
+    g_judge.py            impact-weighted → a distribution
     v2_comparability.py   fires → λ collapses
-    f_lambda.py           the thesis
+    h_lambda.py           the thesis
     v3_calibrate.py       our own residuals, by regime
   eval/
     cases.py              point-in-time firm-quarters — Block 1, the gate

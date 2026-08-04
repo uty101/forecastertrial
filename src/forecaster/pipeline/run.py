@@ -5,16 +5,16 @@ should be able to read `forecast()` top to bottom and see every stage in order,
 because on the day you will need to explain layers C to F under questioning and
 a clever abstraction here would cost you that.
 
-    A  ACQUIRE     numbers · filings · industry · macro
-    B  STRUCTURE   evidence store · guidance · landing distribution
-    C  ANALYSE     7 lenses, blind to each other
+    B  ACQUIRE     numbers · filings · industry · macro
+    C  STRUCTURE   evidence store · guidance · landing distribution
+    E  ANALYSE     7 lenses, blind to each other
     V1 RECONCILE   arithmetic + citations — fail drops the lens
-    D  CHALLENGE   argue each case, then argue against it
-    E  JUDGE       impact-weighted → a distribution
+    F  CHALLENGE   argue each case, then argue against it
+    G  JUDGE       impact-weighted → a distribution
     V2 COMPARABLE  M&A · accounting change · 53rd week → λ collapses
-    F  POSITION    λ vs consensus, fitted and regime-conditioned
+    H  POSITION    λ vs consensus, fitted and regime-conditioned
     V3 CALIBRATE   bootstrap our own backtest residuals
-    G  OUTPUT      forecast + model + trace
+    I  OUTPUT      forecast + model + trace
 
 Every stage emits events, so the live architecture view is driven by running the
 pipeline rather than by a separate animation — and replay mode is free, because
@@ -27,6 +27,7 @@ import statistics
 import time
 from dataclasses import dataclass, field
 from datetime import date
+from pathlib import Path
 
 import structlog
 
@@ -35,18 +36,20 @@ from forecaster.eval import baseline as baseline_mod
 from forecaster.events import EventLog
 from forecaster.llm.client import LLMClient
 from forecaster.pipeline import (
-    a_acquire,
-    b_structure,
-    c_lenses,
-    d_champion,
-    e_judge,
+    b_acquire,
+    c_structure,
+    d_model,
+    dossier,
+    e_lenses,
     extract,
-    f_lambda,
+    f_champion,
+    g_judge,
+    h_lambda,
     v1_reconcile,
     v2_comparability,
     v3_calibrate,
 )
-from forecaster.pipeline.c_lenses.base import LensContext
+from forecaster.pipeline.e_lenses.base import LensContext
 from forecaster.schemas import (
     Basis,
     Consensus,
@@ -89,7 +92,16 @@ def forecast(
     loader: Loader,
     client: LLMClient,
     events: EventLog,
+    dossier_path: Path | str | None = None,
 ) -> RunResult:
+    """A through G. Pass `dossier_path` to start from a recorded acquisition.
+
+    Reading the dossier instead of re-acquiring is what makes prompt iteration
+    affordable: acquire once, restructure and re-run the lenses fifty times
+    without touching the network. It is also the honest way to compare two
+    prompt versions — same evidence, byte for byte, so the difference measured
+    is the prompt rather than a document that changed underneath it.
+    """
     started = time.monotonic()
     # Note the kwargs: `EventLog.emit` collects **payload, so passing
     # `payload={...}` would nest it a second time and every consumer reading
@@ -104,12 +116,24 @@ def forecast(
     )
 
     # ---- A: acquire --------------------------------------------------- #
-    acquired = a_acquire.acquire(
-        config.ticker, config.period, config.as_of, loader, events
-    )
+    replayed = dossier_path is not None
+    if replayed:
+        acquired, guides, _ = dossier.read(dossier_path)
+        guide_claims, rejections = [], []
+        events.emit(
+            EventType.NODE_DONE,
+            "B_acquire",
+            replayed_from=str(dossier_path),
+            claims=len(acquired.claims),
+            documents=len(acquired.documents),
+        )
+    else:
+        acquired = b_acquire.acquire(
+            config.ticker, config.period, config.as_of, loader, events
+        )
     consensus: Consensus | None = acquired.consensus  # type: ignore[assignment]
 
-    # ---- A5: extract guidance ------------------------------------------ #
+    # ---- B5: extract guidance ------------------------------------------ #
     #
     # Acquisition brings back the earnings release as TEXT. Until something
     # reads it, the guidance paragraph, the non-GAAP bridge and the segment
@@ -123,20 +147,49 @@ def forecast(
     # back against its source inside `extract_guidance`, and one that cannot be
     # found is dropped — a range assembled from two different sentences reads
     # perfectly and is not what the company said.
-    with events.node("A5_extract"):
-        guides, guide_claims, rejections = _extract_guidance(
-            client, config.ticker, acquired, events
-        )
+    # A dossier already carries its guidance, and re-extracting would spend a
+    # model call to reproduce a result recorded on disk.
+    if not replayed:
+        with events.node("B5_extract"):
+            guides, guide_claims, rejections = _extract_guidance(
+                client, config.ticker, acquired, events
+            )
 
     # ---- B: structure ------------------------------------------------- #
-    with events.node("B_structure"):
-        store = b_structure.build(
+    with events.node("C_structure"):
+        store = c_structure.build(
             claims=acquired.claims + guide_claims,
             documents=acquired.documents,
             consensus=consensus,
             guidance=guides,
         )
-        events.emit(EventType.CLAIM_ADDED, "B_structure", n=store.n_claims)
+        events.emit(EventType.CLAIM_ADDED, "C_structure", n=store.n_claims)
+
+    # ---- D: model ----------------------------------------------------- #
+    #
+    # Deterministic, and deliberately before the lenses rather than after the
+    # judge. Only the PROJECTION needs a revenue view; the historical statements,
+    # the ratio base and the model's own measured error are arithmetic on
+    # filings, and a lens that can see the company's margin trajectory is
+    # reasoning about a company rather than about a bag of claims.
+    #
+    # A failure here is not fatal. The lenses ran without a model until now and
+    # can again; what they lose is context, not their inputs.
+    model = None
+    with events.node("D_model"):
+        if acquired.history is None:
+            log.info("model_skipped", why="no history in the dossier")
+        else:
+            try:
+                model = d_model.build(acquired.history, prices=acquired.prices)
+                events.emit(
+                    EventType.NODE_DONE, "D_model",
+                    balanced=model.balanced,
+                    quarters_checked=len(model.checks),
+                    median_abs_eps_error=model.median_abs_eps_error,
+                )
+            except (ValueError, KeyError) as exc:
+                log.warning("model_failed", error=f"{type(exc).__name__}: {exc}")
 
     ctx = LensContext(
         ticker=config.ticker,
@@ -151,10 +204,11 @@ def forecast(
         peers=acquired.peer_block,
         macro=acquired.macro_block,
         working_revenue=_working_revenue(acquired, consensus),
+        model=d_model.to_block(model) if model else "",
     )
 
     # ---- C: analyse --------------------------------------------------- #
-    lens_results = c_lenses.run_all(
+    lens_results = e_lenses.run_all(
         client, store, ctx, events, config.run_index, config.only_lenses
     )
     lenses: list[LensOutput] = list(lens_results.kept)
@@ -188,12 +242,12 @@ def forecast(
         )
 
     # ---- D: challenge -------------------------------------------------- #
-    lenses = d_champion.develop(
+    lenses = f_champion.develop(
         client, lenses, store, config.ticker, config.period, events, config.run_index
     )
 
     # ---- E: judge ------------------------------------------------------ #
-    distribution, judge_rationale = e_judge.judge(
+    distribution, judge_rationale = g_judge.judge(
         client, lenses, dropped, consensus, config.ticker, config.period,
         config.basis, events, config.run_index,
     )
@@ -205,7 +259,7 @@ def forecast(
     )
 
     # ---- F: position ---------------------------------------------------- #
-    with events.node("F_lambda"):
+    with events.node("H_lambda"):
         own_estimate = distribution.point(
             "squared" if config.preset is LambdaPreset.SHRINK else "absolute"
         )
@@ -218,9 +272,9 @@ def forecast(
             baseline_eps = own_estimate
             baseline_note = "no consensus available — λ not applied"
         else:
-            decision = f_lambda.decide(
+            decision = h_lambda.decide(
                 config.preset,
-                f_lambda.LambdaInputs(
+                h_lambda.LambdaInputs(
                     consensus=consensus,
                     lenses=lenses,
                     own_estimate=own_estimate,
@@ -228,7 +282,7 @@ def forecast(
                     tiny_tilt=config.tiny_tilt,
                 ),
             )
-            final_eps = f_lambda.apply(consensus.eps, own_estimate, decision)
+            final_eps = h_lambda.apply(consensus.eps, own_estimate, decision)
             built = baseline_mod.build(
                 consensus.eps, config.ticker,
                 config.own_surprises, config.peer_surprises,
@@ -236,7 +290,7 @@ def forecast(
             baseline_eps, baseline_note = built.eps, built.rationale
         events.emit(
             EventType.NODE_DONE,
-            "F_lambda",
+            "H_lambda",
             lambda_value=decision.value if decision else None,
             own=own_estimate,
             consensus=consensus.eps if consensus else None,
@@ -259,10 +313,10 @@ def forecast(
     if decision is None:
         # `Forecast` requires a decision; record the degenerate one explicitly
         # rather than fabricating a λ that was never computed.
-        decision = f_lambda.LambdaDecision(
+        decision = h_lambda.LambdaDecision(
             preset=config.preset,
             value=1.0,
-            internal_disagreement=f_lambda.internal_disagreement(lenses),
+            internal_disagreement=h_lambda.internal_disagreement(lenses),
             rationale="no consensus available — the own estimate stands unshrunk",
         )
 
@@ -278,7 +332,7 @@ def forecast(
         or Consensus(eps=final_eps, basis=config.basis, as_of=config.as_of),
         lambda_decision=decision,
         lenses=lenses,
-        dropped_lenses=dropped,
+        droppee_lenses=dropped,
         baseline_eps=baseline_eps,
         total_cost_usd=cost["total_cost_usd"],
         total_input_tokens=sum(c.usage.input_tokens for c in client.calls),
@@ -307,6 +361,12 @@ def forecast(
     )
 
     trace = {
+        # Stage D. `statements` and `balance_check` are lifted to the top level
+        # because the model sheet has read them from there since before the
+        # stage existed — it was rendering a key nothing ever wrote.
+        "model": d_model.to_json(model) if model else None,
+        "statements": model.statements if model else None,
+        "balance_check": model.balance_detail if model else None,
         "judge_rationale": judge_rationale,
         "comparability": {"flag": comparability_flag, "note": comparability_note},
         "calibration": calibration_note,
@@ -336,7 +396,7 @@ def _unique_guides(guides: list) -> list:
 def _extract_guidance(
     client: LLMClient,
     ticker: str,
-    acquired: a_acquire.Acquired,
+    acquired: b_acquire.Acquired,
     events: EventLog,
 ) -> tuple[list, list, list[str]]:
     """Run the extractor over the earnings-release exhibits, newest first.
@@ -397,7 +457,7 @@ def _extract_guidance(
     )
     events.emit(
         EventType.NODE_DONE,
-        "A5_extract",
+        "B5_extract",
         documents=len(targets),
         guides=len(guides),
         rejected=len(rejections),
@@ -405,7 +465,7 @@ def _extract_guidance(
     return guides, guide_claims, rejections
 
 
-def _working_revenue(acquired: a_acquire.Acquired, consensus: Consensus | None) -> str:
+def _working_revenue(acquired: b_acquire.Acquired, consensus: Consensus | None) -> str:
     """The working top line handed to the Margins lens.
 
     Sourced from prior-year actuals and the Street's revenue estimate — NOT from
@@ -436,7 +496,7 @@ def _median_revenue(lenses: list[LensOutput]) -> float | None:
     return statistics.median(values) if values else None
 
 
-def _events_block(store: b_structure.EvidenceStore) -> str:
+def _events_block(store: c_structure.EvidenceStore) -> str:
     """Filing-level facts for the comparability check. Only what is dated and
     disclosed; this check must never see a derived figure."""
     lines = [

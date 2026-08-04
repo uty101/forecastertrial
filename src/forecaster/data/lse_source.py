@@ -6,7 +6,7 @@ we know about dispersion comes from our own backtest residuals and from analyst
 disagreement, which are both our own opinion measured two ways. An option
 straddle is somebody putting money on the size of the move.
 
-That feeds two places — `f_lambda`, which already conditions lambda on
+That feeds two places — `h_lambda`, which already conditions lambda on
 dispersion, and `v3_calibrate`, whose distribution width currently rests on our
 residuals alone.
 

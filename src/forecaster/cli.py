@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from datetime import date
 from pathlib import Path
 
@@ -29,12 +30,21 @@ from forecaster.eval import fit as fit_mod
 from forecaster.events import EventLog
 from forecaster.llm.client import LLMClient
 from forecaster.llm.prompt import load_all
-from forecaster.pipeline import a_acquire, dossier
+from forecaster.pipeline import b_acquire, d_model, dossier
 from forecaster.pipeline import run as pipeline
 from forecaster.schemas import LambdaPreset
 
 app = typer.Typer(add_completion=False, help="Earnings forecasting agent")
 log = structlog.get_logger()
+
+# A Windows console defaults to cp1252, which has no λ — and λ is the name of the
+# central quantity in this system, so it appears in almost every status line.
+# `forecast status` crashed on it with a UnicodeEncodeError traceback. The demo
+# runs from a terminal; a stage that works but cannot print its own output is
+# indistinguishable from one that failed.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 
 
 def build_loader(read_only: bool = False) -> Loader:
@@ -112,15 +122,15 @@ def sources(ticker: str = "NVDA") -> None:
 
 
 AGENT_LAYERS = {
-    "extract_guidance": "B  structure",
-    "lens_guidance": "C  analyse",
-    "lens_drivers": "C  analyse",
-    "lens_margins": "C  analyse",
-    "lens_forensics": "C  analyse",
-    "lens_peer_read": "C  analyse",
-    "lens_macro": "C  analyse",
-    "champion": "D  challenge",
-    "judge": "E  judge",
+    "extract_guidance": "B  acquire",
+    "lens_guidance": "E  analyse",
+    "lens_drivers": "E  analyse",
+    "lens_margins": "E  analyse",
+    "lens_forensics": "E  analyse",
+    "lens_peer_read": "E  analyse",
+    "lens_macro": "E  analyse",
+    "champion": "F  challenge",
+    "judge": "G  judge",
     "comparability": "V2 comparability",
 }
 
@@ -128,7 +138,7 @@ AGENT_LAYERS = {
 # belongs on the roster — it is the agent the whole determinism argument rests on.
 MECHANICAL = {
     "id": "mechanical",
-    "layer": "C  analyse",
+    "layer": "E  analyse",
     "tier": "none",
     "version": None,
     "model": "pure code — cannot hallucinate",
@@ -163,7 +173,7 @@ def agents(
     typer.echo(f"{'agent':20} {'layer':18} {'tier':6} {'v':>3}  model")
     typer.echo("-" * 86)
     typer.echo(
-        f"{'mechanical':20} {'C  analyse':18} {'none':6} {'-':>3}  "
+        f"{'mechanical':20} {'E  analyse':18} {'none':6} {'-':>3}  "
         "pure code — cannot hallucinate"
     )
     for name in sorted(prompts, key=lambda n: (AGENT_LAYERS.get(n, "Z"), n)):
@@ -314,7 +324,7 @@ def acquire(
     cache = Cache(settings.cache_dir, read_only=from_cache)
     loader = build_loader(read_only=from_cache)
 
-    acquired = a_acquire.acquire(
+    acquired = b_acquire.acquire(
         ticker, period, lock, loader, events,
         macro_source=build_macro_source(read_only=from_cache),
     )
@@ -354,6 +364,44 @@ def acquire(
 
 
 @app.command()
+def model(
+    dossier_path: Path = typer.Option(..., "--dossier", help="a dossier directory"),
+    out: Path = Path("out/model.json"),
+    shares: float | None = typer.Option(
+        None, help="diluted share count, for multi-class issuers XBRL omits"
+    ),
+) -> None:
+    """Stage 4 only — build the three-statement model from a dossier.
+
+    Independently runnable and free: no network, no API key, no model call. Run
+    it against a dossier and read the statements before spending anything on
+    seven lenses and a judge.
+
+    The number worth reading is the reproduction error. Each past quarter is
+    modelled from its OWN reported revenue — the one input a forecast would have
+    had to supply — so what comes back is the model's structural error rather
+    than any lens's forecasting error. A model that cannot reproduce a quarter
+    whose revenue it was handed cannot project one.
+    """
+    acquired, _, manifest = dossier.read(dossier_path)
+    if acquired.history is None:
+        typer.secho("this dossier carries no history", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+    result = d_model.build(
+        acquired.history, prices=acquired.prices, shares_open=shares
+    )
+
+    payload = d_model.to_json(result)
+    payload["ticker"] = manifest.get("ticker", result.ticker)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+
+    typer.echo(d_model.to_block(result))
+    typer.echo(f"\nwrote {out}")
+
+
+@app.command()
 def run(
     ticker: str = typer.Option(...),
     as_of: str = typer.Option(..., "--as-of"),
@@ -362,9 +410,19 @@ def run(
     tiny_tilt: bool = typer.Option(False, help="pure win-rate metric: direction only"),
     from_cache: bool = typer.Option(False, help="fail rather than hit the network"),
     run_index: int = 0,
+    dossier_path: Path | None = typer.Option(
+        None, "--dossier",
+        help="start from a recorded acquisition instead of re-fetching",
+    ),
     out: Path = Path("out/results.json"),
 ) -> None:
-    """One forecast, A through G."""
+    """One forecast, A through G.
+
+    With --dossier the run starts from a recorded acquisition: no network, no
+    extraction call, the same evidence byte for byte. That is what makes prompt
+    iteration affordable and what makes a comparison between two prompt
+    versions measure the prompt rather than a corpus that moved underneath it.
+    """
     lock = date.fromisoformat(as_of)
     events = EventLog(settings.out_dir / "events.ndjson")
     cache = Cache(settings.cache_dir, read_only=from_cache)
@@ -382,6 +440,7 @@ def run(
         loader=build_loader(read_only=from_cache),
         client=LLMClient(cache=cache, settings=settings),
         events=events,
+        dossier_path=dossier_path,
     )
 
     payload = {
@@ -400,7 +459,7 @@ def run(
     typer.echo(f"  vs Street  {forecast.surprise_vs_consensus:+.2%}")
     typer.echo(
         f"  lenses     {len(forecast.lenses)} kept, "
-        f"{len(forecast.dropped_lenses)} dropped"
+        f"{len(forecast.droppee_lenses)} dropped"
     )
     typer.echo(f"  cost       ${forecast.total_cost_usd:.4f}")
     typer.echo(f"\nwrote {out}")
@@ -529,7 +588,7 @@ def fit(
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2, sort_keys=True))
     typer.echo(json.dumps(report, indent=2))
-    typer.echo(f"\nwrote {out} — copy these into f_lambda.FITTED_BETA")
+    typer.echo(f"\nwrote {out} — copy these into h_lambda.FITTED_BETA")
 
 
 if __name__ == "__main__":

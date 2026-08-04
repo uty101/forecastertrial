@@ -75,7 +75,7 @@ export default function ReasoningScreen() {
     verified?: number;
     failed?: number;
   };
-  const dropped = (f.dropped_lenses ?? {}) as Record<string, string>;
+  const dropped = (f.droppee_lenses ?? {}) as Record<string, string>;
   const droppedList = Object.entries(dropped);
   const lenses = (f.lenses ?? []) as LensOutput[];
   const challenged = lenses.filter((l) => l.counterargument).length;

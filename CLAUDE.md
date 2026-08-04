@@ -57,16 +57,22 @@ Corollary that matters: **shrinking to consensus on a 61-analyst mega-cap is the
 ## Architecture
 
 ```
-A  ACQUIRE     numbers · filings · industry · macro        parallel, hard budgets
-B  STRUCTURE   3-statement model · evidence store          deterministic
-C  ANALYSE     7 lenses, blind to each other               parallel, shared cached prefix
+A  SOURCES     SEC · yfinance · Exa · LSE · FRED · universe   adapters, point-in-time
+B  ACQUIRE     numbers · series · filings · industry · macro · guidance
+                                                           parallel, hard budgets
+   dossier     out/acquired/<ticker>/<period>_<as_of>      the handover, on disk
+C  STRUCTURE   evidence store                             deterministic
+D  MODEL       3-statement model · ratio base             deterministic; reproduces
+                                                          past quarters to measure
+                                                          its own structural error
+E  ANALYSE     7 lenses, blind to each other               parallel, shared cached prefix
 V1 RECONCILE   arithmetic + citation verification          fail → drop the lens
-D  CHALLENGE   argue each case, then argue against it      ×7 parallel
-E  JUDGE       impact-weighted → a distribution            one expensive call
+F  CHALLENGE   argue each case, then argue against it      ×7 parallel
+G  JUDGE       impact-weighted → a distribution            one expensive call
 V2 COMPARABLE  M&A · accounting change · 53rd week         fires → λ collapses
-F  POSITION    λ vs consensus, fitted, regime-conditioned
+H  POSITION    λ vs consensus, fitted, regime-conditioned
 V3 CALIBRATE   bootstrap our own backtest residuals
-G  OUTPUT      forecast + model + trace
+I  OUTPUT      forecast + model + trace
 ```
 
 **The seven lenses:** Mechanical (no LLM — FX, share count, net interest, calendar), Guidance, Drivers, Margins, Forensics, Peer read, Macro.
@@ -80,7 +86,7 @@ Model tiering: cheap for acquisition and extraction, mid for lenses and champion
 **Stage 1 complete. 50 tests passing, ~3,300 lines.**
 
 Built and tested:
-`schemas.py` · `data/protocol.py` · `data/cache.py` · `data/loader.py` · `model/graph.py` · `pipeline/c_lenses/mechanical.py` · `pipeline/v1_reconcile.py` · `pipeline/f_lambda.py` · `eval/shrinkage.py` · `eval/baseline.py` · `eval/backtest.py` · `events.py` · `cli.py` · tooling, Docker, CI
+`schemas.py` · `data/protocol.py` · `data/cache.py` · `data/loader.py` · `model/graph.py` · `pipeline/e_lenses/mechanical.py` · `pipeline/v1_reconcile.py` · `pipeline/h_lambda.py` · `eval/shrinkage.py` · `eval/baseline.py` · `eval/backtest.py` · `events.py` · `cli.py` · tooling, Docker, CI
 
 Written but **never run against live data** — verify these first:
 `data/sec_source.py` · `data/yfinance_source.py`
@@ -95,7 +101,7 @@ Not started: all six LLM lenses, `llm/client.py`, evidence-store assembly, the l
 
 **GAAP vs non-GAAP.** Consensus is non-GAAP. SEC XBRL is GAAP. The median DJIA gap was **31%** in one recent quarter. Every EPS figure must declare its `Basis`. Getting this wrong produces a systematic one-directional error that looks like bad modelling. `Forecast` carries both.
 
-**`FITTED_BETA` in `f_lambda.py` holds three placeholder numbers.** They are meant to be the output of the Block 1 regression (`actual ~ α·consensus + β·own`). Until that runs, the thesis is asserted rather than measured. Do not treat them as tuned.
+**`FITTED_BETA` in `h_lambda.py` holds three placeholder numbers.** They are meant to be the output of the Block 1 regression (`actual ~ α·consensus + β·own`). Until that runs, the thesis is asserted rather than measured. Do not treat them as tuned.
 
 **The Dockerfile base image digest is literally `PINME`.** Pin it.
 

@@ -53,7 +53,7 @@ class Status:
         }
 
 
-LENS = "forecaster.pipeline.c_lenses"
+LENS = "forecaster.pipeline.e_lenses"
 PIPE = "forecaster.pipeline"
 DATA = "forecaster.data"
 EVAL = "forecaster.eval"
@@ -64,11 +64,18 @@ MODULES: list[tuple[str, str, str, str, str]] = [
     (f"{DATA}.sec_source", "sec", "SEC XBRL + filings", "sources", "none"),
     (f"{DATA}.yfinance_source", "yfinance", "yfinance consensus", "sources", "none"),
     (f"{DATA}.fred_source", "fred", "FRED macro", "sources", "none"),
+    (f"{DATA}.exa_source", "exa", "Exa news search", "sources", "none"),
+    (f"{DATA}.lse_source", "lse", "LSE options + insiders", "sources", "none"),
     (f"{DATA}.sponsor_source", "sponsor", "Sponsor feed adapter", "sources", "none"),
     (f"{DATA}.universe", "universe", "Prepared universe", "sources", "none"),
-    (f"{PIPE}.a_acquire", "acquire", "A1–A4 acquirers", "acquire", "none"),
+    (f"{DATA}.history", "history", "Quarterly series builder", "sources", "none"),
+    (f"{DATA}.prices", "prices", "Price bars + VWAP", "sources", "none"),
+    (f"{PIPE}.b_acquire", "acquire", "B1–B5 acquirers", "acquire", "none"),
     (f"{PIPE}.extract", "extract_guidance", "Guidance extractor", "acquire", "cheap"),
-    (f"{PIPE}.b_structure", "evidence", "Evidence store", "structure", "none"),
+    (f"{PIPE}.dossier", "dossier", "Acquisition artifact", "acquire", "none"),
+    (f"{MODEL}.inputs", "inputs", "History → model inputs", "structure", "none"),
+    (f"{PIPE}.d_model", "model", "3-statement stage + backtest", "model", "none"),
+    (f"{PIPE}.c_structure", "evidence", "Evidence store", "structure", "none"),
     (f"{MODEL}.statements", "statements", "3-statement model", "structure", "none"),
     (f"{MODEL}.bridge", "bridge", "GAAP↔non-GAAP bridge", "structure", "none"),
     (f"{LENS}.mechanical", "mechanical", "Mechanical lens", "lenses", "none"),
@@ -79,10 +86,10 @@ MODULES: list[tuple[str, str, str, str, str]] = [
     (f"{LENS}.peer_read", "peer_read", "Peer read lens", "lenses", "mid"),
     (f"{LENS}.macro", "macro", "Macro lens", "lenses", "mid"),
     (f"{PIPE}.v1_reconcile", "v1", "V1 reconcile", "verify", "none"),
-    (f"{PIPE}.d_champion", "champion", "Champion ×7", "challenge", "mid"),
-    (f"{PIPE}.e_judge", "judge", "Judge", "judge", "deep"),
+    (f"{PIPE}.f_champion", "champion", "Champion ×7", "challenge", "mid"),
+    (f"{PIPE}.g_judge", "judge", "Judge", "judge", "deep"),
     (f"{PIPE}.v2_comparability", "v2", "V2 comparability", "verify", "cheap"),
-    (f"{PIPE}.f_lambda", "lambda", "λ positioning", "position", "none"),
+    (f"{PIPE}.h_lambda", "lambda", "λ positioning", "position", "none"),
     (f"{PIPE}.v3_calibrate", "v3", "V3 calibrate", "verify", "none"),
     (f"{PIPE}.run", "orchestrator", "A→G orchestrator", "position", "none"),
     (f"{EVAL}.cases", "cases", "Case builder", "eval", "none"),
@@ -102,6 +109,17 @@ TEST_MAP = {
     "tests/test_stage1.py": ["yfinance", "baseline", "backtest", "landing"],
     "tests/test_llm_layer.py": ["llm", "evidence", "judge", "v3", "extract_guidance"],
     "tests/test_model.py": ["statements", "bridge"],
+    "tests/test_extract.py": ["extract_guidance"],
+    "tests/test_exa_source.py": ["exa"],
+    "tests/test_lse_source.py": ["lse"],
+    "tests/test_history.py": ["history", "sec"],
+    "tests/test_prices.py": ["prices", "yfinance"],
+    "tests/test_dossier.py": ["dossier"],
+    "tests/test_model_inputs.py": ["inputs"],
+    "tests/test_d_model.py": ["model", "statements"],
+    "tests/test_sec_acquisition.py": ["sec", "acquire"],
+    "tests/test_universe.py": ["universe"],
+    "tests/test_sponsor_source.py": ["sponsor"],
 }
 
 
@@ -176,7 +194,7 @@ def _gates() -> list[dict]:
     system where every component is green and every gate is red is a system that
     has been built and never tested against reality.
     """
-    from forecaster.pipeline import f_lambda
+    from forecaster.pipeline import h_lambda
 
     golden = REPO / "tests" / "golden" / "fixture.json"
     cases = REPO / "out" / "cases.json"
@@ -234,10 +252,10 @@ def _gates() -> list[dict]:
         {
             "id": "lambda_measured",
             "label": "λ fitted rather than asserted",
-            "passed": bool(getattr(f_lambda, "FITTED_BETA_MEASURED", False)),
+            "passed": bool(getattr(h_lambda, "FITTED_BETA_MEASURED", False)),
             "detail": (
                 "FITTED_BETA holds fitted coefficients"
-                if getattr(f_lambda, "FITTED_BETA_MEASURED", False)
+                if getattr(h_lambda, "FITTED_BETA_MEASURED", False)
                 else "FITTED_BETA holds three placeholder numbers — the thesis is "
                 "asserted, not measured"
             ),

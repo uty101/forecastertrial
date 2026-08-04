@@ -1,4 +1,4 @@
-"""Layer A — acquisition, with hard budgets.
+"""Layer B — acquisition, with hard budgets.
 
 Unbounded research is the main way this design loses the day. "Find everything
 available online" has no termination condition, and most of what it would find
@@ -11,12 +11,12 @@ as "we covered everything" when you didn't.
 
 Four acquirers, run in order here for determinism:
 
-    A1 Numbers    XBRL actuals + consensus
-    A2 Filings    8-K EX-99.1, 10-Q, transcript — AND THE DOCUMENT TEXT
-    A3 Industry   peers and the value chain who ALREADY reported this cycle
-    A4 Macro      sector-relevant FRED series, point-in-time
+    B1 Numbers    XBRL actuals + consensus
+    B2 Filings    8-K EX-99.1, 10-Q, transcript — AND THE DOCUMENT TEXT
+    B3 Industry   peers and the value chain who ALREADY reported this cycle
+    B4 Macro      sector-relevant FRED series, point-in-time
 
-A2 fetching the actual document text is not an optimisation. Citation
+B2 fetching the actual document text is not an optimisation. Citation
 verification string-matches every prose quote against its source, so a filing
 acquired as a URL with no body means every quote from it fails and every lens
 citing it is dropped.
@@ -137,7 +137,7 @@ def acquire(
     events: EventLog,
     macro_source=None,
 ) -> Acquired:
-    """A1-A4. Sequential for determinism; independent in principle.
+    """B1-B5. Sequential for determinism; independent in principle.
 
     Note every call carries `as_of` — sources refuse anything filed later, so a
     leak raises rather than quietly flattering the backtest.
@@ -148,8 +148,8 @@ def acquire(
     out.prepared = company.prepared
     out.driver_block = company.drivers
 
-    # ---- A1: numbers --------------------------------------------------- #
-    with events.node("A1_numbers"):
+    # ---- B1: numbers --------------------------------------------------- #
+    with events.node("B1_numbers"):
         budget = Budget()
         actuals = loader.actuals(ticker, period, as_of)
         if actuals:
@@ -181,8 +181,8 @@ def acquire(
                 hint="periods are fiscal labels derived from period end dates",
             )
 
-        out.budgets["A1"] = budget.report()
-        events.emit(EventType.CLAIM_ADDED, "A1_numbers", n=len(out.claims))
+        out.budgets["B1"] = budget.report()
+        events.emit(EventType.CLAIM_ADDED, "B1_numbers", n=len(out.claims))
 
     # ---- A1b: the series the model rolls forward from ------------------- #
     #
@@ -190,20 +190,20 @@ def acquire(
     # handover: everything the analysis needs, gathered once, budgeted, and
     # written to the dossier. The alternative — the model reaching back to the
     # network mid-run — means a stage that was supposed to be replayable is not.
-    with events.node("A1b_series"):
+    with events.node("B1b_series"):
         out.history = loader.history(ticker, as_of)
         # Two years of daily bars. The whole series would be 4,000 sessions to
         # answer a question about one quarter's buyback.
         out.prices = loader.prices(ticker, as_of - timedelta(days=730), as_of)
         events.emit(
             EventType.NODE_DONE,
-            "A1b_series",
+            "B1b_series",
             quarters=out.history.n_quarters() if out.history else 0,
             price_bars=len(out.prices or []),
         )
 
-    # ---- A2: filings and their text ------------------------------------ #
-    with events.node("A2_filings"):
+    # ---- B2: filings and their text ------------------------------------ #
+    with events.node("B2_filings"):
         budget = Budget()
         for form, items, why in FILINGS_PRIORITY:
             if budget.exhausted():
@@ -232,17 +232,17 @@ def acquire(
             uri = f"transcript:{ticker}:{period}"
             out.documents[uri] = transcript
 
-        out.budgets["A2"] = budget.report()
+        out.budgets["B2"] = budget.report()
         if budget.skipped:
             # Never silent. A dropped source must be visible in the manifest.
-            log.info("acquisition_truncated", stage="A2", skipped=budget.skipped)
+            log.info("acquisition_truncated", stage="B2", skipped=budget.skipped)
         events.emit(
-            EventType.NODE_DONE, "A2_filings",
+            EventType.NODE_DONE, "B2_filings",
             filings=len(out.claims), documents=len(out.documents),
         )
 
-    # ---- A3: industry --------------------------------------------------- #
-    with events.node("A3_industry"):
+    # ---- B3: industry --------------------------------------------------- #
+    with events.node("B3_industry"):
         budget = Budget()
         peer_claims, peer_lines = [], []
 
@@ -315,7 +315,7 @@ def acquire(
 
         for target in INDUSTRY_PRIORITY[2:]:
             budget.skip(f"not implemented: {target}")
-        out.budgets["A3_news"] = news_budget.report()
+        out.budgets["B3_news"] = news_budget.report()
 
         out.claims.extend(peer_claims)
         out.peer_block = "\n\n".join(peer_lines)
@@ -325,14 +325,14 @@ def acquire(
                 f"{PEER_LOOKBACK_DAYS} days of {as_of}. Early in a reporting "
                 "cycle this is the correct and common situation.)"
             )
-        out.budgets["A3"] = budget.report()
+        out.budgets["B3"] = budget.report()
         events.emit(
-            EventType.NODE_DONE, "A3_industry",
+            EventType.NODE_DONE, "B3_industry",
             peers_checked=len(peer_tickers), peers_with_prints=len(peer_lines),
         )
 
-    # ---- A4: macro ------------------------------------------------------ #
-    with events.node("A4_macro"):
+    # ---- B4: macro ------------------------------------------------------ #
+    with events.node("B4_macro"):
         budget = Budget()
         if macro_source is None:
             budget.skip("no macro source configured (FRED_API_KEY unset)")
@@ -344,9 +344,9 @@ def acquire(
             if series:
                 budget.spend(docs=len(series))
                 out.claims.extend(_macro_claims(series, as_of))
-        out.budgets["A4"] = budget.report()
+        out.budgets["B4"] = budget.report()
         events.emit(
-            EventType.NODE_DONE, "A4_macro",
+            EventType.NODE_DONE, "B4_macro",
             series=len(company.macro_series) if macro_source else 0,
         )
 

@@ -129,7 +129,7 @@ export default function RiskScreen() {
   const ceiling = cost.ceiling_usd ?? 25;
   const utilisation = ceiling ? spent / ceiling : 0;
   const stopped = Boolean(comparability.flag);
-  const droppedCount = Object.keys(f.dropped_lenses ?? {}).length;
+  const droppedCount = Object.keys(f.droppee_lenses ?? {}).length;
 
   const CONTROLS = [
     {

@@ -177,7 +177,7 @@ export interface Forecast {
   lambda_decision: LambdaDecision;
   lenses: LensOutput[];
   /** Lens name -> why it was dropped. Surfaced in the UI, never silently swallowed. */
-  dropped_lenses?: Record<string, string>;
+  droppee_lenses?: Record<string, string>;
   /** consensus * (1 + shrunk company surprise). Every chart shows this. If we cannot beat it, lambda should have been zero. */
   baseline_eps: number;
   total_cost_usd?: number;

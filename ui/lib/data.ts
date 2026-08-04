@@ -199,6 +199,69 @@ export function useResult(): RunResult | null {
   return result;
 }
 
+/**
+ * Stage D's output, from `out/model.json`.
+ *
+ * Fetched separately from `results.json` on purpose. The model stage is
+ * deterministic and free — `forecast model --dossier ...` builds it with no
+ * network, no API key and no model call — so the sheet has to be able to render
+ * it when no forecast run exists at all. Requiring a full seven-lens run to look
+ * at a three-statement model would make the cheapest stage the hardest to see.
+ */
+export interface StatementRow {
+  key: string;
+  label: string;
+  unit: string;
+  value: number;
+  is_input: boolean;
+  sourced: boolean;
+  source_uri?: string | null;
+  quote?: string | null;
+  note?: string | null;
+}
+
+export interface QuarterCheck {
+  period: string;
+  modelled_eps: number | null;
+  actual_eps: number | null;
+  modelled_net_income: number | null;
+  actual_net_income: number | null;
+  eps_error: number | null;
+  balanced: boolean;
+}
+
+export interface ModelPayload {
+  ticker: string;
+  base_period: string;
+  forecast_period: string;
+  balanced: boolean;
+  balance_detail: string;
+  statements: {
+    income_statement?: StatementRow[];
+    cash_flow?: StatementRow[];
+    balance_sheet?: StatementRow[];
+  };
+  ratios: Record<string, number>;
+  notes: Record<string, string>;
+  checks: QuarterCheck[];
+  median_abs_eps_error: number | null;
+  bias: number | null;
+  skipped: string[];
+}
+
+export function useModel(): ModelPayload | null {
+  const [model, setModel] = useState<ModelPayload | null>(null);
+  useEffect(() => {
+    void fetch(`/model.json?t=${Date.now()}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => data && setModel(data as ModelPayload))
+      // No model.json is a legitimate state — nothing has been built yet — so
+      // it is an empty sheet with the command on it, not an error.
+      .catch(() => setModel(null));
+  }, []);
+  return model;
+}
+
 // --------------------------------------------------------------------------- //
 // formatting
 // --------------------------------------------------------------------------- //

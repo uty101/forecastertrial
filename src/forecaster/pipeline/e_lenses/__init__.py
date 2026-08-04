@@ -24,8 +24,8 @@ import structlog
 
 from forecaster.events import EventLog
 from forecaster.llm.client import LLMClient
-from forecaster.pipeline.b_structure import EvidenceStore
-from forecaster.pipeline.c_lenses import (
+from forecaster.pipeline.c_structure import EvidenceStore
+from forecaster.pipeline.e_lenses import (
     drivers,
     forensics,
     guidance,
@@ -33,7 +33,7 @@ from forecaster.pipeline.c_lenses import (
     margins,
     peer_read,
 )
-from forecaster.pipeline.c_lenses.base import LensContext, LensFailure
+from forecaster.pipeline.e_lenses.base import LensContext, LensFailure
 from forecaster.schemas import EventType, LensName, LensOutput
 
 log = structlog.get_logger()

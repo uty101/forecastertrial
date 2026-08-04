@@ -214,7 +214,7 @@ class LensOutput(BaseModel):
     reconciled: bool | None = None
     reconcile_errors: list[str] = Field(default_factory=list)
 
-    # populated by d_champion
+    # populated by f_champion
     thesis: str | None = None
     counterargument: str | None = None
 
@@ -312,7 +312,7 @@ class Forecast(BaseModel):
     lambda_decision: LambdaDecision
 
     lenses: list[LensOutput]
-    dropped_lenses: dict[str, str] = Field(
+    droppee_lenses: dict[str, str] = Field(
         default_factory=dict,
         description="Lens name -> why it was dropped. Surfaced in the UI, never "
         "silently swallowed.",

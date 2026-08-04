@@ -72,10 +72,10 @@ Formally: `forecast = consensus + λ · (own_estimate − consensus)`, where **�
 
 ```
 LAYER A — ACQUIRE (parallel, cheap model, hard budgets)
-  A1 Numbers      XBRL / sponsor feed → typed financials, point-in-time
-  A2 Filings      8-K EX-99.1 · transcript · 10-Q · post-call 8-Ks
-  A3 Industry     peers who already reported · value chain · volume & price
-  A4 Macro        FRED series relevant to the sector
+  B1 Numbers      XBRL / sponsor feed → typed financials, point-in-time
+  B2 Filings      8-K EX-99.1 · transcript · 10-Q · post-call 8-Ks
+  B3 Industry     peers who already reported · value chain · volume & price
+  B4 Macro        FRED series relevant to the sector
         │
 LAYER B — STRUCTURE
   B1 3-statement model   IS/BS/CF, linked, deterministic, no LLM

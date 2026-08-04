@@ -40,7 +40,7 @@ verify:                      ## THE ONE THAT MATTERS
 ui-build:
 	mkdir -p ui/public/replays
 	cp -f out/results.json out/events.ndjson ui/public/ 2>/dev/null || true
-	cp -f out/eval.json out/agents.json out/portfolio.json out/build.json ui/public/ 2>/dev/null || true
+	cp -f out/eval.json out/agents.json out/portfolio.json out/build.json out/model.json ui/public/ 2>/dev/null || true
 	cd ui && npm run build
 
 # NOTE: make is NOT a dependency of this project — it is not installed on every

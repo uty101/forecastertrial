@@ -123,15 +123,15 @@ forecaster/
       bridge.py               # revenue → EPS
       export_xlsx.py
     pipeline/
-      a_acquire.py
-      b_structure.py
-      c_lenses/               # mechanical · guidance · drivers · margins
+      b_acquire.py
+      c_structure.py
+      e_lenses/               # mechanical · guidance · drivers · margins
                               # forensics · peer_read · macro
       v1_reconcile.py         # arithmetic + citations
-      d_champion.py
-      e_judge.py
+      f_champion.py
+      g_judge.py
       v2_comparability.py
-      f_lambda.py
+      h_lambda.py
       v3_calibrate.py
     llm/
       client.py               # caching, cost ceiling, token accounting

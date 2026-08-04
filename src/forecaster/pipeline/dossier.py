@@ -38,7 +38,7 @@ import structlog
 
 from forecaster.data.history import History, Observation
 from forecaster.data.prices import PriceBar
-from forecaster.pipeline.a_acquire import Acquired
+from forecaster.pipeline.b_acquire import Acquired
 from forecaster.schemas import Claim, Consensus, Guidance
 
 log = structlog.get_logger()

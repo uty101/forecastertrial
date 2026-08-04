@@ -19,8 +19,8 @@ address the FX regime and hedging instead.
 from __future__ import annotations
 
 from forecaster.llm.client import LLMClient
-from forecaster.pipeline.b_structure import EvidenceStore
-from forecaster.pipeline.c_lenses.base import LensContext, common_vars, run_lens
+from forecaster.pipeline.c_structure import EvidenceStore
+from forecaster.pipeline.e_lenses.base import LensContext, common_vars, run_lens
 from forecaster.schemas import LensName, LensOutput
 
 NO_SERIES = (

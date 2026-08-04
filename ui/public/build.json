@@ -1,21 +1,21 @@
 {
   "components": [
     {
-      "detail": "covered by test_point_in_time.py",
+      "detail": "covered by test_point_in_time.py, test_history.py, test_sec_acquisition.py",
       "id": "sec",
       "label": "SEC XBRL + filings",
       "layer": "sources",
       "state": "built",
-      "tests": 5,
+      "tests": 34,
       "tier": "none"
     },
     {
-      "detail": "covered by test_point_in_time.py, test_stage1.py",
+      "detail": "covered by test_point_in_time.py, test_stage1.py, test_prices.py",
       "id": "yfinance",
       "label": "yfinance consensus",
       "layer": "sources",
       "state": "built",
-      "tests": 29,
+      "tests": 37,
       "tier": "none"
     },
     {
@@ -28,40 +28,103 @@
       "tier": "none"
     },
     {
-      "detail": "no test encodes its failure modes",
+      "detail": "covered by test_exa_source.py",
+      "id": "exa",
+      "label": "Exa news search",
+      "layer": "sources",
+      "state": "built",
+      "tests": 6,
+      "tier": "none"
+    },
+    {
+      "detail": "covered by test_lse_source.py",
+      "id": "lse",
+      "label": "LSE options + insiders",
+      "layer": "sources",
+      "state": "built",
+      "tests": 6,
+      "tier": "none"
+    },
+    {
+      "detail": "covered by test_sponsor_source.py",
       "id": "sponsor",
       "label": "Sponsor feed adapter",
       "layer": "sources",
-      "state": "partial",
-      "tests": 0,
+      "state": "built",
+      "tests": 14,
       "tier": "none"
     },
     {
-      "detail": "no test encodes its failure modes",
+      "detail": "covered by test_universe.py",
       "id": "universe",
       "label": "Prepared universe",
       "layer": "sources",
-      "state": "partial",
-      "tests": 0,
+      "state": "built",
+      "tests": 8,
       "tier": "none"
     },
     {
-      "detail": "no test encodes its failure modes",
+      "detail": "covered by test_history.py",
+      "id": "history",
+      "label": "Quarterly series builder",
+      "layer": "sources",
+      "state": "built",
+      "tests": 16,
+      "tier": "none"
+    },
+    {
+      "detail": "covered by test_prices.py",
+      "id": "prices",
+      "label": "Price bars + VWAP",
+      "layer": "sources",
+      "state": "built",
+      "tests": 8,
+      "tier": "none"
+    },
+    {
+      "detail": "covered by test_sec_acquisition.py",
       "id": "acquire",
-      "label": "A1\u2013A4 acquirers",
+      "label": "B1\u2013B5 acquirers",
       "layer": "acquire",
-      "state": "partial",
-      "tests": 0,
+      "state": "built",
+      "tests": 13,
       "tier": "none"
     },
     {
-      "detail": "covered by test_llm_layer.py",
+      "detail": "covered by test_llm_layer.py, test_extract.py",
       "id": "extract_guidance",
       "label": "Guidance extractor",
       "layer": "acquire",
       "state": "built",
-      "tests": 25,
+      "tests": 31,
       "tier": "cheap"
+    },
+    {
+      "detail": "covered by test_dossier.py",
+      "id": "dossier",
+      "label": "Acquisition artifact",
+      "layer": "acquire",
+      "state": "built",
+      "tests": 5,
+      "tier": "none"
+    },
+    {
+      "detail": "covered by test_model_inputs.py",
+      "id": "inputs",
+      "label": "History \u2192 model inputs",
+      "layer": "structure",
+      "state": "built",
+      "tests": 9,
+      "tier": "none"
+    },
+    {
+      "detail": "covered by test_d_model.py",
+      "id": "model",
+      "label": "3-statement stage + backtest",
+      "layer": "model",
+      "state": "built",
+      "tests": 15,
+      "tier": "none"
     },
     {
       "detail": "covered by test_reconciler.py, test_llm_layer.py",
@@ -73,12 +136,12 @@
       "tier": "none"
     },
     {
-      "detail": "covered by test_model.py",
+      "detail": "covered by test_model.py, test_d_model.py",
       "id": "statements",
       "label": "3-statement model",
       "layer": "structure",
       "state": "built",
-      "tests": 16,
+      "tests": 31,
       "tier": "none"
     },
     {
@@ -274,10 +337,10 @@
   "gates": [
     {
       "blocks": "everything downstream assumes a data shape that was inferred from documentation rather than observed",
-      "detail": "no cached responses \u2014 run `forecast sources --ticker NVDA` from the demo machine first. This is the check most likely to be silently broken.",
+      "detail": "cache holds real responses",
       "id": "sources_verified",
       "label": "Data sources run against the network",
-      "passed": false
+      "passed": true
     },
     {
       "blocks": "without cases there is no baseline, and without a baseline a pipeline result cannot be interpreted",
@@ -316,19 +379,31 @@
     }
   ],
   "totals": {
-    "built": 14,
-    "components": 30,
-    "gates_passed": 1,
+    "built": 24,
+    "components": 37,
+    "gates_passed": 2,
     "gates_total": 6,
     "missing": 0,
-    "partial": 16,
-    "tests": 87,
+    "partial": 13,
+    "tests": 197,
     "tests_by_file": {
+      "tests/test_config.py": 4,
+      "tests/test_d_model.py": 15,
+      "tests/test_dossier.py": 5,
+      "tests/test_exa_source.py": 6,
+      "tests/test_extract.py": 6,
+      "tests/test_history.py": 16,
       "tests/test_llm_layer.py": 25,
+      "tests/test_lse_source.py": 6,
       "tests/test_model.py": 16,
+      "tests/test_model_inputs.py": 9,
       "tests/test_point_in_time.py": 5,
+      "tests/test_prices.py": 8,
       "tests/test_reconciler.py": 17,
-      "tests/test_stage1.py": 24
+      "tests/test_sec_acquisition.py": 13,
+      "tests/test_sponsor_source.py": 14,
+      "tests/test_stage1.py": 24,
+      "tests/test_universe.py": 8
     }
   }
 }

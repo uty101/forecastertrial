@@ -45,7 +45,7 @@ import type { NodeStatus, RunResult } from "@/lib/data";
  *                from the Street straight off the slider.
  *
  *   consensus    And the thing an org chart cannot show at all: consensus enters
- *   bus          at A1 and runs along the bottom of the sheet, past every stage,
+ *   bus          at B1 and runs along the bottom of the sheet, past every stage,
  *                untouched, into λ's second input. That rail IS the thesis. Seven
  *                lenses, a champion round and one expensive judge all exist to
  *                earn the right to move the wiper off it.
@@ -62,7 +62,7 @@ interface Part extends OrgNode {
   ghost?: boolean;
 }
 
-const W = 1740;
+const W = 1910;
 const H = 992;
 
 /* The lens rank is the spine of the drawing; everything else centres on it. */
@@ -73,42 +73,47 @@ const lensY = (i: number) => LY0 + i * LPITCH;
 const LENS_BOTTOM = lensY(6) + LH;
 const SPINE = (LY0 + LENS_BOTTOM) / 2;
 
-/* Column origins. Buses run in the gutters between them. */
+/* Column origins. Buses run in the gutters between them.
+ *
+ * Keyed by stage NAME rather than stage letter. They were letters, and when
+ * Sources became stage A every one of them was off by one — a key called `a`
+ * holding the acquire column. Names cannot desync from a renumbering. */
 const X = {
-  src: 28,
-  a: 214,
-  b: 414,
-  c: 646,
-  v1: 872,
-  d: 966,
-  e: 1166,
-  f: 1370,
-  g: 1576,
+  sources: 28,
+  acquire: 214,
+  structure: 414,
+  model: 600,
+  analyse: 816,
+  v1: 1042,
+  challenge: 1136,
+  judge: 1336,
+  position: 1540,
+  output: 1746,
 } as const;
 
 /**
  * Bus lanes, all in the gutters between columns.
  *
  * These are hand-picked rather than derived, and every one of them was moved at
- * least once: the first routing put the consensus rail straight through the A2,
- * A3 and A4 packages, and V2's control line through V3. A schematic where a
+ * least once: the first routing put the consensus rail straight through the B2,
+ * B3 and B4 packages, and V2's control line through V3. A schematic where a
  * conductor crosses a part is not a stylistic problem — it is unreadable, since
  * you cannot tell a crossing from a connection. Crossings between conductors are
  * fine and expected, which is exactly why junction dots exist.
  */
 const BUS = {
   src: 170, // sources fan into the acquirers
-  railDown: 196, // the consensus rail drops down this gutter, left of column A
-  a: 380, // acquirers merge into the evidence store
-  extract: 362, // the extractor's own feed, inboard of the merge bus
-  b: 602, // the store fans out to the lenses
-  v1: 942, // reconciled outputs collect into the champion
+  railDown: 196, // the consensus rail drops down this gutter, left of column B
+  acquire: 380, // acquirers merge into the evidence store
+  structure: 576, // the store hands the model its claims
+  model: 782, // the model fans out to the lenses
+  v1: 1112, // reconciled outputs collect into the champion
   rail: 852, // the consensus bus, along the bottom of the sheet
-  lamIn: 1322, // where the rail turns up into λ's second input
-  eJog: 1348, // where the judge's output steps into λ's first input
+  lamIn: 1492, // where the rail turns up into λ's second input
+  eJog: 1518, // where the judge's output steps into λ's first input
   v2Lane: 560, // V2's control line runs along here, clear of V3
-  v2Ctl: 1400, // and turns up into λ's underside
-  v3Ctl: 1602, // V3's control line turns up into the output
+  v2Ctl: 1570, // and turns up into λ's underside
+  v3Ctl: 1772, // V3's control line turns up into the output
 } as const;
 
 export const LENSES = [
@@ -125,10 +130,12 @@ export const PARTS: Part[] = [
   // ---- sources: terminals, not components -------------------------------- //
   ...(
     [
-      ["sec", "SEC", "XBRL + filing text", 262],
-      ["yfinance", "yfinance", "consensus, point-in-time", 336],
-      ["universe", "Universe", "peers + value chain", 440],
-      ["fred", "FRED", "macro via ALFRED", 524],
+      ["sec", "SEC", "XBRL · filings · SIC peers", 250],
+      ["yfinance", "yfinance", "consensus · prices · shares", 318],
+      ["exa", "Exa", "news, date-bounded", 386],
+      ["lse", "LSE", "options chain · implied move", 454],
+      ["universe", "Universe", "prepared, local", 522],
+      ["fred", "FRED", "macro via ALFRED", 590],
     ] as const
   ).map(([component, label, sub, y], i) => ({
     id: `src_${component}`,
@@ -141,48 +148,60 @@ export const PARTS: Part[] = [
     tier: "none" as const,
     stubs: 1,
     sides: "out" as const,
-    x: X.src,
+    x: X.sources,
     y,
     w: 108,
     h: 44,
   })),
   {
     id: "src_sponsor",
-    ref: "J5",
+    ref: "J7",
     label: "Sponsor feed",
     sub: "one adapter, written on the day",
     component: "sponsor",
     role: "source",
     kind: "data",
     tier: "none",
+    // Still a ghost: it is the one terminal with nothing behind it until 10am.
     ghost: true,
     stubs: 1,
     sides: "out",
-    x: X.src,
-    y: 612,
+    x: X.sources,
+    y: 658,
     w: 108,
     h: 44,
   },
 
   // ---- A: acquire --------------------------------------------------------- //
+  //
+  // B5 sits directly under B2 rather than at the numeric end of the rank,
+  // because it is the one acquirer fed by another acquirer rather than by a
+  // source: it reads the EX-99 body B2 pulled down. Any other placement routes
+  // its feed either straight through B3 and B4 — on a schematic you cannot tell
+  // a crossing from a connection — or out to a lane and back into the same edge
+  // it left, which reads as a fault. The org chart keeps numeric order because
+  // it draws rank; this sheet draws signal flow, and they disagree here.
   ...(
     [
-      ["A1_numbers", "A1 Numbers", "XBRL · consensus", 286],
-      ["A2_filings", "A2 Filings", "8-K · 10-Q · body text", 360],
-      ["A3_industry", "A3 Industry", "peers, 100-day window", 440],
-      ["A4_macro", "A4 Macro", "realtime_start pinned", 524],
+      ["B1_numbers", "B1 Numbers", "XBRL · consensus", 250, "acquire", "none"],
+      ["B1b_series", "B1b Series", "74 quarters · daily bars", 318, "acquire", "none"],
+      ["B2_filings", "B2 Filings", "8-K item 2.02 · EX-99", 386, "acquire", "none"],
+      ["B5_extract", "B5 Extract", "EX-99 prose → cited guide", 454,
+       "extract_guidance", "cheap"],
+      ["B3_industry", "B3 Industry", "peers by SIC · news", 522, "acquire", "none"],
+      ["B4_macro", "B4 Macro", "realtime_start pinned", 590, "acquire", "none"],
     ] as const
-  ).map(([id, label, sub, y], i) => ({
+  ).map(([id, label, sub, y, component, tier], i) => ({
     id,
     ref: `U${i + 1}`,
     label,
     sub,
-    component: "acquire",
+    component,
     liveId: id,
-    kind: "data" as const,
-    tier: "none" as const,
+    kind: (tier === "none" ? "data" : "agent") as Kind,
+    tier,
     stubs: 2,
-    x: X.a,
+    x: X.acquire,
     y,
     w: 128,
     h: 50,
@@ -190,51 +209,58 @@ export const PARTS: Part[] = [
 
   // ---- B: structure ------------------------------------------------------- //
   {
-    id: "B_structure",
-    ref: "U5",
+    id: "C_structure",
+    ref: "U7",
     label: "Evidence store",
     sub: "one byte-identical corpus",
     role: "shared, cached, keyed on input hash",
     component: "evidence",
-    liveId: "B_structure",
+    liveId: "C_structure",
     kind: "code",
     tier: "none",
     stubs: 3,
-    x: X.b,
+    x: X.structure,
     y: SPINE - 38,
     w: 140,
     h: 76,
   },
+
+  // ---- D: the three-statement model --------------------------------------- //
+  //
+  // In the signal path, not beside it. The lenses read the model rather than
+  // the store directly, so every one of them argues with the same ratio base
+  // and is told the same thing about how much of a change the arithmetic
+  // downstream can actually resolve.
   {
-    id: "B_extract",
-    ref: "U6",
-    label: "Guidance extract",
-    sub: "8-K prose → structured guide",
-    component: "extract_guidance",
-    kind: "agent",
-    tier: "cheap",
-    unwired: true,
-    ghost: true,
-    stubs: 2,
-    x: X.b,
-    y: 552,
-    w: 140,
-    h: 48,
+    id: "D_model",
+    ref: "U8",
+    label: "3-statement model",
+    sub: "ratio base · reproduces past quarters",
+    role: "deterministic — nothing here can hallucinate",
+    component: "model",
+    liveId: "D_model",
+    kind: "code",
+    tier: "none",
+    stubs: 3,
+    x: X.model,
+    y: SPINE - 38,
+    w: 150,
+    h: 76,
   },
 
-  // ---- C: seven lenses, and no nets between them --------------------------- //
+  // ---- E: seven lenses, and no nets between them --------------------------- //
   ...LENSES.map(([id, label, sub, tier], i) => ({
-    id: `C_${id}`,
-    ref: `U${7 + i}`,
+    id: `E_${id}`,
+    ref: `U${9 + i}`,
     label,
     sub,
     role: "lens",
     component: id,
-    liveId: `C_${id}`,
+    liveId: `E_${id}`,
     kind: (tier === "none" ? "code" : "agent") as Kind,
     tier,
     stubs: 2,
-    x: X.c,
+    x: X.analyse,
     y: lensY(i),
     w: 178,
     h: LH,
@@ -243,7 +269,7 @@ export const PARTS: Part[] = [
   // ---- V1: a series element, inside the signal path ------------------------ //
   {
     id: "V1_reconcile",
-    ref: "U14",
+    ref: "U16",
     label: "V1",
     sub: "recompute · string-match",
     role: "in-line — breaks the net on failure",
@@ -261,33 +287,33 @@ export const PARTS: Part[] = [
 
   // ---- D, E ---------------------------------------------------------------- //
   {
-    id: "D_champion",
-    ref: "U15",
+    id: "F_champion",
+    ref: "U17",
     label: "Champion",
     sub: "argue, then attack",
     role: "×7 — one prompt, seven parallel calls",
     component: "champion",
-    liveId: "D_champion",
+    liveId: "F_champion",
     kind: "agent",
     tier: "mid",
     stubs: 3,
-    x: X.d,
+    x: X.challenge,
     y: SPINE - 40,
     w: 134,
     h: 80,
   },
   {
-    id: "E_judge",
-    ref: "U16",
+    id: "G_judge",
+    ref: "U18",
     label: "Judge",
     sub: "materiality, never votes",
     role: "one expensive call, highest leverage",
     component: "judge",
-    liveId: "E_judge",
+    liveId: "G_judge",
     kind: "agent",
     tier: "deep",
     stubs: 3,
-    x: X.e,
+    x: X.judge,
     y: SPINE - 40,
     w: 138,
     h: 80,
@@ -296,7 +322,7 @@ export const PARTS: Part[] = [
   // ---- V2, V3: control lines, not series elements --------------------------- //
   {
     id: "V2_comparability",
-    ref: "U17",
+    ref: "U19",
     label: "V2 Comparability",
     sub: "M&A · accounting · 53rd week",
     role: "gate — when it fires, λ collapses",
@@ -306,14 +332,14 @@ export const PARTS: Part[] = [
     tier: "cheap",
     audit: true,
     stubs: 2,
-    x: X.e,
+    x: X.judge,
     y: 704,
     w: 138,
     h: 48,
   },
   {
     id: "V3_calibrate",
-    ref: "U18",
+    ref: "U20",
     label: "V3 Calibrate",
     sub: "bootstrapped own residuals",
     role: "gate — sets the interval width, nothing else",
@@ -323,7 +349,7 @@ export const PARTS: Part[] = [
     tier: "none",
     audit: true,
     stubs: 2,
-    x: X.f,
+    x: X.position,
     y: 704,
     w: 150,
     h: 48,
@@ -331,17 +357,17 @@ export const PARTS: Part[] = [
 
   // ---- F: the mixer -------------------------------------------------------- //
   {
-    id: "F_lambda",
-    ref: "U19",
+    id: "H_lambda",
+    ref: "U21",
     label: "λ",
     sub: "fitted, regime-conditioned",
     role: "crossfade: consensus ↔ our own estimate",
     component: "lambda",
-    liveId: "F_lambda",
+    liveId: "H_lambda",
     kind: "code",
     tier: "none",
     stubs: 2,
-    x: X.f,
+    x: X.position,
     y: SPINE - 54,
     w: 150,
     h: 108,
@@ -350,7 +376,7 @@ export const PARTS: Part[] = [
   // ---- the baseline, tapped off the consensus rail -------------------------- //
   {
     id: "baseline",
-    ref: "U20",
+    ref: "U22",
     label: "Baseline",
     sub: "consensus × (1 + shrunk surprise)",
     role: "the bar to beat — on every chart, by rule",
@@ -358,7 +384,7 @@ export const PARTS: Part[] = [
     kind: "code",
     tier: "none",
     stubs: 2,
-    x: X.d,
+    x: X.challenge,
     y: BUS.rail - 22,
     w: 134,
     h: 44,
@@ -366,7 +392,7 @@ export const PARTS: Part[] = [
 
   // ---- G ------------------------------------------------------------------- //
   {
-    id: "G_output",
+    id: "I_output",
     ref: "OUT",
     label: "Forecast",
     sub: "point + full quantiles",
@@ -374,7 +400,7 @@ export const PARTS: Part[] = [
     kind: "output",
     stubs: 1,
     sides: "in",
-    x: X.g,
+    x: X.output,
     y: SPINE - 38,
     w: 130,
     h: 76,
@@ -444,7 +470,7 @@ function buildNets(result: RunResult | null) {
   const claims = new Map<string, number>(
     (forecast?.lenses ?? []).map((l) => [l.lens, l.claim_ids.length]),
   );
-  const dropped = forecast?.dropped_lenses ?? {};
+  const dropped = forecast?.droppee_lenses ?? {};
   const maxVolume = Math.max(1, ...claims.values());
   const totalKept = [...claims.values()].reduce((a, b) => a + b, 0);
 
@@ -453,12 +479,17 @@ function buildNets(result: RunResult | null) {
 
   // sources → acquirers. SEC feeds two: the numbers and the filing body text.
   for (const [a, b] of [
-    ["src_sec", "A1_numbers"],
-    ["src_sec", "A2_filings"],
-    ["src_yfinance", "A1_numbers"],
-    ["src_universe", "A3_industry"],
-    ["src_fred", "A4_macro"],
-    ["src_sponsor", "A1_numbers"],
+    ["src_sec", "B1_numbers"],
+    ["src_sec", "B1b_series"],
+    ["src_sec", "B2_filings"],
+    ["src_sec", "B3_industry"],
+    ["src_yfinance", "B1_numbers"],
+    ["src_yfinance", "B1b_series"],
+    ["src_exa", "B3_industry"],
+    ["src_lse", "B3_industry"],
+    ["src_universe", "B3_industry"],
+    ["src_fred", "B4_macro"],
+    ["src_sponsor", "B1_numbers"],
   ] as const) {
     nets.push({
       id: `${a}>${b}`,
@@ -470,56 +501,71 @@ function buildNets(result: RunResult | null) {
   }
 
   // acquirers → evidence store, merging on one vertical bus.
-  for (const id of ["A1_numbers", "A2_filings", "A3_industry", "A4_macro"]) {
+  for (const id of [
+    "B1_numbers",
+    "B1b_series",
+    "B2_filings",
+    "B5_extract",
+    "B3_industry",
+    "B4_macro",
+  ]) {
     nets.push({
       id: `${id}>B`,
-      d: hvh(BY_ID[id], BY_ID.B_structure, BUS.a),
+      d: hvh(BY_ID[id], BY_ID.C_structure, BUS.acquire),
       kind: "signal",
       from: id,
-      to: "B_structure",
+      to: "C_structure",
     });
-    junctions.push({ x: BUS.a, y: cy(BY_ID[id]) });
+    junctions.push({ x: BUS.acquire, y: cy(BY_ID[id]) });
   }
 
-  // The extractor's footprint, wired with nets that carry nothing. Its return
-  // leg goes straight up into the store's underside rather than hooking back to
-  // the same edge the lens bus leaves from — a conductor that leaves an edge and
-  // returns to it reads as a fault, not a feed.
+  // evidence store → model. One conductor, straight across the gutter: the
+  // model is fed by the whole corpus rather than by any one acquirer.
   nets.push({
-    id: "A2>B_extract",
-    d: hvh(BY_ID.A2_filings, BY_ID.B_extract, BUS.extract),
-    kind: "reference",
+    id: "C_structure>D_model",
+    d: `M${right(BY_ID.C_structure)},${cy(BY_ID.C_structure)} H${X.model}`,
+    kind: "signal",
+    from: "C_structure",
+    to: "D_model",
   });
+
+  // B2 → B5, the one net inside column B. The extractor reads the EX-99 body B2
+  // pulled down, so its feed is a short vertical between adjacent parts rather
+  // than anything routed out to a lane. Drawn off-centre from the merge bus stub
+  // so the two conductors on B5's outline do not appear to be one wire passing
+  // through the part.
   nets.push({
-    id: "B_extract>B",
-    d: `M${BY_ID.B_extract.x + 70},${BY_ID.B_extract.y} V${BY_ID.B_structure.y + BY_ID.B_structure.h}`,
-    kind: "reference",
+    id: "B2_filings>B5_extract",
+    d: `M${BY_ID.B2_filings.x + 40},${BY_ID.B2_filings.y + BY_ID.B2_filings.h} V${BY_ID.B5_extract.y}`,
+    kind: "signal",
+    from: "B2_filings",
+    to: "B5_extract",
   });
 
   // evidence store → each lens, off one distribution bus. Width is that lens's
   // own citation count, so a lens standing on a single quote looks like it does.
   for (const [id] of LENSES) {
-    const lens = BY_ID[`C_${id}`];
+    const lens = BY_ID[`E_${id}`];
     nets.push({
-      id: `B>C_${id}`,
-      d: `M${right(BY_ID.B_structure)},${cy(BY_ID.B_structure)} H${BUS.b} V${cy(lens)} H${lens.x}`,
+      id: `D>E_${id}`,
+      d: `M${right(BY_ID.D_model)},${cy(BY_ID.D_model)} H${BUS.model} V${cy(lens)} H${lens.x}`,
       kind: "signal",
-      from: "B_structure",
-      to: `C_${id}`,
+      from: "D_model",
+      to: `E_${id}`,
       volume: claims.get(id),
     });
-    junctions.push({ x: BUS.b, y: cy(lens) });
+    junctions.push({ x: BUS.model, y: cy(lens) });
   }
 
   // lens → V1. In-line: this is the net V1 is able to break.
   for (const [id] of LENSES) {
-    const lens = BY_ID[`C_${id}`];
+    const lens = BY_ID[`E_${id}`];
     const open = id in dropped;
     nets.push({
-      id: `C_${id}>V1`,
+      id: `E_${id}>V1`,
       d: `M${right(lens)},${cy(lens)} H${X.v1}`,
       kind: "signal",
-      from: `C_${id}`,
+      from: `E_${id}`,
       to: "V1_reconcile",
       volume: claims.get(id),
       open,
@@ -530,14 +576,14 @@ function buildNets(result: RunResult | null) {
   // V1 → champion, collecting on one bus. A dropped lens is open here too, and
   // the collector bus is visibly thinner for it.
   for (const [id] of LENSES) {
-    const lens = BY_ID[`C_${id}`];
+    const lens = BY_ID[`E_${id}`];
     const open = id in dropped;
     nets.push({
       id: `V1>D_${id}`,
-      d: `M${right(BY_ID.V1_reconcile)},${cy(lens)} H${BUS.v1} V${cy(BY_ID.D_champion)} H${X.d}`,
+      d: `M${right(BY_ID.V1_reconcile)},${cy(lens)} H${BUS.v1} V${cy(BY_ID.F_champion)} H${X.challenge}`,
       kind: "signal",
       from: "V1_reconcile",
-      to: "D_champion",
+      to: "F_champion",
       volume: claims.get(id),
       open,
       mark: open ? [(right(BY_ID.V1_reconcile) + BUS.v1) / 2, cy(lens)] : undefined,
@@ -547,10 +593,10 @@ function buildNets(result: RunResult | null) {
 
   nets.push({
     id: "D>E",
-    d: `M${right(BY_ID.D_champion)},${cy(BY_ID.D_champion)} H${X.e}`,
+    d: `M${right(BY_ID.F_champion)},${cy(BY_ID.F_champion)} H${X.judge}`,
     kind: "signal",
-    from: "D_champion",
-    to: "E_judge",
+    from: "F_champion",
+    to: "G_judge",
     volume: totalKept,
   });
 
@@ -558,21 +604,21 @@ function buildNets(result: RunResult | null) {
   // conductor is a fixed weight: the volume story ends at the judge.
   nets.push({
     id: "E>F",
-    d: `M${right(BY_ID.E_judge)},${cy(BY_ID.E_judge)} H${BUS.eJog} V${BY_ID.F_lambda.y + 30} H${X.f}`,
+    d: `M${right(BY_ID.G_judge)},${cy(BY_ID.G_judge)} H${BUS.eJog} V${BY_ID.H_lambda.y + 30} H${X.position}`,
     kind: "signal",
-    from: "E_judge",
-    to: "F_lambda",
+    from: "G_judge",
+    to: "H_lambda",
   });
 
-  // THE CONSENSUS BUS. Tapped at A1's underside, down the outboard gutter so it
-  // clears the rest of column A, along the bottom of the sheet, through the
+  // THE CONSENSUS BUS. Tapped at B1's underside, down the outboard gutter so it
+  // clears the rest of column B, along the bottom of the sheet, through the
   // baseline in series, and up into λ's second input. It touches nothing else.
-  const a1 = BY_ID.A1_numbers;
+  const a1 = BY_ID.B1_numbers;
   nets.push({
     id: "rail_in",
-    d: `M${X.a + 24},${a1.y + a1.h} V${a1.y + a1.h + 18} H${BUS.railDown} V${BUS.rail} H${X.d}`,
+    d: `M${X.acquire + 24},${a1.y + a1.h} V${a1.y + a1.h + 18} H${BUS.railDown} V${BUS.rail} H${X.challenge}`,
     kind: "rail",
-    from: "A1_numbers",
+    from: "B1_numbers",
   });
   // The baseline is IN SERIES on the rail, not a branch off it: it is consensus
   // with the company's own shrunk surprise applied, and nothing else touches it.
@@ -580,18 +626,18 @@ function buildNets(result: RunResult | null) {
   // is scored against, not an input to it. Wiring it into G would be a lie.
   nets.push({
     id: "rail_lambda",
-    d: `M${right(BY_ID.baseline)},${BUS.rail} H${BUS.lamIn} V${BY_ID.F_lambda.y + 78} H${X.f}`,
+    d: `M${right(BY_ID.baseline)},${BUS.rail} H${BUS.lamIn} V${BY_ID.H_lambda.y + 78} H${X.position}`,
     kind: "rail",
-    from: "A1_numbers",
-    to: "F_lambda",
+    from: "B1_numbers",
+    to: "H_lambda",
   });
 
   nets.push({
     id: "F>G",
-    d: `M${right(BY_ID.F_lambda)},${cy(BY_ID.F_lambda)} H${X.g}`,
+    d: `M${right(BY_ID.H_lambda)},${cy(BY_ID.H_lambda)} H${X.output}`,
     kind: "signal",
-    from: "F_lambda",
-    to: "G_output",
+    from: "H_lambda",
+    to: "I_output",
   });
 
   // Control lines. Dashed, thin, arrowed, entering the underside of the part they
@@ -601,7 +647,7 @@ function buildNets(result: RunResult | null) {
   const v2 = BY_ID.V2_comparability;
   nets.push({
     id: "V2>F",
-    d: `M${v2.x + v2.w / 2},${v2.y} V${BUS.v2Lane} H${BUS.v2Ctl} V${BY_ID.F_lambda.y + BY_ID.F_lambda.h}`,
+    d: `M${v2.x + v2.w / 2},${v2.y} V${BUS.v2Lane} H${BUS.v2Ctl} V${BY_ID.H_lambda.y + BY_ID.H_lambda.h}`,
     kind: "control",
     from: "V2_comparability",
   });
@@ -616,20 +662,20 @@ function buildNets(result: RunResult | null) {
   const gauges: Gauge[] = forecast
     ? [
         {
-          x: BUS.b - 34,
-          y: cy(BY_ID.B_structure) - 12,
+          x: BUS.structure - 34,
+          y: cy(BY_ID.C_structure) - 12,
           value: forecast.lenses.reduce((a, l) => a + l.claim_ids.length, 0),
           label: "cited",
         },
         {
           x: BUS.v1 - 40,
-          y: cy(BY_ID.D_champion) - 12,
+          y: cy(BY_ID.F_champion) - 12,
           value: totalKept,
           label: "verified",
         },
         {
-          x: (right(BY_ID.D_champion) + X.e) / 2,
-          y: cy(BY_ID.E_judge) - 12,
+          x: (right(BY_ID.F_champion) + X.judge) / 2,
+          y: cy(BY_ID.G_judge) - 12,
           value: keptCount,
           label: "cases",
         },
@@ -717,7 +763,7 @@ export default function Schematic({
     const status = live[part.liveId];
     if (!status) return null;
     const lens = result?.forecast.lenses.find(
-      (l) => `C_${l.lens}` === part.liveId,
+      (l) => `E_${l.lens}` === part.liveId,
     );
     const tok = lens ? (lens.input_tokens ?? 0) + (lens.output_tokens ?? 0) : 0;
     const ms = status.latencyMs ?? 0;
@@ -879,15 +925,16 @@ export default function Schematic({
         {/* ---- column headers, drafted as a table row ---------------------- */}
         {(
           [
-            ["SOURCES", X.src, 108],
-            ["A · ACQUIRE", X.a, 128],
-            ["B · STRUCTURE", X.b, 140],
-            ["C · ANALYSE", X.c, 178],
+            ["A · SOURCES", X.sources, 108],
+            ["B · ACQUIRE", X.acquire, 128],
+            ["C · STRUCTURE", X.structure, 140],
+            ["D · MODEL", X.model, 150],
+            ["E · ANALYSE", X.analyse, 178],
             ["V1", X.v1, 50],
-            ["D · CHALLENGE", X.d, 134],
-            ["E · JUDGE", X.e, 138],
-            ["F · POSITION", X.f, 150],
-            ["G", X.g, 130],
+            ["F · CHALLENGE", X.challenge, 134],
+            ["G · JUDGE", X.judge, 138],
+            ["H · POSITION", X.position, 150],
+            ["I", X.output, 130],
           ] as const
         ).map(([label, x, w]) => (
           <g key={label}>
@@ -1227,7 +1274,7 @@ export default function Schematic({
         {/* ---- λ drawn as what it is: a crossfader ------------------------- */}
         <g pointerEvents="none">
           {(() => {
-            const f = BY_ID.F_lambda;
+            const f = BY_ID.H_lambda;
             const trackX = f.x + 116;
             const top = f.y + 26;
             const bottom = f.y + 92;
@@ -1298,7 +1345,7 @@ export default function Schematic({
             not. The symbol lives on the control line, where it belongs. */}
         <g pointerEvents="none">
           {(() => {
-            const f = BY_ID.F_lambda;
+            const f = BY_ID.H_lambda;
             const gx = f.x + f.w / 2;
             const gTop = f.y + f.h;
             const fired = Boolean(comparability);
@@ -1342,7 +1389,7 @@ export default function Schematic({
 
         {/* ---- the annotations that carry the argument --------------------- */}
         <text
-          x={X.c + 89}
+          x={X.analyse + 89}
           y={LENS_BOTTOM + 24}
           textAnchor="middle"
           className="fill-ink-3"
@@ -1365,7 +1412,7 @@ export default function Schematic({
           className="fill-ink-2"
           style={{ fontSize: 9.5 }}
         >
-          Tapped at A1, past every stage untouched, into λ&rsquo;s second input. The
+          Tapped at B1, past every stage untouched, into λ&rsquo;s second input. The
           baseline sits in series and terminates there: it is what the forecast is
           scored against, not an input to it.
         </text>

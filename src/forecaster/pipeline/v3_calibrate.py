@@ -130,7 +130,7 @@ def calibrate(
     }
 
     # Preserve the judge's median as the 0.5 point. The residual book's own
-    # median encodes our historical bias, which f_lambda already handles; a
+    # median encodes our historical bias, which h_lambda already handles; a
     # second correction here would double-count it.
     quantiles["0.5"] = centre
 

@@ -206,7 +206,7 @@ def main(out: Path = Path("out"), ticker: str = "DEMO") -> None:
             ),
         ),
         lenses=lenses,
-        dropped_lenses=DROPPED,
+        droppee_lenses=DROPPED,
         baseline_eps=2.4816,
         total_cost_usd=0.2837,
         total_input_tokens=112_800,
@@ -270,18 +270,18 @@ def main(out: Path = Path("out"), ticker: str = "DEMO") -> None:
     # kwargs, not payload= — `emit` collects **payload, so a dict named `payload`
     # would nest a second time and consumers would read undefined.
     events.emit(EventType.RUN_START, ticker=ticker, as_of=str(AS_OF))
-    for node in ("A1_numbers", "A2_filings", "A3_industry", "A4_macro", "B_structure"):
+    for node in ("B1_numbers", "B2_filings", "B3_industry", "B4_macro", "C_structure"):
         events.emit(EventType.NODE_START, node)
         events.emit(EventType.NODE_DONE, node, latency_ms=900)
-    events.emit(EventType.CLAIM_ADDED, "B_structure", n=N_CLAIMS)
+    events.emit(EventType.CLAIM_ADDED, "C_structure", n=N_CLAIMS)
     for name, _, confidence, _, _, cites in LENSES:
         events.emit(EventType.NODE_START, f"C_{name.value}")
         events.emit(EventType.NODE_DONE, f"C_{name.value}",
                     latency_ms=7800, confidence=confidence, cited=cites)
-    events.emit(EventType.NODE_START, "C_macro")
-    events.emit(EventType.NODE_FAILED, "C_macro", error=DROPPED["macro"])
-    for node in ("V1_reconcile", "D_champion", "E_judge", "V2_comparability",
-                 "F_lambda", "V3_calibrate"):
+    events.emit(EventType.NODE_START, "E_macro")
+    events.emit(EventType.NODE_FAILED, "E_macro", error=DROPPED["macro"])
+    for node in ("V1_reconcile", "F_champion", "G_judge", "V2_comparability",
+                 "H_lambda", "V3_calibrate"):
         events.emit(EventType.NODE_START, node)
         events.emit(EventType.NODE_DONE, node, latency_ms=1200)
     events.emit(EventType.RUN_DONE, eps=2.44, cost_usd=0.2837)

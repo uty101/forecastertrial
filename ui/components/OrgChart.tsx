@@ -64,8 +64,26 @@ export interface OrgNode {
 }
 
 const W = 1520;
-const H = 900;
+// Raised from 900 when acquisition grew from four boxes to six plus the
+// dossier: the sources row had been sitting on the frame's edge.
+const H = 1000;
 const MID = W / 2;
+
+// The two widest rows, spread evenly about the midline. Computed rather than
+// hand-placed, because the row widths change whenever a source or an acquirer is
+// added and hand-tuned x offsets are how a diagram silently stops matching the
+// system it describes.
+//
+// The widths are not arbitrary: the rank labels run down the left edge from
+// x=14, so a row reaching past x≈100 would put a box on top of the word SOURCES.
+// Both rows are sized to stop at 101 or later.
+const rowX = (n: number, w: number, gap: number, i: number) =>
+  MID - (n * w + (n - 1) * gap) / 2 + i * (w + gap);
+
+const ACQUIRE_W = 206;
+const ACQUIRE_X = (i: number) => rowX(6, ACQUIRE_W, 14, i);
+const SOURCE_W = 178;
+const SOURCE_X = (i: number) => rowX(7, SOURCE_W, 12, i);
 
 const LENS_NAMES = [
   ["mechanical", "Mechanical", "FX · shares · interest", "none"],
@@ -104,7 +122,7 @@ export const NODES: OrgNode[] = [
     sub: "how far from consensus",
     role: "the decision",
     component: "lambda",
-    liveId: "F_lambda",
+    liveId: "H_lambda",
     // The most consequential decision in the system, and there is no model in
     // it: arithmetic on a coefficient fitted by the backtest.
     kind: "code",
@@ -120,7 +138,7 @@ export const NODES: OrgNode[] = [
     sub: "materiality, never votes",
     role: "verdict",
     component: "judge",
-    liveId: "E_judge",
+    liveId: "G_judge",
     kind: "agent",
     tier: "deep",
     x: MID - 110,
@@ -134,7 +152,7 @@ export const NODES: OrgNode[] = [
     label: "Champion",
     sub: "argue, then attack",
     component: "champion",
-    liveId: `D_${id}`,
+    liveId: `F_${id}`,
     kind: "agent" as const,
     tier: "mid" as const,
     x: lensX(i),
@@ -148,7 +166,7 @@ export const NODES: OrgNode[] = [
     sub,
     role: "lens",
     component: id,
-    liveId: `C_${id}`,
+    liveId: `E_${id}`,
     // Mechanical is the one lens with no prompt file, so it is code, not an
     // agent. Deriving the kind from the tier keeps the two from drifting apart.
     kind: (tier === "none" ? "code" : "agent") as Kind,
@@ -158,45 +176,96 @@ export const NODES: OrgNode[] = [
     w: LENS_W,
     h: 56,
   })),
+  // Stage D. Deterministic, and deliberately BELOW the lenses in the chain
+  // rather than above the judge: only the projection needs a revenue view, and
+  // the historical statements, the ratio base and the model's own measured
+  // error are arithmetic on filings. Every lens argues with this dict.
+  {
+    id: "model",
+    label: "3-statement model",
+    sub: "ratio base · reproduces past quarters",
+    role: "measured, not asserted",
+    component: "model",
+    liveId: "D_model",
+    kind: "code",
+    tier: "none",
+    x: MID - 170,
+    y: 526,
+    w: 340,
+    h: 58,
+  },
   {
     id: "evidence",
     label: "Evidence store",
     sub: "claims + verified quotes",
     role: "shared, cached corpus",
     component: "evidence",
-    liveId: "B_structure",
+    liveId: "C_structure",
     kind: "code",
     tier: "none",
     x: MID - 130,
-    y: 556,
+    y: 608,
     w: 260,
     h: 58,
   },
-  // Acquirers.
+  // Acquirers. Six now, not four: A1b carries the quarterly series and the
+  // price history the three-statement model rolls forward from, and B5 lifts
+  // guidance out of the earnings release into citable claims.
+  // Five of the six are pure retrieval and cost nothing but time. B5 is the one
+  // model call in this stage, and it is on the cheap tier — reading a guide out
+  // of a press release the company wrote is not a judgement call.
   ...[
-    ["A1_numbers", "A1 Numbers", "XBRL · consensus", "acquire"],
-    ["A2_filings", "A2 Filings", "8-K · 10-Q · text", "acquire"],
-    ["A3_industry", "A3 Industry", "peers · value chain", "acquire"],
-    ["A4_macro", "A4 Macro", "FRED, point-in-time", "acquire"],
-  ].map(([liveId, label, sub], i) => ({
+    ["B1_numbers", "B1 Numbers", "XBRL · consensus", "acquire", "none"],
+    ["B1b_series", "B1b Series", "74 quarters · daily bars", "acquire", "none"],
+    ["B2_filings", "B2 Filings", "8-K item 2.02 · EX-99 text", "acquire", "none"],
+    ["B3_industry", "B3 Industry", "peers by SIC · news", "acquire", "none"],
+    ["B4_macro", "B4 Macro", "FRED, point-in-time", "acquire", "none"],
+    ["B5_extract", "B5 Extract", "guidance → cited claims", "extract_guidance", "cheap"],
+  ].map(([liveId, label, sub, component, tier], i) => ({
     id: liveId,
     label,
     sub,
-    component: "acquire",
+    component,
     liveId,
-    kind: "data" as const,
-    tier: "none" as const,
-    x: MID - 400 + i * 205,
-    y: 656,
-    w: 190,
+    kind: (tier === "none" ? "data" : "agent") as "data" | "agent",
+    tier: tier as "none" | "cheap",
+    x: ACQUIRE_X(i),
+    y: 708,
+    w: ACQUIRE_W,
     h: 52,
   })),
-  // Sources.
+  // The dossier. Acquisition's output is an artifact on disk, which is what
+  // lets stage 3 run without the network — acquire once, iterate prompts.
+  {
+    id: "dossier",
+    label: "Dossier",
+    sub: "out/acquired/<ticker>/<period>_<as_of>",
+    role: "acquire writes, analysis reads",
+    component: "dossier",
+    kind: "data",
+    tier: "none",
+    x: MID - 200,
+    y: 778,
+    w: 400,
+    h: 46,
+  },
+  // Sources. Stage 1: where the data lives, distinct from stage 2 which goes
+  // and gets it. The sponsor feed sits in this row rather than off to one side
+  // because on the day it is a source like any other — the only one whose
+  // adapter is written in the room.
+  //
+  // Universe is the odd one: a local file, not a fetch. It stays in the row
+  // anyway because acquisition genuinely reads peers, driver text and macro
+  // series ids out of it, and a chart that omits it cannot answer "where did
+  // this company's driver decomposition come from".
   ...[
-    ["sec", "SEC", "XBRL + filing text"],
-    ["yfinance", "yfinance", "consensus, point-in-time"],
-    ["universe", "Universe", "peers + drivers"],
+    ["sec", "SEC", "XBRL · filings · SIC peers"],
+    ["yfinance", "yfinance", "consensus · prices · shares"],
+    ["exa", "Exa", "news, date-bounded"],
+    ["lse", "LSE", "options chain · implied move"],
     ["fred", "FRED", "macro via ALFRED"],
+    ["universe", "Universe", "prepared, local · warm start"],
+    ["sponsor", "Sponsor feed", "written on the day"],
   ].map(([component, label, sub], i) => ({
     id: `src_${component}`,
     label,
@@ -205,24 +274,11 @@ export const NODES: OrgNode[] = [
     role: "source",
     kind: "data" as const,
     tier: "none" as const,
-    x: MID - 400 + i * 205,
-    y: 748,
-    w: 190,
+    x: SOURCE_X(i),
+    y: 858,
+    w: SOURCE_W,
     h: 50,
   })),
-  {
-    id: "src_sponsor",
-    label: "Sponsor feed",
-    sub: "written on the day",
-    component: "sponsor",
-    role: "source",
-    kind: "data",
-    tier: "none",
-    x: MID + 425,
-    y: 748,
-    w: 176,
-    h: 50,
-  },
   // Verification — beside the chain, not in it. Two of the three are pure code,
   // deliberately: the thing checking the agents must not itself be able to
   // hallucinate.
@@ -271,19 +327,11 @@ export const NODES: OrgNode[] = [
     h: 56,
   },
   // Supporting functions.
-  {
-    id: "statements",
-    label: "3-statement model",
-    sub: "linked, balance-checked",
-    component: "statements",
-    audit: false,
-    kind: "code",
-    tier: "none",
-    x: MID + 200,
-    y: 556,
-    w: 172,
-    h: 58,
-  },
+  //
+  // `statements` used to sit here as a floating box with an edge into the
+  // evidence store and no `unwired` mark — which claimed a connection that did
+  // not exist, since nothing in `run.py` called it. It is stage D now, in the
+  // chain, so the duplicate is gone rather than relabelled.
   {
     id: "bridge",
     label: "GAAP ↔ non-GAAP",
@@ -310,19 +358,9 @@ export const NODES: OrgNode[] = [
     w: 176,
     h: 50,
   },
-  {
-    id: "extract_guidance",
-    label: "Guidance extractor",
-    sub: "8-K → structured guide",
-    component: "extract_guidance",
-    kind: "agent",
-    tier: "cheap",
-    unwired: true,
-    x: MID + 425,
-    y: 656,
-    w: 176,
-    h: 52,
-  },
+  // The guidance extractor used to stand off to one side marked `unwired` —
+  // built, tested, and never called. It is now B5 in the acquirer row, where a
+  // step `run.py` actually executes belongs.
   {
     id: "eval",
     label: "Eval harness",
@@ -374,23 +412,39 @@ const EDGES: Array<[string, string, "reports" | "audit"]> = [
       [`lens_${id}`, `champion_${id}`, "reports"] as [string, string, "reports"],
   ),
   ...LENS_NAMES.map(
-    ([id]) => ["evidence", `lens_${id}`, "reports"] as [string, string, "reports"],
+    // Through the model, not around it. Every lens sees the same ratio base and
+    // the same measured error, so their disagreement is about judgment rather
+    // than partly an artefact of having been given different arithmetic.
+    ([id]) => ["model", `lens_${id}`, "reports"] as [string, string, "reports"],
   ),
-  ["A1_numbers", "evidence", "reports"],
-  ["A2_filings", "evidence", "reports"],
-  ["A3_industry", "evidence", "reports"],
-  ["A4_macro", "evidence", "reports"],
-  ["src_sec", "A1_numbers", "reports"],
-  ["src_yfinance", "A1_numbers", "reports"],
-  ["src_universe", "A3_industry", "reports"],
-  ["src_fred", "A4_macro", "reports"],
+  // Acquisition no longer hands the corpus straight up the chain — it writes
+  // the dossier, and the evidence store is built from that. This is the edge
+  // that makes stage 3 runnable on its own.
+  ["B1_numbers", "dossier", "reports"],
+  ["B1b_series", "dossier", "reports"],
+  ["B2_filings", "dossier", "reports"],
+  ["B3_industry", "dossier", "reports"],
+  ["B4_macro", "dossier", "reports"],
+  ["B5_extract", "dossier", "reports"],
+  ["dossier", "evidence", "reports"],
+  ["evidence", "model", "reports"],
+  ["src_sec", "B1_numbers", "reports"],
+  ["src_sec", "B1b_series", "reports"],
+  ["src_sec", "B2_filings", "reports"],
+  ["src_yfinance", "B1_numbers", "reports"],
+  ["src_yfinance", "B1b_series", "reports"],
+  ["src_exa", "B3_industry", "reports"],
+  ["src_lse", "B3_industry", "reports"],
+  ["src_fred", "B4_macro", "reports"],
+  ["src_universe", "B3_industry", "reports"],
+  ["src_universe", "B4_macro", "reports"],
+  ["src_sponsor", "B1_numbers", "reports"],
   // audits and side functions
   ["v3", "lambda", "audit"],
   ["v2", "judge", "audit"],
   ["v1", "judge", "audit"],
-  ["statements", "evidence", "audit"],
   ["bridge", "evidence", "audit"],
-  ["extract_guidance", "evidence", "audit"],
+  ["llm", "B5_extract", "audit"],
 ];
 
 /* The state palettes are exported because the schematic view paints from the same
@@ -574,14 +628,16 @@ export default function OrgChart({
 
         {/* Row labels down the left edge — the layer each rank belongs to. */}
         {[
-          ["G  OUTPUT", 90],
-          ["F  POSITION", 185],
-          ["E  JUDGE", 281],
-          ["D  CHALLENGE", 381],
-          ["C  ANALYSE", 474],
-          ["B  STRUCTURE", 585],
-          ["A  ACQUIRE", 682],
-          ["   SOURCES", 773],
+          ["I  OUTPUT", 90],
+          ["H  POSITION", 185],
+          ["G  JUDGE", 281],
+          ["F  CHALLENGE", 381],
+          ["E  ANALYSE", 474],
+          ["D  MODEL", 555],
+          ["C  STRUCTURE", 637],
+          ["B  ACQUIRE", 734],
+          ["   DOSSIER", 801],
+          ["A  SOURCES", 883],
         ].map(([label, y]) => (
           <text
             key={label as string}

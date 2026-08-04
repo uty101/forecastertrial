@@ -30,7 +30,7 @@ export default function RunBlock({ run }: { run: RunState }) {
     : "------";
 
   const kept = forecast?.lenses.length ?? 0;
-  const dropped = Object.keys(forecast?.dropped_lenses ?? {}).length;
+  const dropped = Object.keys(forecast?.droppee_lenses ?? {}).length;
   const lambda = forecast?.lambda_decision.value;
 
   const state = run.finished

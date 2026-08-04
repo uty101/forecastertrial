@@ -12,7 +12,7 @@ from datetime import date
 from forecaster.data.history import History, Observation
 from forecaster.data.prices import PriceBar
 from forecaster.pipeline import dossier
-from forecaster.pipeline.a_acquire import Acquired
+from forecaster.pipeline.b_acquire import Acquired
 from forecaster.pipeline.v1_reconcile import verify_citations
 from forecaster.schemas import Basis, Claim, Consensus, Guidance, Source, SourceKind
 
@@ -38,7 +38,7 @@ def _acquired() -> Acquired:
         claims=[claim],
         documents={URI: ARTICLE},
         consensus=Consensus(eps=2.083, basis=Basis.NON_GAAP, as_of=AS_OF),
-        budgets={"A2": {"docs": 12, "tokens": 33612, "elapsed_s": 1.5,
+        budgets={"B2": {"docs": 12, "tokens": 33612, "elapsed_s": 1.5,
                         "skipped": ["10-K: geographic mix"]}},
         sector="semiconductors",
         prepared=True,
@@ -96,8 +96,8 @@ def test_the_manifest_records_what_was_skipped(tmp_path):
     path = dossier.write(_acquired(), "NVDA", "2027Q2", AS_OF, root=tmp_path)
     _, _, manifest = dossier.read(path)
 
-    assert manifest["budgets"]["A2"]["skipped"] == ["10-K: geographic mix"]
-    assert "elapsed_s" not in manifest["budgets"]["A2"]
+    assert manifest["budgets"]["B2"]["skipped"] == ["10-K: geographic mix"]
+    assert "elapsed_s" not in manifest["budgets"]["B2"]
 
 
 def test_guidance_and_rejections_are_both_kept(tmp_path):
