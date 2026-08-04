@@ -30,6 +30,7 @@ from forecaster.eval import fit as fit_mod
 from forecaster.events import EventLog
 from forecaster.llm.client import LLMClient
 from forecaster.llm.prompt import load_all
+from forecaster.model import grid
 from forecaster.pipeline import b_acquire, d_model, dossier
 from forecaster.pipeline import run as pipeline
 from forecaster.schemas import LambdaPreset
@@ -394,8 +395,21 @@ def model(
 
     payload = d_model.to_json(result)
     payload["ticker"] = manifest.get("ticker", result.ticker)
+    # The reported history laid out as three statements — quarterly back to the
+    # first filing, and the same data rolled into fiscal years. Both, because
+    # commingling them in one table is how the SUM(Q1:Q4) rule gets applied to a
+    # balance sheet.
+    payload["grids"] = {
+        "quarter": grid.to_json(grid.build(acquired.history, "quarter")),
+        "annual": grid.to_json(grid.build(acquired.history, "annual")),
+    }
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+    # Compact, not indented. The UI fetches this whole file on page load and
+    # indentation doubled it to a megabyte;  already prints the
+    # human-readable version to the terminal.
+    out.write_text(
+        json.dumps(payload, separators=(",", ":"), default=str), encoding="utf-8"
+    )
 
     typer.echo(d_model.to_block(result))
     typer.echo(f"\nwrote {out}")

@@ -230,6 +230,65 @@ export interface QuarterCheck {
   balanced: boolean;
 }
 
+/**
+ * The reported history laid out as three statements.
+ *
+ * Keys are short and empty fields are dropped, and the filing a figure came out
+ * of is referenced by index into a per-statement table rather than repeated on
+ * every cell — a 10-Q has one accession and sixty rows read out of it. Spelling
+ * it all out cost 1.9 MB on a file the sheet fetches on load.
+ */
+export interface GridCell {
+  /** The value. Null and absent both mean "not reported". */
+  v: number | null;
+  /** What the cell CONTAINS, which is what sets its colour. Absent = derived. */
+  o?: "actual" | "derived" | "link";
+  /** Index into the statement's `filings` table. */
+  s?: number;
+  /** How this figure was arrived at, when that is not obvious. */
+  n?: string;
+}
+
+export interface GridLink {
+  statement: "income" | "cashflow" | "balance";
+  row: string;
+  direction: "from" | "to";
+  note: string;
+}
+
+export interface GridRow {
+  id: string;
+  label: string;
+  style: "header" | "line" | "subtotal" | "total" | "memo" | "check";
+  level: number;
+  unit: "usd" | "pct" | "days" | "shares" | "per_share" | "ratio";
+  note?: string;
+  links?: GridLink[];
+  cells: Record<string, GridCell>;
+}
+
+export interface GridPeriod {
+  id: string;
+  label: string;
+  kind: "quarter" | "annual";
+  fy: number;
+  fp: string;
+  quarters: number;
+  complete: boolean;
+}
+
+export interface GridPayload {
+  statement: string;
+  title: string;
+  ticker: string;
+  periods: GridPeriod[];
+  rows: GridRow[];
+  filings: Array<{ uri: string | null; filed: string | null; form: string | null }>;
+  annual_variances: Record<string, Record<string, [number, number]>>;
+}
+
+export type GridSet = Record<"income" | "cashflow" | "balance", GridPayload>;
+
 export interface ModelPayload {
   ticker: string;
   base_period: string;
@@ -247,6 +306,10 @@ export interface ModelPayload {
   median_abs_eps_error: number | null;
   bias: number | null;
   skipped: string[];
+  /** Quarterly and annual are separate layouts, not one table with a toggle —
+   *  commingling them is how the SUM(Q1:Q4) rule gets applied to a balance
+   *  sheet, which produces a plausible number that means nothing. */
+  grids?: Record<"quarter" | "annual", GridSet>;
 }
 
 export function useModel(): ModelPayload | null {

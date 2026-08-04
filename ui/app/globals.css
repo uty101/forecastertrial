@@ -72,6 +72,28 @@
   --color-consensus: #d9a441;
   --color-consensus-soft: #221a0c;
 
+  /*
+   * THE MODEL COLOUR CODE, translated to this substrate.
+   *
+   * In Excel the convention is blue for a hardcoded actual, black for a formula
+   * on the same sheet, green for a link to another sheet. The code is about what
+   * a cell CONTAINS, never what the number means, and it is the first thing a
+   * person who reads models for a living looks at.
+   *
+   * Black-on-white does not survive the move to a dark ground, so the default
+   * ink takes the "calculated here" role and the other two map onto hues this
+   * palette already owns: the data blue for a figure we were told, the
+   * deterministic green for one that arrived from another statement. Three
+   * distinct colours, same meanings, legible on #080b10.
+   *
+   * Negatives stay in parentheses and are NEVER red. Red means something else in
+   * a model, and using it for negatives destroys the code.
+   */
+  --color-model-actual: #4cc2f1;
+  --color-model-link: #35d39a;
+  --color-negative: #ff6b7d;
+  --color-negative-soft: #2a0f16;
+
   /* node / status states */
   --color-idle: #263041;
   --color-running: #a77bff;

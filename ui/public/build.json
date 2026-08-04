@@ -118,6 +118,15 @@
       "tier": "none"
     },
     {
+      "detail": "covered by test_grid.py",
+      "id": "grid",
+      "label": "Statements as laid-out grids",
+      "layer": "model",
+      "state": "built",
+      "tests": 20,
+      "tier": "none"
+    },
+    {
       "detail": "covered by test_d_model.py",
       "id": "model",
       "label": "3-statement stage + backtest",
@@ -379,19 +388,20 @@
     }
   ],
   "totals": {
-    "built": 24,
-    "components": 37,
+    "built": 25,
+    "components": 38,
     "gates_passed": 2,
     "gates_total": 6,
     "missing": 0,
     "partial": 13,
-    "tests": 197,
+    "tests": 217,
     "tests_by_file": {
       "tests/test_config.py": 4,
       "tests/test_d_model.py": 15,
       "tests/test_dossier.py": 5,
       "tests/test_exa_source.py": 6,
       "tests/test_extract.py": 6,
+      "tests/test_grid.py": 20,
       "tests/test_history.py": 16,
       "tests/test_llm_layer.py": 25,
       "tests/test_lse_source.py": 6,
