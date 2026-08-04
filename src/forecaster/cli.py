@@ -29,6 +29,7 @@ from forecaster.eval import fit as fit_mod
 from forecaster.events import EventLog
 from forecaster.llm.client import LLMClient
 from forecaster.llm.prompt import load_all
+from forecaster.pipeline import a_acquire, dossier
 from forecaster.pipeline import run as pipeline
 from forecaster.schemas import LambdaPreset
 
@@ -288,6 +289,68 @@ def status(
 
     if json_out is not None:
         typer.echo(f"\nwrote {json_out}")
+
+
+@app.command()
+def acquire(
+    ticker: str = typer.Option(...),
+    as_of: str = typer.Option(..., "--as-of"),
+    period: str = "2026Q3",
+    extract_guidance: bool = typer.Option(
+        True, help="run the guidance extractor (the only step that costs money)"
+    ),
+    from_cache: bool = typer.Option(False, help="fail rather than hit the network"),
+    root: Path = Path("out/acquired"),
+) -> None:
+    """Stage 2 only — gather everything and write it to a dossier.
+
+    Stops at the boundary on purpose. On the day this runs first, you read what
+    came back, and only then spend model tokens on seven lenses and a judge. A
+    corpus holding the wrong company's filings is cheap to notice here and
+    expensive to notice after the analysis has run on it.
+    """
+    lock = date.fromisoformat(as_of)
+    events = EventLog(settings.out_dir / "events.ndjson")
+    cache = Cache(settings.cache_dir, read_only=from_cache)
+    loader = build_loader(read_only=from_cache)
+
+    acquired = a_acquire.acquire(
+        ticker, period, lock, loader, events,
+        macro_source=build_macro_source(read_only=from_cache),
+    )
+
+    guides: list = []
+    rejections: list[str] = []
+    if extract_guidance:
+        guides, guide_claims, rejections = pipeline._extract_guidance(
+            LLMClient(cache=cache, settings=settings), ticker, acquired, events
+        )
+        acquired.claims.extend(guide_claims)
+
+    path = dossier.write(
+        acquired, ticker, period, lock,
+        guides=guides, rejections=rejections,
+        provenance=loader.report(), root=root,
+    )
+
+    counts = {
+        "claims": len(acquired.claims),
+        "documents": len(acquired.documents),
+        "guides": len(guides),
+        "rejected": len(rejections),
+        "quarters": acquired.history.n_quarters() if acquired.history else 0,
+        "price_bars": len(acquired.prices or []),
+    }
+    typer.echo(f"wrote {path}")
+    for key, value in counts.items():
+        typer.echo(f"  {key:12s} {value}")
+    skipped = [s for b in acquired.budgets.values() for s in b.get("skipped", [])]
+    if skipped:
+        # Never silent: a budget that ran out has to be visible here, not only
+        # in a log line that scrolled past.
+        typer.echo(f"  skipped      {len(skipped)}")
+        for item in skipped[:8]:
+            typer.echo(f"    - {item[:96]}")
 
 
 @app.command()

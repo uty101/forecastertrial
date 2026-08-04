@@ -162,13 +162,24 @@ class ExaSource:
             kept.append(result)
 
         # Persist the bodies so quotes can be verified against them later.
-        for result in kept:
-            text = (result.get("text") or "").strip()
-            if text and result.get("url"):
-                self.cache.fetch(
-                    self.cache.key("exa_doc", date(2000, 1, 1), uri=result["url"]),
-                    lambda text=text: text,
-                )
+        #
+        # OVERWRITE, never get-or-keep. The quote is lifted from THIS payload's
+        # text, so the body stored must be the same payload's text. Keeping an
+        # older copy pairs a fresh quote with a stale document, and some pages
+        # render the current date into their own body — one article opened with
+        # "Today: 4 August 2026" against a stored copy saying "3 August", so the
+        # citation failed on a quote that was copied out perfectly.
+        #
+        # A filing is immutable and can be cached forever. A web page is not,
+        # and treating it as though it were is what broke this.
+        if not self.cache.read_only:
+            for result in kept:
+                text = (result.get("text") or "").strip()
+                if text and result.get("url"):
+                    self.cache.put(
+                        self.cache.key("exa_doc", date(2000, 1, 1), uri=result["url"]),
+                        text,
+                    )
         log.info(
             "exa_search",
             query=query[:70], category=category,

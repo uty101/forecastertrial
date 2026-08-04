@@ -117,6 +117,14 @@ class Acquired:
     sector: str = "unknown"
     prepared: bool = False
 
+    # The two series the MODEL needs, as distinct from the evidence store. A
+    # lens cites claims; the three-statement model rolls a balance sheet forward
+    # and needs the quarterly history, and its EPS denominator needs a share
+    # price. Carrying them here is what lets stage 2 be a complete handover
+    # rather than a partial one that stage 3 has to top up from the network.
+    history: object | None = None
+    prices: list | None = None
+
     def by_id(self) -> dict[str, Claim]:
         return {c.id: c for c in self.claims}
 
@@ -175,6 +183,24 @@ def acquire(
 
         out.budgets["A1"] = budget.report()
         events.emit(EventType.CLAIM_ADDED, "A1_numbers", n=len(out.claims))
+
+    # ---- A1b: the series the model rolls forward from ------------------- #
+    #
+    # Fetched here rather than inside the model so acquisition is a complete
+    # handover: everything the analysis needs, gathered once, budgeted, and
+    # written to the dossier. The alternative — the model reaching back to the
+    # network mid-run — means a stage that was supposed to be replayable is not.
+    with events.node("A1b_series"):
+        out.history = loader.history(ticker, as_of)
+        # Two years of daily bars. The whole series would be 4,000 sessions to
+        # answer a question about one quarter's buyback.
+        out.prices = loader.prices(ticker, as_of - timedelta(days=730), as_of)
+        events.emit(
+            EventType.NODE_DONE,
+            "A1b_series",
+            quarters=out.history.n_quarters() if out.history else 0,
+            price_bars=len(out.prices or []),
+        )
 
     # ---- A2: filings and their text ------------------------------------ #
     with events.node("A2_filings"):
