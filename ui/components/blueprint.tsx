@@ -525,14 +525,44 @@ export function Empty({
  * design exists to prevent, and an unlabelled fixture on a demo machine is how
  * one ends up on a projector.
  */
-export function SyntheticBanner({ trace }: { trace?: Record<string, unknown> }) {
+/**
+ * The provenance marker, and it has to be accurate in BOTH directions.
+ *
+ * It exists so a synthetic screen can never pass as a real one. But a marker
+ * that also claims real data is synthetic is not a safer version of the same
+ * thing — it is the same failure. A banner that cries wolf gets tuned out, and
+ * then the screen it was built for goes past unread.
+ *
+ * `scope` is what makes it honest on a page fed by more than one file. The model
+ * sheet reads its statements from `model.json` (real, built from filings) and
+ * its forecast trace from `results.json` (which in UI development is a fixture).
+ * Saying "this is not a forecast" across the top of that page is true of one
+ * source and false of the other, so the marker names which.
+ */
+export function SyntheticBanner({
+  trace,
+  scope,
+}: {
+  trace?: Record<string, unknown>;
+  /** What on THIS page came from the fixture. Omit when the whole page did. */
+  scope?: string;
+}) {
   if (!trace?.["synthetic"]) return null;
   return (
     <div className="border-l-2 border-accent bg-accent-soft px-4 py-2.5">
       <div className="label text-accent">⚠ synthetic fixture</div>
       <p className="mt-1 text-[12.5px] leading-relaxed text-ink-2">
-        <strong className="text-ink">This is not a forecast.</strong>{" "}
-        {String(trace["note"] ?? "")}
+        {scope ? (
+          <>
+            <strong className="text-ink">{scope}</strong>{" "}
+            {String(trace["note"] ?? "")}
+          </>
+        ) : (
+          <>
+            <strong className="text-ink">This is not a forecast.</strong>{" "}
+            {String(trace["note"] ?? "")}
+          </>
+        )}
       </p>
     </div>
   );

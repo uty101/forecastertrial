@@ -276,7 +276,7 @@ export default function ModelScreen() {
     cash_flow?: Row[];
     balance_sheet?: Row[];
   } | null) ?? model?.statements ?? null);
-  const bridge = (result?.trace?.bridge ?? null) as Array<{
+  const rawBridge = (result?.trace?.bridge ?? null) as Array<{
     label: string;
     per_share: number;
     source_uri?: string | null;
@@ -284,8 +284,10 @@ export default function ModelScreen() {
     recurring?: boolean;
     quarters_recurring?: number;
   }> | null;
+  // Prefer the model's own balance check. The run's copy describes the quarter
+  // the forecast was built on, which on a mixed page is a different company.
   const balance =
-    (result?.trace?.balance_check as string | undefined) ?? model?.balance_detail;
+    model?.balance_detail ?? (result?.trace?.balance_check as string | undefined);
   const evidence = (result?.trace?.evidence ?? {}) as {
     claims?: number;
     deduped?: number;
@@ -295,14 +297,25 @@ export default function ModelScreen() {
     failed?: number;
   };
   const balanced = balance ? !balance.includes("DOES NOT") : null;
-  // A stage-D-only sheet still has a company and a quarter to name; what it does
-  // not have is a locked as-of, because nothing was forecast.
-  const readout: [string, string] = f
-    ? [`${f.ticker} ${f.period}`, `LOCKED ${f.as_of}`]
-    : [
+
+  // Two files feed this sheet and they can disagree about which company they are
+  // describing. `model.json` is built from filings; `results.json` is a synthetic
+  // fixture during UI development, and its ticker is DEMO. Showing DEMO in the
+  // readout above NVDA's statements, and DEMO's claim counts beside them, is a
+  // provenance failure of exactly the kind the fixture banner exists to prevent —
+  // so where they disagree, the statements win and the fixture-fed figures are
+  // withheld rather than shown as though they described the same company.
+  const syntheticTrace = Boolean(result?.trace?.synthetic);
+  const mixed = syntheticTrace && Boolean(model);
+  const showTraceFigures = Boolean(result) && !mixed;
+  const bridge = showTraceFigures ? rawBridge : null;
+
+  const readout: [string, string] = mixed || !f
+    ? [
         `${model?.ticker ?? "—"} ${model?.forecast_period ?? ""}`.trim(),
         `BASE ${model?.base_period ?? "—"}`,
-      ];
+      ]
+    : [`${f.ticker} ${f.period}`, `LOCKED ${f.as_of}`];
 
   return (
     <Sheet
@@ -327,7 +340,14 @@ export default function ModelScreen() {
     >
       <div className="space-y-6">
         <ModelTabs active="overview" />
-        <SyntheticBanner trace={result?.trace} />
+        <SyntheticBanner
+          trace={result?.trace}
+          scope={
+            mixed
+              ? `The statements below are ${model?.ticker} as filed. Only the GAAP bridge and the citation counts come from the fixture, and they are withheld here rather than shown against another company's numbers.`
+              : undefined
+          }
+        />
 
         <div className="grid gap-6 lg:grid-cols-[1fr_270px]">
           <Lede>
@@ -346,8 +366,11 @@ export default function ModelScreen() {
               ["base quarter", model?.base_period ?? "—"],
               ["projecting", model?.forecast_period ?? "—"],
               ["quarters reproduced", model?.checks.length ?? "—"],
-              ["claims in store", evidence.claims ?? "—"],
-              ["citations failed", citations.failed ?? "—"],
+              // From the run, not the model. Withheld when the run is a fixture
+              // for another company — a claim count is meaningless next to
+              // statements it does not describe.
+              ["claims in store", showTraceFigures ? evidence.claims ?? "—" : "—"],
+              ["citations failed", showTraceFigures ? citations.failed ?? "—" : "—"],
             ]}
           />
         </div>
@@ -402,7 +425,15 @@ export default function ModelScreen() {
             label="GAAP ↔ non-GAAP bridge"
             hint="the median DJIA gap was 31% in one recent quarter"
           >
-            {!bridge ? (
+            {mixed ? (
+              <p className="text-[12.5px] leading-relaxed text-ink-2">
+                Withheld. The only forecast run staged here is a synthetic
+                fixture for a different company, and a reconciliation printed
+                under {model?.ticker}&rsquo;s statements would be read as{" "}
+                {model?.ticker}&rsquo;s. A bridge appears once a real run for
+                this company produces one.
+              </p>
+            ) : !bridge ? (
               <p className="text-[12.5px] leading-relaxed text-ink-2">
                 No verified bridge for this run. The forecast is reported on
                 non-GAAP only, and{" "}
