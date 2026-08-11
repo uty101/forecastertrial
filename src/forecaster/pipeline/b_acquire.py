@@ -285,6 +285,13 @@ def acquire(
         # not merely add noise: it hands the model the answer.
         sic = loader.sic(ticker, as_of)
         industry = sic[1] if sic else company.sector
+        # And it is the SECTOR too, not just a search term. This was fetched,
+        # used to build a query, and thrown away — so every company outside the
+        # prepared list reached the Macro lens with `sector="unknown"` while its
+        # actual industry sat in a local variable one line above. SEC states the
+        # industry on the filing; there is no reason to be guessing at it.
+        if sic and out.sector == "unknown":
+            out.sector = sic[1]
         searches = [
             (f"{industry} industry demand pricing outlook", "industry"),
             (f"{ticker} {industry} earnings outlook guidance", "company"),

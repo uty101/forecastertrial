@@ -55,12 +55,20 @@ Kind = Literal["segment", "geography", "product", "concentration"]
 # disappears. Matching stops at the first hit, so the narrow patterns have to
 # come first and the catch-all last.
 NAME_PATTERNS: tuple[tuple[Kind, tuple[str, ...]], ...] = (
-    ("geography", ("geographic", "by country", "by region")),
+    ("geography", ("geographic", "by country", "by region", "by geography")),
     ("concentration", ("concentration",)),
+    # Filers name this every possible way. MSFT: "Revenue Classified by
+    # Significant Product and Service Offerings". KO: "Net Operating Revenues".
+    # WMT: "Segments and Disaggregated Revenue". NVDA: "Revenue by Market
+    # Platform". There is no standard, so the list is empirical and grows.
     ("product", ("revenue by market", "revenue by product", "disaggregat",
-                 "net sales", "revenue by category", "by market platform")),
+                 "net sales", "revenue by category", "by market platform",
+                 "product and service", "major product", "by product",
+                 "operating revenue", "revenue classified", "revenues by",
+                 "by segment and", "revenue from contract with customer")),
     ("segment", ("reportable segment", "operating segment", "segment revenue",
-                 "segment information", "segment financial", "business segment")),
+                 "segment information", "segment financial", "business segment",
+                 "segment reporting", "segment and geographic")),
 )
 
 # Banks overload the word: "Loans — By Portfolio Segment" is a loan book, not a
@@ -93,6 +101,12 @@ class SegmentLine:
     prior_period_label: str
     report: str
     source_uri: str
+    # The row's OWN label, before the member name was substituted in. A wide
+    # segment schedule carries revenue, operating income, D&A and assets for
+    # every member — 87 rows for KO — and once the member name replaces the row
+    # label there is nothing left to tell them apart. Keeping both is what makes
+    # "the revenue rows only" a filter rather than a guess.
+    line_item: str = ""
 
     @property
     def growth(self) -> float | None:
@@ -157,7 +171,13 @@ def find_reports(summary_xml: str) -> list[tuple[Kind, str, str]]:
             continue
         name = _clean(name_match.group(1))
         low = name.lower()
-        if "(details)" not in low:
+        # `(Detail)` OR `(Details)`. Microsoft uses the singular and every one
+        # of its notes was therefore invisible — the filer with the cleanest
+        # segment disclosure in the index returned nothing, on one character.
+        if "(detail" not in low:
+            continue
+        # A parenthetical page carries footnote text about the table above it.
+        if "(parenthetical" in low:
             continue
         if any(bad in low for bad in EXCLUDE):
             continue
@@ -239,6 +259,7 @@ def parse_report(html: str, kind: Kind, report: str, uri: str) -> list[SegmentLi
                 prior_period_label=periods[1] if len(periods) > 1 else "",
                 report=report,
                 source_uri=uri,
+                line_item=label,
             )
         )
 
@@ -257,6 +278,21 @@ def _is_boilerplate(label: str) -> bool:
 
 
 MAX_SUBSET_SEARCH = 18
+
+# Row labels that mean "this figure is revenue". A wide segment schedule uses the
+# member name for the row that carries revenue and an explicit label for
+# everything else, so an empty or revenue-ish line item is the revenue row.
+REVENUE_ROWS = (
+    "revenue", "revenues", "net sales", "net revenue", "net operating revenue",
+    "sales", "total revenue", "net operating revenues", "operating revenue",
+)
+
+
+def _is_revenue_row(line: SegmentLine) -> bool:
+    item = line.line_item.lower().strip()
+    if not item:
+        return True
+    return any(item.startswith(prefix) for prefix in REVENUE_ROWS)
 
 
 def _best_subset(
@@ -323,6 +359,15 @@ def reconcile(lines: list[SegmentLine], reported_revenue: float | None,
             # meant to sum to revenue and rejecting it for that would be wrong.
             kept.extend(group)
             continue
+
+        # A wide schedule carries revenue, operating income, D&A and assets for
+        # every member. KO's is 87 rows, of which perhaps six are revenue —
+        # searching subsets of all 87 is both intractable and pointless, because
+        # the rows that should sum to revenue are identifiable by their own line
+        # label. Narrow to those first and search what is left.
+        revenue_rows = [line for line in group if _is_revenue_row(line)]
+        if revenue_rows and len(revenue_rows) < len(group):
+            group = revenue_rows
 
         subset = _best_subset(group, reported_revenue, tolerance)
         if subset:
