@@ -34,6 +34,7 @@ from tenacity import (
     wait_exponential,
 )
 
+from forecaster.data import segments
 from forecaster.data.cache import Cache
 from forecaster.data.history import History, build_history
 from forecaster.data.lineitems import BY_KEY
@@ -594,6 +595,107 @@ class SECSource:
         # Guidance lives in 8-K EX-99.1 prose, not XBRL. The acquisition layer
         # pulls the exhibit; extraction is an LLM job, not this source's.
         return None
+
+    def get_segments(
+        self, ticker: str, as_of: date, forms: tuple[str, ...] = ("10-Q", "10-K")
+    ) -> tuple[list[segments.SegmentLine], list[str]]:
+        """The revenue disaggregation from the most recent filing that has one.
+
+        Returns (lines, notes). Notes carry every split that was found and
+        rejected, because a decomposition that does not reconcile is a finding
+        about the parse rather than a gap in the data.
+
+        **Why this is not `companyfacts`.** Segment revenue is tagged against a
+        dimension axis and that endpoint exposes only undimensioned facts, so
+        every segment number a filer publishes is invisible to it. What is used
+        instead is `FilingSummary.xml`, the index of rendered report tables that
+        sits in every filing folder — deterministic, no model call, and general
+        to any XBRL filer rather than to a list of companies somebody prepared.
+        """
+        cik = self._cik(ticker)
+        subs = self._submissions(ticker, as_of)
+        if cik is None or not subs:
+            return [], ["no CIK or submissions index"]
+
+        recent = subs.get("filings", {}).get("recent", {})
+        rows = zip(
+            recent.get("form", []),
+            recent.get("filingDate", []),
+            recent.get("accessionNumber", []),
+            strict=False,
+        )
+        for form, filed_str, accession in rows:
+            if form not in forms:
+                continue
+            filed = date.fromisoformat(filed_str)
+            if not segments.as_of_ok(filed, as_of):
+                continue
+            lines, notes = self._segments_for(cik, accession, as_of)
+            if not lines:
+                continue
+            # Reconcile against the revenue this same filing reported. A split
+            # that does not sum to it is a parse that picked up a parent
+            # alongside its children, or missed a member — both produce a
+            # decomposition that looks structured and is wrong.
+            revenue = self._reported_revenue(ticker, as_of)
+            lines, reconcile_notes = segments.reconcile(lines, revenue)
+            return lines, notes + reconcile_notes
+        return [], ["no 10-Q or 10-K with a disaggregation table before as_of"]
+
+    def _reported_revenue(self, ticker: str, as_of: date) -> float | None:
+        """The most recent quarter's revenue, as the reconciliation target."""
+        history = self.get_history(ticker, as_of)
+        if history is None:
+            return None
+        period = history.latest_period()
+        observation = history.get("revenue", period) if period else None
+        return observation.value if observation else None
+
+    def _segments_for(
+        self, cik: str, accession: str, as_of: date
+    ) -> tuple[list[segments.SegmentLine], list[str]]:
+        base = (
+            f"https://www.sec.gov/Archives/edgar/data/{cik.lstrip('0')}/"
+            f"{accession.replace('-', '')}"
+        )
+
+        def produce() -> dict:
+            try:
+                summary = self._http_get(f"{base}/FilingSummary.xml").text
+            except Exception as exc:  # noqa: BLE001 — a filing without one is normal
+                log.info("filing_summary_absent", accession=accession, why=str(exc)[:80])
+                return {"reports": [], "html": {}}
+            reports = segments.find_reports(summary)
+            html = {}
+            for _, _, path in reports:
+                try:
+                    html[path] = self._http_get(f"{base}/{path}").text
+                except Exception as exc:  # noqa: BLE001
+                    log.info("segment_report_failed", path=path, why=str(exc)[:80])
+            return {
+                "reports": [[k, n, p] for k, n, p in reports],
+                "html": html,
+            }
+
+        # A filing is immutable, so this is cached on the accession rather than
+        # on `as_of` — the same document can never change underneath us.
+        payload = self.cache.fetch(
+            self.cache.key("sec_segments", date(2000, 1, 1), accession=accession),
+            produce,
+        )
+
+        lines: list[segments.SegmentLine] = []
+        for kind, name, path in payload.get("reports", []):
+            body = payload.get("html", {}).get(path)
+            if body:
+                lines.extend(
+                    segments.parse_report(body, kind, name, f"{base}/{path}")
+                )
+        log.info(
+            "segments_parsed", accession=accession,
+            reports=len(payload.get("reports", [])), lines=len(lines),
+        )
+        return lines, []
 
     def get_filings(
         self,
