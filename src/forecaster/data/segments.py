@@ -1,32 +1,47 @@
-"""Segment, geographic and customer-concentration disclosure, from the filing.
+"""Revenue disaggregation, read from the XBRL instance rather than a rendering.
 
-**This file exists because the alternative was a hardcoded list of twelve
-companies with their driver decomposition written out by hand.** That worked for
-twelve names and produced nothing for the thousands of others, which is the
-wrong shape for a system handed a ticker at 10am.
-
-Everything here derives from the filing itself, for any XBRL filer since 2009.
+**This exists because the alternative was a hardcoded list of twelve companies
+with their driver decomposition typed out by hand.** That gave twelve names a
+warm start and everything else an empty string, which is the wrong shape for a
+system handed a ticker at 10am.
 
 **Why not `companyfacts`.** Segment revenue is tagged against a dimension axis —
-`StatementBusinessSegmentsAxis`, `SegmentGeographicalGroupsOfCountriesAxis` —
-and the `companyfacts` endpoint exposes only facts with NO dimensions. Every
-segment number a filer reports is invisible to it. That is the same limitation
-that hid Visa's diluted share count, and no tag list fixes it: the numbers are
-not in the response.
+`StatementBusinessSegmentsAxis`, `ProductOrServiceAxis` — and that endpoint
+exposes only facts with NO dimensions. Every segment number a filer publishes is
+invisible to it. Same limitation that hid Visa's diluted share count; no tag list
+fixes it, because the numbers are not in the response.
 
-**What is used instead.** Every filing folder carries `FilingSummary.xml`, an
-index of the seventy-odd rendered report tables SEC generates from the XBRL. The
-segment note is one of them. Find it by name, fetch the R-file, read the table.
-No model call, deterministic, and the source is a filing URL that cites cleanly.
+**Why not the rendered tables either.** SEC also publishes `FilingSummary.xml`
+indexing seventy-odd HTML report tables, and that route works — for some filers.
+It got to 7 of 12 and each additional filer cost its own fix: Microsoft writes
+`(Detail)` where everyone else writes `(Details)`; the geographic note heads each
+block with a bare `Revenues` where the product note uses a bracketed label;
+Coca-Cola's schedule is 87 rows of which six are revenue. Every one of those is a
+quirk of how a filer's accountants laid out a page, and the supply of them is
+unbounded.
 
-The tables come with the prior-year comparative in the adjacent column, so
-segment GROWTH falls out of the filing rather than out of an assumption — which
-is the whole point of a driver decomposition.
+**What is used instead.** The XBRL instance document in the same folder, where
+the same numbers carry their dimension as DATA:
+
+    <context id="c-42">
+      <entity><segment>
+        <xbrldi:explicitMember dimension="us-gaap:StatementGeographicalAxis"
+          >country:TW</xbrldi:explicitMember>
+      </segment></entity>
+      <period><startDate>2026-01-26</startDate>…</period>
+    </context>
+
+The axis states what kind of split it is, so nothing has to be inferred from a
+report title or a table layout. There is no page to lay out wrongly.
+
+The instance carries every period it reports, so the prior-year comparative comes
+from the same document — segment GROWTH falls out of the filing rather than out
+of an assumption, which is the whole point of a driver decomposition.
 
 **Three things this closes at once.** The Drivers lens gets a real bottom-up
 build on any ticker. Margins gets the mix argument it exists to make. And the
-geographic table IS the FX exposure the Mechanical lens needs, so the one leg of
-that lens I had written off as unavailable turns out to be in the same document.
+geographic split IS the FX exposure the Mechanical lens needs, so the one leg of
+that lens written off as unavailable is in the same document.
 """
 
 from __future__ import annotations
@@ -42,55 +57,55 @@ log = structlog.get_logger()
 
 Kind = Literal["segment", "geography", "product", "concentration"]
 
-# Report names, matched case-insensitively against `ShortName` in the index.
-# Ordered by how directly each answers "how does this company's revenue split".
-#
-# The `Details` suffix matters: SEC renders each note three times — the narrative,
-# the tables block, and the tagged detail. Only the last carries machine-readable
-# numbers, and matching without it returns a page of prose.
-#
-# SPECIFIC BEFORE GENERIC, and the order is load-bearing. NVDA titles every one
-# of its notes "Segment Information — …", so a generic `segment information`
-# pattern checked first claims the geographic table too and the FX exposure
-# disappears. Matching stops at the first hit, so the narrow patterns have to
-# come first and the catch-all last.
-NAME_PATTERNS: tuple[tuple[Kind, tuple[str, ...]], ...] = (
-    ("geography", ("geographic", "by country", "by region", "by geography")),
-    ("concentration", ("concentration",)),
-    # Filers name this every possible way. MSFT: "Revenue Classified by
-    # Significant Product and Service Offerings". KO: "Net Operating Revenues".
-    # WMT: "Segments and Disaggregated Revenue". NVDA: "Revenue by Market
-    # Platform". There is no standard, so the list is empirical and grows.
-    ("product", ("revenue by market", "revenue by product", "disaggregat",
-                 "net sales", "revenue by category", "by market platform",
-                 "product and service", "major product", "by product",
-                 "operating revenue", "revenue classified", "revenues by",
-                 "by segment and", "revenue from contract with customer")),
-    ("segment", ("reportable segment", "operating segment", "segment revenue",
-                 "segment information", "segment financial", "business segment",
-                 "segment reporting", "segment and geographic")),
+# The dimension axis says what the split IS. No report titles, no table layouts,
+# no filer-specific naming — this is the taxonomy's own classification and it is
+# the same for every company that files.
+AXIS_KIND: dict[str, Kind] = {
+    "StatementBusinessSegmentsAxis": "segment",
+    "OperatingSegmentsAxis": "segment",
+    "SegmentReportingInformationBySegmentAxis": "segment",
+    "StatementGeographicalAxis": "geography",
+    "SegmentGeographicalGroupsOfCountriesAxis": "geography",
+    "GeographicalAxis": "geography",
+    "ProductOrServiceAxis": "product",
+    "SegmentProductsAndServicesAxis": "product",
+    "MajorCustomersAxis": "concentration",
+    "ConcentrationRiskByCustomerAxis": "concentration",
+}
+
+# Axes that appear alongside a revenue fact without splitting it. The
+# consolidation axis in particular tags the CONSOLIDATED total as
+# `OperatingSegmentsMember`, which parses as a one-member split summing exactly
+# to revenue — a decomposition into one part, which is no decomposition at all.
+IGNORE_AXES = {
+    "ConsolidationItemsAxis",
+    "StatementEquityComponentsAxis",
+    "StatementScenarioAxis",
+    "StatementClassOfStockAxis",
+}
+
+# Tried in order. A company-specific extension (`nvda:SomeRevenueMember`) is not
+# needed here — the us-gaap revenue tags are what filers dimension.
+REVENUE_TAGS = (
+    "RevenueFromContractWithCustomerExcludingAssessedTax",
+    "Revenues",
+    "RevenueFromContractWithCustomerIncludingAssessedTax",
+    "SalesRevenueNet",
+    "SalesRevenueGoodsNet",
+    # Banks and brokers. The same omission cost Goldman its entire revenue line
+    # in `lineitems.py` and it cost JPMorgan its segment split here — the
+    # geographic axis parsed fine and the business segments were invisible,
+    # because a bank's top line is revenue NET of interest expense.
+    "RevenuesNetOfInterestExpense",
+    "InterestAndDividendIncomeOperating",
 )
 
-# Banks overload the word: "Loans — By Portfolio Segment" is a loan book, not a
-# line of business. Anything matching these is skipped regardless of what else
-# it matched, because a loan portfolio parsed as a revenue split produces a
-# decomposition that does not sum to revenue and is wrong in a way that looks
-# structured.
-EXCLUDE = (
-    "portfolio segment", "loans", "allowance", "fair value", "financial instrument",
-    "maturit", "derivative", "credit quality", "impairment", "goodwill by",
-    # A narrative page carries the prose facts — "number of reportable segments:
-    # 2" — and no revenue schedule. Parsed as one it yields rows like "Number of
-    # operating segments = 2" sitting beside revenue in millions.
-    "narrative",
-)
-
-MAX_REPORTS = 8
+MAX_SUBSET_SEARCH = 18
 
 
 @dataclass(frozen=True)
 class SegmentLine:
-    """One row of a disaggregation table, with its comparative."""
+    """One member of one axis, with its prior-year comparative."""
 
     kind: Kind
     label: str
@@ -101,220 +116,255 @@ class SegmentLine:
     prior_period_label: str
     report: str
     source_uri: str
-    # The row's OWN label, before the member name was substituted in. A wide
-    # segment schedule carries revenue, operating income, D&A and assets for
-    # every member — 87 rows for KO — and once the member name replaces the row
-    # label there is nothing left to tell them apart. Keeping both is what makes
-    # "the revenue rows only" a filter rather than a guess.
-    line_item: str = ""
+    axis: str = ""
+    member: str = ""
 
     @property
     def growth(self) -> float | None:
-        """Year-over-year, straight from the filing's own two columns.
+        """Year-over-year, from two facts in the same document.
 
-        Not an assumption and not a derivation across two documents — the
-        comparative is printed beside the figure in the same table, which is
-        what makes a segment build defensible rather than reconstructed.
+        Not an assumption and not a join across two filings — the instance
+        carries every period it reports, which is what makes a segment build
+        defensible rather than reconstructed.
         """
         if not self.prior_value:
             return None
         return self.value / self.prior_value - 1
 
 
-def _clean(text: str) -> str:
-    text = re.sub(r"&#160;|&nbsp;", " ", text)
-    text = re.sub(r"&amp;", "&", text)
-    return re.sub(r"\s+", " ", text).strip()
+# --------------------------------------------------------------------------- #
+# reading the instance
+# --------------------------------------------------------------------------- #
 
 
-def _scale(header: str) -> float:
-    """`$ in Millions` in the table header, applied to every figure below it.
+@dataclass(frozen=True)
+class _Context:
+    axis: str | None
+    member: str | None
+    start: str | None
+    end: str | None
 
-    A table read at face value when it is quoted in millions is wrong by six
-    orders of magnitude and internally consistent — the segments still sum to
-    the total, so nothing downstream catches it.
+
+def _humanise(member: str) -> str:
+    """`us-gaap:ChinaIncludingHongKongMember` -> `China Including Hong Kong`.
+
+    Two-letter country codes (`country:TW`) are left alone: expanding them would
+    need a lookup table, and "TW" is unambiguous to a reader while a wrong
+    expansion is not.
     """
-    low = header.lower()
-    if "in billions" in low:
-        return 1e9
-    if "in millions" in low:
-        return 1e6
-    if "in thousands" in low:
-        return 1e3
-    return 1.0
+    name = member.split(":")[-1]
+    if name.endswith("Member"):
+        name = name[: -len("Member")]
+    if len(name) <= 3 and name.isupper():
+        return name
+    # CamelCase to words, keeping runs of capitals together (US, EMEA, AI).
+    spaced = re.sub(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", " ", name)
+    return spaced.strip() or name
 
 
-def _number(cell: str) -> float | None:
-    text = _clean(cell).replace("$", "").replace(",", "").strip()
-    if not text or text in {"-", "—", "–"}:
-        return None
-    negative = text.startswith("(") and text.endswith(")")
-    text = text.strip("()")
-    try:
-        value = float(text)
-    except ValueError:
-        return None
-    return -value if negative else value
+def parse_contexts(xml: str) -> dict[str, _Context]:
+    """Every context, with its single dimension if it has exactly one.
 
-
-def find_reports(summary_xml: str) -> list[tuple[Kind, str, str]]:
-    """(kind, short name, R-file) for every disaggregation table in the filing.
-
-    Ranked by `NAME_PATTERNS` order, so a product/market split — the closest
-    thing to a driver tree — is preferred over a bare segment schedule.
+    Facts carrying two or more dimensions are cross-tabulations — revenue by
+    segment AND geography — and including them double-counts against either
+    axis alone. They are dropped rather than assigned to one of the two.
     """
-    found: list[tuple[int, Kind, str, str]] = []
-    for block in re.findall(r"<Report[^>]*>(.*?)</Report>", summary_xml, re.S):
-        name_match = re.search(r"<ShortName>(.*?)</ShortName>", block, re.S)
-        file_match = re.search(r"<HtmlFileName>(.*?)</HtmlFileName>", block, re.S)
-        if not name_match or not file_match:
-            continue
-        name = _clean(name_match.group(1))
-        low = name.lower()
-        # `(Detail)` OR `(Details)`. Microsoft uses the singular and every one
-        # of its notes was therefore invisible — the filer with the cleanest
-        # segment disclosure in the index returned nothing, on one character.
-        if "(detail" not in low:
-            continue
-        # A parenthetical page carries footnote text about the table above it.
-        if "(parenthetical" in low:
-            continue
-        if any(bad in low for bad in EXCLUDE):
-            continue
-        for rank, (kind, patterns) in enumerate(NAME_PATTERNS):
-            if any(p in low for p in patterns):
-                found.append((rank, kind, name, file_match.group(1)))
-                break
+    out: dict[str, _Context] = {}
+    for match in re.finditer(r"<context id=\"([^\"]+)\">(.*?)</context>", xml, re.S):
+        body = match.group(2)
+        members = re.findall(
+            r"<xbrldi:explicitMember dimension=\"([^\"]+)\"[^>]*>([^<]+)<", body
+        )
+        start = re.search(r"<startDate>([^<]+)", body)
+        end = re.search(r"<endDate>([^<]+)", body)
 
-    found.sort(key=lambda row: row[0])
-    return [(kind, name, path) for _, kind, name, path in found[:MAX_REPORTS]]
+        # Drop the axes that qualify a fact without splitting it before deciding
+        # whether this is a single-axis context. Exxon and Coca-Cola tag segment
+        # revenue against BOTH the segment axis and `ConsolidationItemsAxis`, and
+        # requiring exactly one dimension threw every one of those facts away —
+        # the two filers with the most revenue facts in the sample returned
+        # nothing at all.
+        meaningful = [
+            (axis.split(":")[-1], member)
+            for axis, member in members
+            if axis.split(":")[-1] not in IGNORE_AXES
+        ]
+        axis = member = None
+        if len(meaningful) == 1:
+            axis, member = meaningful[0]
+        out[match.group(1)] = _Context(
+            axis=axis,
+            member=member,
+            start=start.group(1) if start else None,
+            end=end.group(1) if end else None,
+        )
+    return out
 
 
-def parse_report(html: str, kind: Kind, report: str, uri: str) -> list[SegmentLine]:
-    """Read one rendered R-file table into lines.
-
-    SEC's renderer emits a stable shape: a caption carrying the units, a header
-    row of period labels, then one row per tagged fact where the first cell is
-    the label and the rest are values in period order. Rows whose label repeats
-    a boilerplate axis header ("Revenue from External Customer [Line Items]")
-    carry no figures and are skipped.
-    """
-    caption = re.search(r"<th[^>]*class=\"tl\"[^>]*>(.*?)</th>", html, re.S)
-    scale = _scale(_clean(caption.group(1))) if caption else 1.0
-
-    rows = re.findall(r"<tr[^>]*>(.*?)</tr>", html, re.S)
-    periods: list[str] = []
-    lines: list[SegmentLine] = []
-    # The axis label most recently seen. SEC renders a dimension member as its
-    # own row and the figures for it on the rows beneath, so the member name has
-    # to be carried down.
-    member: str | None = None
-
-    for row in rows:
-        headers = re.findall(r"<th[^>]*>(.*?)</th>", row, re.S)
-        if headers and not periods:
-            candidates = [_clean(h) for h in headers[1:]]
-            periods = [c for c in candidates if re.search(r"\d{4}", c)]
-            continue
-
-        cells = re.findall(r"<td[^>]*>(.*?)</td>", row, re.S)
-        label_match = re.search(r"<t[dh][^>]*>(.*?)</t[dh]>", row, re.S)
-        if not label_match:
-            continue
-        label = _clean(re.sub(r"<[^>]+>", " ", label_match.group(1)))
-        if not label:
-            continue
-
-        values = [_number(re.sub(r"<[^>]+>", " ", c)) for c in cells]
-        values = [v for v in values if v is not None]
-
-        if not values:
-            # A bare label with no figures is the dimension member itself —
-            # "United States", "Data Center" — and the figures for it are on the
-            # rows beneath, so it has to be carried down.
+def _facts(xml: str, contexts: dict[str, _Context]) -> list[tuple[_Context, float]]:
+    seen: set[tuple[str, str, str]] = set()
+    rows: list[tuple[_Context, float]] = []
+    for tag in REVENUE_TAGS:
+        # Attribute order is not guaranteed. Microsoft emits `id=` before
+        # `contextRef=`, and a pattern that assumed contextRef came first matched
+        # none of its revenue facts — the filer with the cleanest segment
+        # tagging in the sample looked like it had no revenue at all.
+        pattern = rf"<us-gaap:{tag}\s[^>]*?contextRef=\"([^\"]+)\"[^>]*>([-\d.]+)<"
+        for match in re.finditer(pattern, xml):
+            context = contexts.get(match.group(1))
+            if context is None or context.axis is None or context.start is None:
+                continue
+            if context.axis not in AXIS_KIND:
+                continue
+            # One value per (axis, member, period) — NOT per context.
             #
-            # Unless it is the section header. The market-platform table heads
-            # each block with "Revenue from External Customer [Line Items]",
-            # which the bracket test catches; the geographic table heads it with
-            # a bare "Revenues", which it does not. That one word overwrote the
-            # member on every row and every geography came back labelled
-            # "Revenues", so the whole table parsed to nothing usable.
-            if "[" not in label and len(label) < 80 and not _is_boilerplate(label):
-                member = label
-            continue
+            # A filer often tags the same segment revenue under several contexts
+            # that differ only in an axis we ignore: P&G reports each segment
+            # both plainly and again qualified by `ConsolidationItemsAxis`. Keyed
+            # on the context those are two facts, the members double, and no
+            # subset reconciles to revenue — so the whole split is discarded and
+            # the company looks like it discloses nothing.
+            key = (context.axis, context.member or "", context.start or "")
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append((context, float(match.group(2))))
+    return rows
 
-        # A tagged line under a member: the member is what it is about.
-        name = member if member and _is_boilerplate(label) else label
-        if not name or _is_boilerplate(name):
-            continue
 
+def consolidated_revenue(xml: str, period_start: str) -> float | None:
+    """The undimensioned revenue for a given period, from the same document.
+
+    **This is the reconciliation target and it has to come from here.** Using
+    the latest quarter out of `History` instead compares an ANNUAL segment split
+    against a QUARTERLY total whenever the most recent filing is a 10-K, and
+    nothing then reconciles — Exxon, P&G and Coca-Cola all extracted their
+    members correctly and had every one of them discarded on that mismatch.
+
+    Same document, same period, no join.
+    """
+    contexts = parse_contexts(xml)
+    candidates: list[float] = []
+    for tag in REVENUE_TAGS:
+        pattern = rf"<us-gaap:{tag}\s[^>]*?contextRef=\"([^\"]+)\"[^>]*>([-\d.]+)<"
+        for match in re.finditer(pattern, xml):
+            context = contexts.get(match.group(1))
+            # Undimensioned: the consolidated figure, not a slice of it.
+            if context and context.axis is None and context.start == period_start:
+                candidates.append(float(match.group(2)))
+        if candidates:
+            break
+
+    if not candidates:
+        return None
+    # The LARGEST, where a filer tags more than one undimensioned revenue figure
+    # for the period. UnitedHealth reports a total and several components of it
+    # against the same context, and taking the first found returned a component
+    # — against which no segment split could possibly reconcile.
+    return max(candidates)
+
+
+def from_instance(xml: str, uri: str) -> list[SegmentLine]:
+    """Every single-axis revenue split in the document, newest period first.
+
+    The comparative is matched by axis and member across periods, so a segment
+    that did not exist a year ago simply has no growth rather than being paired
+    with an unrelated member.
+    """
+    contexts = parse_contexts(xml)
+    rows = _facts(xml, contexts)
+    if not rows:
+        return []
+
+    # The most recent period start is the quarter being reported. Everything
+    # sharing that start is current; the same duration a year earlier is the
+    # comparative.
+    starts = sorted({c.start for c, _ in rows if c.start}, reverse=True)
+    if not starts:
+        return []
+    current_start = starts[0]
+    current_end = next(
+        (c.end for c, _ in rows if c.start == current_start and c.end), None
+    )
+
+    current: dict[tuple[str, str], float] = {}
+    prior: dict[tuple[str, str], float] = {}
+    prior_start = ""
+    for context, value in rows:
+        key = (context.axis or "", context.member or "")
+        if context.start == current_start:
+            current[key] = value
+        # Same duration, a year earlier. Comparing durations rather than
+        # trusting order keeps a year-to-date column from being read as the
+        # prior quarter.
+        elif (
+            context.start
+            and context.start < current_start
+            and _same_length(context.start, context.end, current_start, current_end)
+        ):
+            prior[key] = value
+            prior_start = context.start
+
+    lines: list[SegmentLine] = []
+    for (axis, member), value in current.items():
+        kind = AXIS_KIND.get(axis)
+        if kind is None:
+            continue
         lines.append(
             SegmentLine(
                 kind=kind,
-                label=name,
-                value=values[0] * scale,
-                prior_value=values[1] * scale if len(values) > 1 else None,
+                label=_humanise(member),
+                value=value,
+                prior_value=prior.get((axis, member)),
                 unit="USD",
-                period_label=periods[0] if periods else "",
-                prior_period_label=periods[1] if len(periods) > 1 else "",
-                report=report,
+                period_label=current_start,
+                prior_period_label=prior_start,
+                report=axis,
                 source_uri=uri,
-                line_item=label,
+                axis=axis,
+                member=member,
             )
         )
-
     return lines
 
 
-def _is_boilerplate(label: str) -> bool:
-    low = label.lower()
-    return (
-        "[line items]" in low
-        or "[abstract]" in low
-        or "[member]" in low
-        or "[axis]" in low
-        or low in {"revenue", "revenues", "total", "net sales"}
-    )
+def _same_length(
+    start: str | None, end: str | None, ref_start: str | None, ref_end: str | None
+) -> bool:
+    """Within a fortnight of the reference duration.
+
+    Fiscal quarters are 13 weeks but 52/53-week calendars drift, so an exact
+    match would reject a legitimate comparative. A year-to-date column is months
+    longer and never gets through this.
+    """
+    try:
+        span = (date.fromisoformat(end) - date.fromisoformat(start)).days
+        reference = (date.fromisoformat(ref_end) - date.fromisoformat(ref_start)).days
+    except (TypeError, ValueError):
+        return False
+    return abs(span - reference) <= 14
 
 
-MAX_SUBSET_SEARCH = 18
-
-# Row labels that mean "this figure is revenue". A wide segment schedule uses the
-# member name for the row that carries revenue and an explicit label for
-# everything else, so an empty or revenue-ish line item is the revenue row.
-REVENUE_ROWS = (
-    "revenue", "revenues", "net sales", "net revenue", "net operating revenue",
-    "sales", "total revenue", "net operating revenues", "operating revenue",
-)
-
-
-def _is_revenue_row(line: SegmentLine) -> bool:
-    item = line.line_item.lower().strip()
-    if not item:
-        return True
-    return any(item.startswith(prefix) for prefix in REVENUE_ROWS)
+# --------------------------------------------------------------------------- #
+# reconciling, which is what makes it usable
+# --------------------------------------------------------------------------- #
 
 
 def _best_subset(
     group: list[SegmentLine], target: float, tolerance: float
 ) -> list[SegmentLine] | None:
-    """The finest subset of these lines that sums to reported revenue.
+    """The finest subset of these members that sums to reported revenue.
 
-    **A rendered segment table is a hierarchy flattened into rows.** NVDA's
-    market-platform note lists Data Center at 75,246 and then Hyperscale at
-    37,869 and AI Clouds at 37,377 underneath it — the parent and its two
-    children, all as sibling rows. Summing every row double-counts: 156,861
-    against 81,615 of actual revenue.
+    **An axis is a hierarchy flattened into members.** NVDA tags Data Center at
+    75,246 and Hyperscale at 37,869 and AI Clouds at 37,377 all against
+    `ProductOrServiceAxis` — the parent and its two children, siblings as far as
+    the axis is concerned. Summing every member gives 156,861 against 81,615 of
+    actual revenue.
 
-    Nothing in the text says which is which. What does say it is arithmetic:
-    exactly one subset of these rows reconciles to the revenue the company
-    reported, and here there are two — {Data Center, Edge} and {Hyperscale,
-    AI Clouds, Edge}. The finer of the two is the better driver tree, so ties
-    break toward more members.
-
-    Exhaustive over subsets, capped: a filer with more than eighteen rows in one
-    disaggregation table is disclosing something other than a segment split, and
-    guessing at it is worse than declining.
+    Nothing in the taxonomy says which is which. Arithmetic does: one subset
+    reconciles to the revenue the company reported, and where two do — {Data
+    Center, Edge} and {Hyperscale, AI Clouds, Edge} — the finer is the better
+    driver tree, so ties break toward more members.
     """
     n = len(group)
     if n == 0 or n > MAX_SUBSET_SEARCH:
@@ -331,18 +381,19 @@ def _best_subset(
     return best
 
 
-def reconcile(lines: list[SegmentLine], reported_revenue: float | None,
-              tolerance: float = 0.02) -> tuple[list[SegmentLine], list[str]]:
+def reconcile(
+    lines: list[SegmentLine], reported_revenue: float | None, tolerance: float = 0.02
+) -> tuple[list[SegmentLine], list[str]]:
     """Keep only the splits whose parts sum to the revenue the company reported.
 
-    **The check that makes this usable rather than plausible.** A parse that
-    picks up a sub-segment alongside its parent double-counts, and a parse that
-    misses a member under-counts; both produce a decomposition that looks
-    structured and is wrong. Neither is detectable by looking at the numbers.
+    **The check that makes this usable rather than plausible.** A split that
+    picks up a parent alongside its children double-counts, and one missing a
+    member under-counts; both produce a decomposition that looks structured and
+    is wrong, and neither is visible by looking at the numbers.
 
-    A split that does not reconcile is dropped with its reason rather than
-    passed on partially — a driver tree missing a third of the revenue is worse
-    than no driver tree, because a lens will build on it and never know.
+    A split that cannot reconcile is dropped with its reason rather than passed
+    on partially — a driver tree missing a third of the revenue is worse than no
+    driver tree, because a lens will build on it and never know.
     """
     if not reported_revenue:
         return [], ["no reported revenue to reconcile any split against"]
@@ -355,46 +406,47 @@ def reconcile(lines: list[SegmentLine], reported_revenue: float | None,
 
     for kind, group in by_kind.items():
         if kind == "concentration":
-            # A concentration note lists customers above a threshold; it is not
-            # meant to sum to revenue and rejecting it for that would be wrong.
+            # A concentration disclosure names the customers above a threshold.
+            # It is not meant to be exhaustive and rejecting it for that would
+            # throw away the one disclosure saying who actually buys.
             kept.extend(group)
             continue
 
-        # A wide schedule carries revenue, operating income, D&A and assets for
-        # every member. KO's is 87 rows, of which perhaps six are revenue —
-        # searching subsets of all 87 is both intractable and pointless, because
-        # the rows that should sum to revenue are identifiable by their own line
-        # label. Narrow to those first and search what is left.
-        revenue_rows = [line for line in group if _is_revenue_row(line)]
-        if revenue_rows and len(revenue_rows) < len(group):
-            group = revenue_rows
+        if len(group) == 1:
+            # One member is not a split. It is the consolidated total wearing a
+            # dimension, and it reconciles perfectly while saying nothing.
+            notes.append(f"{kind}: a single member is not a decomposition")
+            continue
 
         subset = _best_subset(group, reported_revenue, tolerance)
-        if subset:
+        if subset and len(subset) > 1:
             kept.extend(subset)
             if len(subset) < len(group):
                 notes.append(
-                    f"{kind}: {len(group)} rows collapsed to the {len(subset)} that "
-                    f"reconcile to revenue — the rest are parents or subtotals of "
-                    "those, and counting both double-counts"
+                    f"{kind}: {len(group)} members collapsed to the {len(subset)} that "
+                    "reconcile to revenue — the rest are parents of those, and "
+                    "counting both double-counts"
                 )
             continue
 
         total = sum(line.value for line in group)
         notes.append(
-            f"{kind}: no subset of the {len(group)} rows sums to reported revenue "
-            f"of {reported_revenue:,.0f} (all of them together give {total:,.0f}) — "
+            f"{kind}: no subset of the {len(group)} members sums to reported revenue "
+            f"of {reported_revenue:,.0f} (all together they give {total:,.0f}) — "
             "dropped rather than used partially"
         )
-        log.info("segment_split_rejected", kind=kind, rows=len(group))
+        log.info("segment_split_rejected", kind=kind, members=len(group))
 
     return kept, notes
+
+
+# --------------------------------------------------------------------------- #
 
 
 def to_block(lines: list[SegmentLine]) -> str:
     """The decomposition as prose for the Drivers and Margins lenses.
 
-    Growth is printed beside each part because it is the number the lens is
+    Growth is printed beside every part because it is the number the lens is
     being asked to forecast, and it came out of the filing rather than out of
     anyone's model.
     """
@@ -406,7 +458,7 @@ def to_block(lines: list[SegmentLine]) -> str:
         by_kind.setdefault(line.kind, []).append(line)
 
     titles = {
-        "product": "Revenue by product or market",
+        "product": "Revenue by product or service",
         "segment": "Revenue by reportable segment",
         "geography": "Revenue by geography",
         "concentration": "Customer concentration",
@@ -418,17 +470,16 @@ def to_block(lines: list[SegmentLine]) -> str:
             continue
         head = group[0]
         out.append(
-            f"{titles[kind]} — {head.report}"
-            + (f"  ({head.period_label} vs {head.prior_period_label})"
-               if head.prior_period_label else "")
+            f"{titles[kind]}  ({head.period_label}"
+            + (f" vs {head.prior_period_label}" if head.prior_period_label else "")
+            + ")"
         )
         total = sum(line.value for line in group) or 1.0
-        for line in group:
-            share = line.value / total
-            growth = (f"{line.growth:+.1%}" if line.growth is not None else "n/a")
+        for line in sorted(group, key=lambda x: -x.value):
+            growth = f"{line.growth:+.1%}" if line.growth is not None else "n/a"
             out.append(
-                f"  {line.label[:44]:46} {line.value / 1e6:>12,.0f}m"
-                f"  {share:>6.1%} of total   YoY {growth:>8}"
+                f"  {line.label[:40]:42} {line.value / 1e6:>12,.0f}m"
+                f"  {line.value / total:>6.1%}   YoY {growth:>8}"
             )
         out.append("")
     return "\n".join(out).rstrip()
@@ -437,10 +488,10 @@ def to_block(lines: list[SegmentLine]) -> str:
 def geo_mix(lines: list[SegmentLine]) -> list[tuple[str, float]]:
     """(region, share of revenue) — the Mechanical lens's FX exposure.
 
-    The geographic revenue table IS the currency exposure, near enough: a filer
-    reporting 22% of revenue from Taiwan has that much translation risk whatever
-    its hedging. Mapping a region to a currency is a separate step and a lossy
-    one, which is why this returns regions rather than pretending to know.
+    The geographic revenue split IS the translation exposure, near enough: a
+    filer reporting 15% of revenue from Taiwan carries that much of it whatever
+    its hedging. Mapping a region to a currency is a separate and lossy step,
+    which is why this returns regions rather than pretending to know.
     """
     geo = [line for line in lines if line.kind == "geography"]
     total = sum(line.value for line in geo)

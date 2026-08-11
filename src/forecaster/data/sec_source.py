@@ -630,72 +630,76 @@ class SECSource:
             filed = date.fromisoformat(filed_str)
             if not segments.as_of_ok(filed, as_of):
                 continue
-            lines, notes = self._segments_for(cik, accession, as_of)
+            lines, notes, revenue = self._segments_for(cik, accession, as_of)
             if not lines:
                 continue
-            # Reconcile against the revenue this same filing reported. A split
-            # that does not sum to it is a parse that picked up a parent
-            # alongside its children, or missed a member — both produce a
+            # Reconcile against the consolidated revenue from the SAME document
+            # and the SAME period. A split that does not sum to it picked up a
+            # parent alongside its children, or missed a member — both produce a
             # decomposition that looks structured and is wrong.
-            revenue = self._reported_revenue(ticker, as_of)
             lines, reconcile_notes = segments.reconcile(lines, revenue)
             return lines, notes + reconcile_notes
         return [], ["no 10-Q or 10-K with a disaggregation table before as_of"]
 
-    def _reported_revenue(self, ticker: str, as_of: date) -> float | None:
-        """The most recent quarter's revenue, as the reconciliation target."""
-        history = self.get_history(ticker, as_of)
-        if history is None:
-            return None
-        period = history.latest_period()
-        observation = history.get("revenue", period) if period else None
-        return observation.value if observation else None
-
     def _segments_for(
         self, cik: str, accession: str, as_of: date
-    ) -> tuple[list[segments.SegmentLine], list[str]]:
+    ) -> tuple[list[segments.SegmentLine], list[str], float | None]:
+        """Read the filing's XBRL instance, where the dimensions are data.
+
+        Not the rendered HTML tables. Those work for some filers and cost a
+        fix per filer for the rest — Microsoft writes `(Detail)` singular,
+        the geographic note heads its blocks with a bare `Revenues`, Coca-Cola's
+        schedule is 87 rows. Every one of those is a quirk of how somebody laid
+        out a page. The instance has no page.
+        """
         base = (
             f"https://www.sec.gov/Archives/edgar/data/{cik.lstrip('0')}/"
             f"{accession.replace('-', '')}"
         )
 
         def produce() -> dict:
-            try:
-                summary = self._http_get(f"{base}/FilingSummary.xml").text
-            except Exception as exc:  # noqa: BLE001 — a filing without one is normal
-                log.info("filing_summary_absent", accession=accession, why=str(exc)[:80])
-                return {"reports": [], "html": {}}
-            reports = segments.find_reports(summary)
-            html = {}
-            for _, _, path in reports:
-                try:
-                    html[path] = self._http_get(f"{base}/{path}").text
-                except Exception as exc:  # noqa: BLE001
-                    log.info("segment_report_failed", path=path, why=str(exc)[:80])
+            index = self._fetch_json(f"{base}/index.json")
+            names = [
+                item.get("name", "")
+                for item in (index or {}).get("directory", {}).get("item", [])
+            ]
+            # The extracted instance is `<ticker>-<date>_htm.xml`. The other
+            # `.xml` files in the folder are the calculation, definition, label
+            # and presentation linkbases, which carry no facts.
+            instance = next(
+                (n for n in names if n.endswith("_htm.xml")),
+                None,
+            )
+            if instance is None:
+                log.info("xbrl_instance_absent", accession=accession)
+                return {"instance": None, "xml": ""}
+            response = self._http_get(f"{base}/{instance}")
             return {
-                "reports": [[k, n, p] for k, n, p in reports],
-                "html": html,
+                "instance": instance,
+                "xml": response.text if response is not None else "",
             }
 
         # A filing is immutable, so this is cached on the accession rather than
         # on `as_of` — the same document can never change underneath us.
         payload = self.cache.fetch(
-            self.cache.key("sec_segments", date(2000, 1, 1), accession=accession),
+            self.cache.key("sec_xbrl", date(2000, 1, 1), accession=accession),
             produce,
         )
+        xml = payload.get("xml") or ""
+        if not xml:
+            return [], [], None
 
-        lines: list[segments.SegmentLine] = []
-        for kind, name, path in payload.get("reports", []):
-            body = payload.get("html", {}).get(path)
-            if body:
-                lines.extend(
-                    segments.parse_report(body, kind, name, f"{base}/{path}")
-                )
-        log.info(
-            "segments_parsed", accession=accession,
-            reports=len(payload.get("reports", [])), lines=len(lines),
+        lines = segments.from_instance(xml, f"{base}/{payload.get('instance')}")
+        revenue = (
+            segments.consolidated_revenue(xml, lines[0].period_label)
+            if lines
+            else None
         )
-        return lines, []
+        log.info(
+            "segments_parsed", accession=accession, lines=len(lines),
+            revenue=revenue,
+        )
+        return lines, [], revenue
 
     def get_filings(
         self,

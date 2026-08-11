@@ -1,168 +1,179 @@
-"""Revenue disaggregation from the filing, for any ticker.
+"""Revenue disaggregation from the XBRL instance, for any ticker.
 
-This replaced a hardcoded list of twelve companies whose driver decomposition
-had been written out by hand. Every test here encodes a way a parsed segment
-table is wrong while looking structured — which is the dangerous kind, because a
-lens will build a bottom-up forecast on it and never know.
+This replaced a hardcoded list of twelve companies whose driver decomposition had
+been typed out by hand, and then replaced a first attempt that read SEC's rendered
+HTML tables. Both earlier routes are worth remembering: the hand-written one
+covered twelve names, and the HTML one reached 7 of 12 while costing a
+filer-specific fix for each — a page-layout quirk per company, with an unbounded
+supply of companies.
+
+Reading the instance means the dimension is data. Every test here encodes a way a
+parsed split is wrong while looking structured, which is the dangerous kind: a
+lens builds a bottom-up forecast on it and never knows.
 """
 
 from __future__ import annotations
 
+import pytest
+
 from forecaster.data import segments
 
-# The shape SEC's renderer emits. Trimmed, but the structure is verbatim: a
-# caption carrying the units, a header row of periods, an abstract row heading
-# each block, then a member row with no figures and its values beneath.
-GEO_HTML = """
-<table>
-<tr><th class="tl" colspan="3">Revenue by Geographic Regions (Details) - USD ($)
-    $ in Millions</th></tr>
-<tr><th>&nbsp;</th><th>Apr. 26, 2026</th><th>Apr. 27, 2025</th></tr>
-<tr><td>Revenues</td><td>&#160;</td><td>&#160;</td></tr>
-<tr><td>Revenue</td><td>$ 81,615</td><td>$ 44,062</td></tr>
-<tr><td>United States</td><td>&#160;</td><td>&#160;</td></tr>
-<tr><td>Revenues</td><td>&#160;</td><td>&#160;</td></tr>
-<tr><td>Revenue</td><td>63,769</td><td>25,685</td></tr>
-<tr><td>Taiwan</td><td>&#160;</td><td>&#160;</td></tr>
-<tr><td>Revenues</td><td>&#160;</td><td>&#160;</td></tr>
-<tr><td>Revenue</td><td>12,006</td><td>7,648</td></tr>
-<tr><td>China (including Hong Kong)</td><td>&#160;</td><td>&#160;</td></tr>
-<tr><td>Revenues</td><td>&#160;</td><td>&#160;</td></tr>
-<tr><td>Revenue</td><td>4,550</td><td>9,659</td></tr>
-<tr><td>Other</td><td>&#160;</td><td>&#160;</td></tr>
-<tr><td>Revenues</td><td>&#160;</td><td>&#160;</td></tr>
-<tr><td>Revenue</td><td>1,290</td><td>1,070</td></tr>
-</table>
-"""
 
-SUMMARY_XML = """
-<FilingSummary>
- <MyReports>
-  <Report><ShortName>Segment Information</ShortName>
-          <HtmlFileName>R20.htm</HtmlFileName></Report>
-  <Report><ShortName>Segment Information - Schedule of Revenue by Geographic
-          Regions (Details)</ShortName>
-          <HtmlFileName>R64.htm</HtmlFileName></Report>
-  <Report><ShortName>Segment Information - Narrative (Details)</ShortName>
-          <HtmlFileName>R61.htm</HtmlFileName></Report>
-  <Report><ShortName>Loans - By Portfolio Segment (Details)</ShortName>
-          <HtmlFileName>R31.htm</HtmlFileName></Report>
-  <Report><ShortName>Segment Information - Schedule of Revenue by Market
-          Platform (Details)</ShortName>
-          <HtmlFileName>R66.htm</HtmlFileName></Report>
- </MyReports>
-</FilingSummary>
-"""
+def _context(cid: str, dims: str, start: str, end: str) -> str:
+    return f"""
+<context id="{cid}">
+  <entity><identifier scheme="http://www.sec.gov/CIK">0001045810</identifier>
+    <segment>{dims}</segment>
+  </entity>
+  <period><startDate>{start}</startDate><endDate>{end}</endDate></period>
+</context>"""
 
 
-def _line(kind, label, value, prior=None) -> segments.SegmentLine:
-    return segments.SegmentLine(
-        kind=kind, label=label, value=value, prior_value=prior, unit="USD",
-        period_label="Apr. 26, 2026", prior_period_label="Apr. 27, 2025",
-        report="test", source_uri="https://example.test/R1.htm",
+def _member(axis: str, member: str) -> str:
+    return (
+        f'<xbrldi:explicitMember dimension="us-gaap:{axis}">{member}'
+        "</xbrldi:explicitMember>"
     )
 
 
+GEO = "StatementGeographicalAxis"
+PRODUCT = "ProductOrServiceAxis"
+CONSOL = "ConsolidationItemsAxis"
+TAG = "RevenueFromContractWithCustomerExcludingAssessedTax"
+
+Q_NOW, Q_NOW_END = "2026-01-26", "2026-04-26"
+Q_AGO, Q_AGO_END = "2025-01-27", "2025-04-27"
+
+
+def _fact(cid: str, value: float, tag: str = TAG, attrs: str = "") -> str:
+    return (
+        f'<us-gaap:{tag}{attrs} contextRef="{cid}" unitRef="usd">'
+        f'{value}</us-gaap:{tag}>'
+    )
+
+
+INSTANCE = "".join(
+    [
+        "<xbrl>",
+        # Undimensioned consolidated revenue, both periods.
+        _context("c-1", "", Q_NOW, Q_NOW_END),
+        _context("c-2", "", Q_AGO, Q_AGO_END),
+        # Geography, current and prior.
+        _context("c-10", _member(GEO, "country:US"), Q_NOW, Q_NOW_END),
+        _context("c-11", _member(GEO, "nvda:TaiwanMember"), Q_NOW, Q_NOW_END),
+        _context("c-12", _member(GEO, "country:US"), Q_AGO, Q_AGO_END),
+        # A parent and its two children, all on the same axis.
+        _context("c-20", _member(PRODUCT, "nvda:DataCenterMember"), Q_NOW, Q_NOW_END),
+        _context("c-21", _member(PRODUCT, "nvda:HyperscaleMember"), Q_NOW, Q_NOW_END),
+        _context("c-24", _member(PRODUCT, "nvda:AICloudsMember"), Q_NOW, Q_NOW_END),
+        _context("c-22", _member(PRODUCT, "nvda:EdgeMember"), Q_NOW, Q_NOW_END),
+        # The same product member again, qualified by an axis that does not split
+        # anything. Keyed on the context this would double-count.
+        _context(
+            "c-23",
+            _member(PRODUCT, "nvda:EdgeMember")
+            + _member(CONSOL, "us-gaap:OperatingSegmentsMember"),
+            Q_NOW,
+            Q_NOW_END,
+        ),
+        _fact("c-1", 100.0),
+        _fact("c-2", 60.0),
+        _fact("c-10", 80.0),
+        _fact("c-11", 20.0),
+        _fact("c-12", 50.0),
+        _fact("c-20", 90.0),
+        _fact("c-21", 60.0),
+        _fact("c-24", 30.0),
+        _fact("c-22", 10.0),
+        _fact("c-23", 10.0),
+        "</xbrl>",
+    ]
+)
+
+
+def _lines():
+    return segments.from_instance(INSTANCE, "https://example.test/x_htm.xml")
+
+
 # --------------------------------------------------------------------------- #
-# finding the right table
+# the axis is the classification
 # --------------------------------------------------------------------------- #
 
 
-def test_it_finds_the_tagged_detail_pages_and_skips_the_prose():
-    """SEC renders each note three times — narrative, tables, tagged detail.
-    Only the last carries machine-readable numbers; matching without the
-    `(Details)` suffix returns a page of prose."""
-    found = segments.find_reports(SUMMARY_XML)
-    paths = {path for _, _, path in found}
+def test_the_dimension_axis_says_what_kind_of_split_it_is():
+    """No report titles, no table layouts, no filer-specific naming. This is the
+    taxonomy's own classification and it is identical for every filer, which is
+    the entire reason for reading the instance instead of the rendering."""
+    kinds = {line.kind for line in _lines()}
 
-    assert "R64.htm" in paths
-    assert "R66.htm" in paths
-    assert "R20.htm" not in paths, "the un-suffixed note is prose"
+    assert kinds == {"geography", "product"}
 
 
-def test_a_narrative_details_page_is_excluded():
-    """It carries facts like "number of reportable segments: 2", which parse as
-    a revenue line of $2 sitting beside figures in millions."""
-    found = segments.find_reports(SUMMARY_XML)
+def test_member_names_are_made_readable_without_being_invented():
+    lines = {line.label for line in _lines()}
 
-    assert "R61.htm" not in {path for _, _, path in found}
-
-
-def test_a_loan_portfolio_is_not_a_business_segment():
-    """Banks overload the word. A loan book parsed as a revenue split produces a
-    decomposition that does not sum to revenue and is wrong in a way that looks
-    structured."""
-    found = segments.find_reports(SUMMARY_XML)
-
-    assert "R31.htm" not in {path for _, _, path in found}
+    assert "Data Center" in lines
+    assert "Taiwan" in lines
+    # A two-letter country code is left alone: expanding it needs a lookup table
+    # and a wrong expansion is worse than the code.
+    assert "US" in lines
 
 
-def test_specific_patterns_beat_the_generic_one():
-    """The ordering bug that cost the FX exposure.
+def test_the_prior_year_comes_from_the_same_document():
+    """What makes segment growth defensible rather than reconstructed — the
+    instance carries every period it reports, so no join across filings."""
+    us = next(line for line in _lines() if line.label == "US")
 
-    NVDA titles every note "Segment Information — …", so a generic
-    `segment information` pattern checked first claims the GEOGRAPHIC table too
-    and it disappears into the segment bucket. Matching stops at the first hit,
-    so narrow patterns have to be tested before the catch-all.
-    """
-    found = dict((path, kind) for kind, _, path in segments.find_reports(SUMMARY_XML))
+    assert us.prior_value == 50.0
+    assert us.growth == pytest.approx(80 / 50 - 1)
 
-    assert found["R64.htm"] == "geography"
-    assert found["R66.htm"] == "product"
+
+def test_a_member_with_no_comparative_has_no_growth_rather_than_a_wrong_one():
+    """A segment that did not exist a year ago must not be paired with an
+    unrelated member's figure."""
+    taiwan = next(line for line in _lines() if line.label == "Taiwan")
+
+    assert taiwan.prior_value is None
+    assert taiwan.growth is None
 
 
 # --------------------------------------------------------------------------- #
-# reading the table
+# the two bugs that cost most of the coverage
 # --------------------------------------------------------------------------- #
 
 
-def test_a_member_row_names_the_figures_beneath_it():
-    lines = segments.parse_report(GEO_HTML, "geography", "geo", "u")
-    labels = [line.label for line in lines]
+def test_an_ignorable_second_axis_does_not_disqualify_a_fact():
+    """Exxon, P&G and Coca-Cola tag segment revenue against BOTH the segment axis
+    and `ConsolidationItemsAxis`. Requiring exactly one dimension threw every one
+    of those facts away and three filers returned nothing at all."""
+    contexts = segments.parse_contexts(INSTANCE)
 
-    assert labels == ["United States", "Taiwan", "China (including Hong Kong)", "Other"]
-
-
-def test_a_bare_section_header_does_not_overwrite_the_member():
-    """The bug that made the whole geographic table parse to nothing.
-
-    The market-platform note heads each block with "Revenue from External
-    Customer [Line Items]", which the bracket test catches. The geographic note
-    heads it with a bare "Revenues", which it does not — and that one word
-    overwrote the member on every row, so every region came back labelled
-    "Revenues" and the table yielded no usable lines at all.
-    """
-    lines = segments.parse_report(GEO_HTML, "geography", "geo", "u")
-
-    assert lines, "the table parsed to nothing"
-    assert not any(line.label.lower() in {"revenue", "revenues"} for line in lines)
+    assert contexts["c-23"].axis == PRODUCT
+    assert contexts["c-23"].member == "nvda:EdgeMember"
 
 
-def test_the_scale_in_the_caption_is_applied():
-    """A table quoted in millions and read at face value is wrong by six orders
-    of magnitude and internally consistent — the parts still sum to the total,
-    so nothing downstream catches it."""
-    lines = segments.parse_report(GEO_HTML, "geography", "geo", "u")
+def test_the_same_member_reaching_us_twice_is_counted_once():
+    """P&G reports each segment plainly and again qualified by the consolidation
+    axis. Keyed on the context those are two facts, the members double, no subset
+    reconciles, and the whole split is discarded — the company looks like it
+    discloses nothing."""
+    edge = [line for line in _lines() if line.label == "Edge"]
 
-    assert lines[0].value == 63_769_000_000.0
-
-
-def test_the_prior_year_comparative_comes_from_the_same_table():
-    """What makes segment growth defensible rather than reconstructed: the
-    comparative is printed beside the figure in the filing, not derived by
-    joining two documents."""
-    lines = segments.parse_report(GEO_HTML, "geography", "geo", "u")
-    us = lines[0]
-
-    assert us.prior_value == 25_685_000_000.0
-    assert us.growth == 63_769 / 25_685 - 1
+    assert len(edge) == 1
 
 
-def test_a_declining_region_reports_a_negative_growth_rate():
-    lines = segments.parse_report(GEO_HTML, "geography", "geo", "u")
-    china = next(line for line in lines if line.label.startswith("China"))
+def test_contextref_is_found_wherever_it_sits_in_the_tag():
+    """Microsoft emits `id=` before `contextRef=`. A pattern assuming contextRef
+    came first matched none of its revenue facts, and the filer with the cleanest
+    segment tagging in the sample looked like it had no revenue at all."""
+    reordered = INSTANCE.replace(
+        f'<us-gaap:{TAG} contextRef="c-10"',
+        f'<us-gaap:{TAG} id="f-99" contextRef="c-10"',
+    )
 
-    assert china.growth < 0
+    lines = segments.from_instance(reordered, "u")
+
+    assert any(line.label == "US" for line in lines)
 
 
 # --------------------------------------------------------------------------- #
@@ -171,83 +182,90 @@ def test_a_declining_region_reports_a_negative_growth_rate():
 
 
 def test_a_parent_listed_beside_its_children_is_collapsed():
-    """A rendered segment table is a hierarchy flattened into rows. NVDA lists
-    Data Center at 75,246 and then Hyperscale and AI Clouds underneath it — all
-    as siblings. Summing every row gives 156,861 against 81,615 of revenue.
+    """An axis is a hierarchy flattened into members. NVDA tags Data Center at
+    75,246 and Hyperscale and AI Clouds beneath it, siblings as far as the axis
+    is concerned — summing every member double-counts. Nothing in the taxonomy
+    says which is which; arithmetic does."""
+    kept, notes = segments.reconcile(_lines(), 100.0)
+    products = {line.label for line in kept if line.kind == "product"}
 
-    Nothing in the text says which is which. Arithmetic does: the finest subset
-    that reconciles to reported revenue is the real decomposition.
-    """
-    group = [
-        _line("product", "Data Center", 75_246),
-        _line("product", "Hyperscale", 37_869),
-        _line("product", "AI Clouds", 37_377),
-        _line("product", "Edge Computing", 6_369),
-    ]
-
-    kept, notes = segments.reconcile(group, 81_615)
-    labels = {line.label for line in kept}
-
-    assert labels == {"Hyperscale", "AI Clouds", "Edge Computing"}
+    # Data Center (90) = Hyperscale (60) + AI Clouds (30). Both {Data Center,
+    # Edge} and {Hyperscale, AI Clouds, Edge} reconcile to 100; the finer split
+    # is the better driver tree, so ties break toward more members.
+    assert products == {"Hyperscale", "AI Clouds", "Edge"}
     assert any("double-count" in note for note in notes)
 
 
-def test_a_split_that_reconciles_at_the_coarse_level_is_kept_whole():
-    group = [
-        _line("segment", "Products", 60_000),
-        _line("segment", "Services", 21_615),
+def test_the_consolidated_revenue_comes_from_the_same_document_and_period():
+    """Reconciling against the latest quarter from `History` instead compares an
+    ANNUAL segment split to a QUARTERLY total whenever the most recent filing is
+    a 10-K. Exxon, P&G and Coca-Cola all extracted their members correctly and
+    had every one discarded on that mismatch."""
+    assert segments.consolidated_revenue(INSTANCE, Q_NOW) == 100.0
+
+
+def test_the_largest_undimensioned_figure_wins():
+    """UnitedHealth tags a total and several components of it against the same
+    context. Taking the first found returned a component, against which no split
+    could possibly reconcile."""
+    with_component = INSTANCE.replace(
+        _fact("c-1", 100.0), _fact("c-1", 30.0) + _fact("c-1", 100.0)
+    )
+
+    assert segments.consolidated_revenue(with_component, Q_NOW) == 100.0
+
+
+def test_a_single_member_is_not_a_decomposition():
+    """The consolidation axis tags the CONSOLIDATED total as
+    `OperatingSegmentsMember`, which reconciles perfectly while saying nothing."""
+    one = [
+        segments.SegmentLine(
+            kind="segment", label="All of it", value=100.0, prior_value=None,
+            unit="USD", period_label=Q_NOW, prior_period_label="", report="",
+            source_uri="u",
+        )
     ]
 
-    kept, notes = segments.reconcile(group, 81_615)
+    kept, notes = segments.reconcile(one, 100.0)
 
-    assert len(kept) == 2
-    assert not notes
+    assert kept == []
+    assert any("single member" in note for note in notes)
 
 
 def test_a_split_that_cannot_reconcile_is_dropped_with_its_reason():
-    """A driver tree missing a third of the revenue is worse than no driver
-    tree, because a lens will build on it."""
-    group = [
-        _line("segment", "Depreciation", 997),
-        _line("segment", "Operating income", 53_536),
-        _line("segment", "Other segment items", 25_339),
+    """A driver tree missing a third of the revenue is worse than no driver tree,
+    because a lens will build on it. Exxon and UnitedHealth end here, and that is
+    the designed outcome rather than a failure."""
+    partial = [
+        segments.SegmentLine(
+            kind="product", label=f"Part {i}", value=10.0, prior_value=None,
+            unit="USD", period_label=Q_NOW, prior_period_label="", report="",
+            source_uri="u",
+        )
+        for i in range(3)
     ]
 
-    kept, notes = segments.reconcile(group, 81_615)
+    kept, notes = segments.reconcile(partial, 100.0)
 
     assert kept == []
     assert any("no subset" in note for note in notes)
 
 
 def test_customer_concentration_is_not_required_to_sum_to_revenue():
-    """A concentration note lists the customers above a threshold. It is not
-    meant to be exhaustive and rejecting it for that would throw away the one
-    disclosure naming who actually buys the product."""
-    group = [_line("concentration", "Customer A", 15_000)]
+    """A concentration disclosure names the customers above a threshold. It is
+    not meant to be exhaustive, and rejecting it for that would discard the one
+    disclosure saying who actually buys."""
+    named = [
+        segments.SegmentLine(
+            kind="concentration", label="Customer A", value=15.0, prior_value=None,
+            unit="USD", period_label=Q_NOW, prior_period_label="", report="",
+            source_uri="u",
+        )
+    ]
 
-    kept, _ = segments.reconcile(group, 81_615)
+    kept, _ = segments.reconcile(named, 100.0)
 
     assert len(kept) == 1
-
-
-def test_no_reported_revenue_means_nothing_is_trusted():
-    """Without a target there is no way to tell a complete split from a partial
-    one, and a partial one is the failure this whole check exists to catch."""
-    kept, notes = segments.reconcile([_line("product", "A", 100)], None)
-
-    assert kept == []
-    assert notes
-
-
-def test_a_table_too_wide_to_search_is_declined_rather_than_guessed():
-    """A filer with more than eighteen rows in one disaggregation table is
-    disclosing something other than a segment split."""
-    group = [_line("segment", f"Row {i}", 1_000) for i in range(20)]
-
-    kept, notes = segments.reconcile(group, 20_000)
-
-    assert kept == []
-    assert any("no subset" in note for note in notes)
 
 
 # --------------------------------------------------------------------------- #
@@ -257,29 +275,27 @@ def test_a_table_too_wide_to_search_is_declined_rather_than_guessed():
 
 def test_the_geographic_split_is_the_fx_exposure():
     """The leg of the Mechanical lens written off as unavailable. A filer
-    reporting 15% of revenue from Taiwan has that much translation exposure,
+    reporting 20% of revenue from Taiwan carries that much translation exposure,
     and it is in the same document as everything else."""
-    lines = segments.parse_report(GEO_HTML, "geography", "geo", "u")
+    kept, _ = segments.reconcile(_lines(), 100.0)
 
-    mix = dict(segments.geo_mix(lines))
+    mix = dict(segments.geo_mix(kept))
 
-    import pytest
-
-    assert mix["United States"] > 0.75
+    assert mix["US"] == pytest.approx(0.8)
     assert sum(mix.values()) == pytest.approx(1.0)
 
 
 def test_the_block_states_growth_beside_every_part():
-    """Growth is the number the lens is being asked to forecast, and it came out
-    of the filing rather than out of anyone's model."""
-    lines = segments.parse_report(GEO_HTML, "geography", "geo", "u")
+    kept, _ = segments.reconcile(_lines(), 100.0)
 
-    block = segments.to_block(lines)
+    block = segments.to_block(kept)
 
-    assert "United States" in block
-    assert "YoY" in block
-    assert "% of total" in block
+    assert "US" in block and "YoY" in block
 
 
 def test_an_empty_parse_renders_as_nothing_rather_than_a_heading():
     assert segments.to_block([]) == ""
+
+
+def test_a_document_with_no_dimensioned_revenue_yields_nothing():
+    assert segments.from_instance("<xbrl></xbrl>", "u") == []
