@@ -38,6 +38,7 @@ import structlog
 
 from forecaster.data.history import History, Observation
 from forecaster.data.prices import PriceBar
+from forecaster.data.segments import SegmentLine
 from forecaster.pipeline.b_acquire import Acquired
 from forecaster.schemas import Claim, Consensus, Guidance
 
@@ -115,6 +116,11 @@ def write(
             # truncation reads as "we covered everything".
             "budgets": {k: _strip_timing(v) for k, v in acquired.budgets.items()},
             "provenance": provenance or {},
+            # The revenue decomposition, so a replayed run gets the same driver
+            # tree without re-reading the XBRL instance.
+            "segments": [asdict(line) for line in acquired.segment_lines],
+            "segment_notes": list(acquired.segment_notes),
+            "geo_mix": [list(pair) for pair in acquired.geo_mix],
             "blocks": {
                 "prior_year": acquired.prior_year_block,
                 "peers": acquired.peer_block,
@@ -163,6 +169,12 @@ def read(path: Path | str) -> tuple[Acquired, list[Guidance], dict]:
         macro_block=manifest.get("blocks", {}).get("macro", ""),
         driver_block=manifest.get("blocks", {}).get("drivers", ""),
     )
+
+    acquired.segment_lines = [
+        SegmentLine(**row) for row in manifest.get("segments", [])
+    ]
+    acquired.segment_notes = list(manifest.get("segment_notes", []))
+    acquired.geo_mix = [tuple(pair) for pair in manifest.get("geo_mix", [])]
 
     history_path = root / "history.json"
     if history_path.exists():

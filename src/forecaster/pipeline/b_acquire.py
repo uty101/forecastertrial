@@ -31,6 +31,7 @@ from datetime import date, timedelta
 import structlog
 
 from forecaster.config import settings
+from forecaster.data import segments
 from forecaster.data.loader import Loader
 from forecaster.data.universe import profile
 from forecaster.events import EventLog
@@ -117,6 +118,16 @@ class Acquired:
     sector: str = "unknown"
     prepared: bool = False
 
+    # The revenue decomposition, read from the filing's XBRL instance. This is
+    # what the Drivers lens builds units x ASP on, and until it existed that
+    # lens was asked to derive a decomposition from a corpus containing none —
+    # unless the company happened to be one of twelve somebody had prepared.
+    segment_lines: list = field(default_factory=list)
+    segment_notes: list[str] = field(default_factory=list)
+    # (region, share of revenue). The geographic split IS the FX translation
+    # exposure, which is the input the Mechanical lens could not previously get.
+    geo_mix: list = field(default_factory=list)
+
     # The two series the MODEL needs, as distinct from the evidence store. A
     # lens cites claims; the three-statement model rolls a balance sheet forward
     # and needs the quarterly history, and its EPS denominator needs a share
@@ -200,6 +211,32 @@ def acquire(
             "B1b_series",
             quarters=out.history.n_quarters() if out.history else 0,
             price_bars=len(out.prices or []),
+        )
+
+    # ---- B6: the revenue decomposition --------------------------------- #
+    #
+    # Deterministic and free: it reads the XBRL instance the filing already
+    # published, where each revenue fact carries the axis it is split on. No
+    # model call, no name matching, and general to any filer rather than to a
+    # list somebody prepared.
+    #
+    # The prepared paragraph in `universe.py` still wins where one exists —
+    # a human's decomposition can name a driver the segment note does not, like
+    # units against ASP — but it is now the exception rather than the only path.
+    with events.node("B6_segments"):
+        found = loader.segments(ticker, as_of)
+        out.segment_lines, out.segment_notes = found or ([], [])
+        out.geo_mix = segments.geo_mix(out.segment_lines)
+        # Deliberately NOT copied into `driver_block`. The table goes into the
+        # shared corpus, where all six lenses read it from the cached prefix —
+        # Margins needs it for the mix case as much as Drivers needs it to build
+        # up. Putting it here as well would pay for the same rows a second time.
+        events.emit(
+            EventType.NODE_DONE,
+            "B6_segments",
+            members=len(out.segment_lines),
+            regions=len(out.geo_mix),
+            rejected=len(out.segment_notes),
         )
 
     # ---- B2: filings and their text ------------------------------------ #

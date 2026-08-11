@@ -31,6 +31,7 @@ from pathlib import Path
 
 import structlog
 
+from forecaster.data import segments
 from forecaster.data.loader import Loader
 from forecaster.eval import baseline as baseline_mod
 from forecaster.events import EventLog
@@ -200,6 +201,7 @@ def forecast(
     # asks for it, which is after both.
     if model is not None:
         store.model = d_model.to_block(model)
+    store.segments = segments.to_block(acquired.segment_lines)
 
     ctx = LensContext(
         ticker=config.ticker,

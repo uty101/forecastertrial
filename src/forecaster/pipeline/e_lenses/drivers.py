@@ -18,9 +18,10 @@ from forecaster.pipeline.e_lenses.base import LensContext, common_vars, run_lens
 from forecaster.schemas import LensName, LensOutput
 
 NO_DRIVERS = (
-    "(no prepared driver definitions for this company — derive the "
-    "decomposition from the segment and operating-metric disclosure in the "
-    "evidence, and say which you used)"
+    "(no hand-written driver definition for this company. The evidence block "
+    "above carries the company's OWN revenue decomposition, read from the "
+    "segment note in its filing, with each part's year-on-year growth beside "
+    "it. Build the forecast on those parts and say which you used.)"
 )
 
 

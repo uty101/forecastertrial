@@ -135,6 +135,21 @@ class Loader:
             lambda s: getattr(s, "get_sic", lambda *_, **__: None)(ticker, as_of),
         )
 
+    def segments(self, ticker: str, as_of: date):
+        """(lines, notes) — the revenue decomposition, from the XBRL instance.
+
+        Returns a tuple rather than a list, so a source that finds the tables and
+        rejects them for not reconciling can say so. An empty list with no reason
+        reads as "this company does not disclose segments", which is a very
+        different fact from "we found a split and could not trust it".
+        """
+        return self.resolve(
+            f"segments:{ticker}",
+            lambda s: getattr(s, "get_segments", lambda *_, **__: None)(
+                ticker, as_of
+            ),
+        )
+
     def news(self, ticker: str, as_of: date, query: str, **kwargs):
         # The query is part of the key: two different questions are two
         # different answers, and collapsing them would serve one from the other.

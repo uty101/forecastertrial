@@ -63,6 +63,12 @@ class EvidenceStore:
     # they get  for the one case they are arguing — so the multiple
     # is six, not thirteen.
     model: str = ""
+    # The revenue decomposition, for the same reason and by the same argument as
+    # the model block. Margins needs it for the MIX case — a shift between parts
+    # with different margins moves the blended number without either part moving
+    # — and Drivers needs it to build bottom-up. Both want the identical table,
+    # so it belongs in the cached prefix rather than in two separate turns.
+    segments: str = ""
 
     # ---------------------------------------------------------------- #
 
@@ -96,6 +102,8 @@ class EvidenceStore:
         halve the cache hit rate.
         """
         lines: list[str] = []
+        if self.segments:
+            lines += [self.segments, "", "-" * 70, ""]
         if self.model:
             # First, and before the claims. The model is what the claims add up
             # to, and a lens that reads the arithmetic before the line items is
