@@ -69,6 +69,11 @@ class EvidenceStore:
     # — and Drivers needs it to build bottom-up. Both want the identical table,
     # so it belongs in the cached prefix rather than in two separate turns.
     segments: str = ""
+    # Stage E's output. Same argument again: identical for every lens, so it
+    # belongs in the cached prefix. The landing distribution tells the Guidance
+    # lens where this company lands inside its own range, and the swing factors
+    # tell every lens which lines are worth arguing about at all.
+    expectations: str = ""
 
     # ---------------------------------------------------------------- #
 
@@ -102,6 +107,8 @@ class EvidenceStore:
         halve the cache hit rate.
         """
         lines: list[str] = []
+        if self.expectations:
+            lines += [self.expectations, "", "-" * 70, ""]
         if self.segments:
             lines += [self.segments, "", "-" * 70, ""]
         if self.model:

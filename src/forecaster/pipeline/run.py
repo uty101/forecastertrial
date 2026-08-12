@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import statistics
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from pathlib import Path
 
@@ -37,6 +37,7 @@ from forecaster.eval import baseline as baseline_mod
 from forecaster.events import EventLog
 from forecaster.llm.client import LLMClient
 from forecaster.model import from_lenses, project
+from forecaster.model import scenarios as scenario_mod
 from forecaster.pipeline import (
     b_acquire,
     c_structure,
@@ -51,6 +52,8 @@ from forecaster.pipeline import (
     v2_comparability,
     v3_calibrate,
 )
+from forecaster.pipeline.e_expect import landing, swing
+from forecaster.pipeline.e_lenses import mechanical
 from forecaster.pipeline.e_lenses.base import LensContext
 from forecaster.schemas import (
     Basis,
@@ -203,6 +206,43 @@ def forecast(
         store.model = d_model.to_block(model)
     store.segments = segments.to_block(acquired.segment_lines)
 
+    # ---- E: expectations ----------------------------------------------- #
+    #
+    # What is ALREADY assumed, measured before any lens forms a view. Nothing
+    # here forecasts; the thesis is that consensus is beatable where it is
+    # structurally weak, and a weakness cannot be located without first stating
+    # precisely what is assumed.
+    with events.node("E_expect"):
+        # E2. The Guidance lens's entire edge, and  has
+        # existed since the schema was written with nothing ever assigning it.
+        actual_revenue = {}
+        if acquired.history is not None:
+            for period_label in acquired.history.periods():
+                observation = acquired.history.get("revenue", period_label)
+                if observation is not None:
+                    actual_revenue[period_label] = observation.value
+        store.landing = landing.build(
+            config.ticker, landing.pair(guides, actual_revenue)
+        )
+
+        # E5. Which lines actually decide this company's quarter. Measured by
+        # holding each driver at its trailing median and re-running the model,
+        # so the judge weighs by something fitted rather than asserted.
+        factors = _swing_factors(model, acquired)
+        events.emit(
+            EventType.NODE_DONE, "E_expect",
+            landing=store.landing.n_quarters if store.landing else 0,
+            swing=[s.driver for s in factors.top()],
+            lenses_worth_running=sorted(factors.lenses_worth_running()),
+        )
+    # Into the cached corpus, like the model and the segment table: identical
+    # for every lens, so charged once at write rates rather than six times.
+    store.expectations = "\n\n".join(
+        block
+        for block in (landing.to_block(store.landing), swing.to_block(factors))
+        if block
+    )
+
     ctx = LensContext(
         ticker=config.ticker,
         period=config.period,
@@ -224,6 +264,23 @@ def forecast(
     )
     lenses: list[LensOutput] = list(lens_results.kept)
     dropped: dict[str, str] = dict(lens_results.dropped)
+
+    # The seventh lens. No model, no tokens, no way to hallucinate — and until
+    # now `run.py` had never called it, so the determinism argument the whole
+    # architecture rests on was being made about code that did not execute.
+    with events.node("E_mechanical"):
+        arithmetic = _mechanical(model, acquired, store)
+        if arithmetic is not None:
+            lenses.append(arithmetic)
+            events.emit(
+                EventType.NODE_DONE, "E_mechanical",
+                eps=arithmetic.eps, revenue=arithmetic.revenue,
+            )
+        else:
+            dropped["mechanical"] = (
+                "not enough of the ratio base, share count or price history to "
+                "compute it"
+            )
 
     # ---- V1: reconcile ------------------------------------------------ #
     with events.node("V1_reconcile"):
@@ -291,6 +348,23 @@ def forecast(
         client, lenses, dropped, consensus, config.ticker, config.period,
         config.basis, events, config.run_index,
     )
+
+    # ---- G2: bull / base / bear ---------------------------------------- #
+    #
+    # After the judge, because the base case IS the judged number — building
+    # scenarios around a pre-judge estimate would produce three cases nobody
+    # forecast. Only the drivers stage E measured as material move; everything
+    # else is held, and the sheet says which.
+    cases = None
+    with events.node("G2_scenarios"):
+        cases = _scenarios(model, acquired, factors, distribution)
+        if cases:
+            events.emit(
+                EventType.NODE_DONE, "G2_scenarios",
+                eps=[round(c.eps, 3) for c in cases.cases],
+                moved=cases.drivers_moved,
+                held=cases.held,
+            )
 
     # ---- V2: comparability --------------------------------------------- #
     comparability_flag, comparability_note = v2_comparability.check(
@@ -410,6 +484,17 @@ def forecast(
         # ratio, and a model with one forecast driver and fifteen extrapolated
         # ones must not read as a fully-formed view.
         "model_drivers": driver_report,
+        # Stage E: what was already assumed before any lens spoke.
+        "landing": store.landing.model_dump(mode="json") if store.landing else None,
+        "swing_factors": [
+            {
+                "driver": s.driver, "label": s.label, "eps_impact": s.eps_impact,
+                "share": s.share, "lenses": list(s.lenses), "material": s.material,
+            }
+            for s in factors.swings
+        ],
+        "lens_weights": factors.weights(),
+        "scenarios": scenario_mod.to_json(cases) if cases else None,
         "statements": model.statements if model else None,
         "balance_check": model.balance_detail if model else None,
         "judge_rationale": judge_rationale,
@@ -508,6 +593,233 @@ def _extract_guidance(
         rejected=len(rejections),
     )
     return guides, guide_claims, rejections
+
+
+def _swing_factors(model, acquired) -> swing.SwingFactors:
+    """E5 — what each driver is worth in EPS, by re-running the model on it.
+
+    Each driver is replaced with what a naive forecaster would assume — its own
+    trailing median — and the projection re-run. The change in year-one EPS is
+    what getting that one line wrong costs, in cents, on this company's actual
+    cost structure. Directly comparable across lines, which is the property that
+    makes it a weight.
+
+    A counterfactual rather than a regression on purpose: eight observations and
+    six correlated drivers is a fit to noise.
+    """
+    if model is None or not model.projected or not model.projected_drivers:
+        return swing.SwingFactors(ticker=getattr(model, "ticker", "?"))
+
+    base_year = model.projected[0]
+    base_eps = base_year.income.get("eps_diluted")
+    seeded = model.projected_drivers
+    opening = project.opening_from(acquired.history, model.base_fiscal_year)
+    revenue = project._fy_totals(acquired.history, model.base_fiscal_year, "revenue")
+
+    perturbed: dict[str, float | None] = {}
+    for driver in swing.LENS_FOR_DRIVER:
+        if not hasattr(seeded[0], driver):
+            continue
+        # One standard deviation of this line's OWN quarterly history — a
+        # realistic surprise rather than a return to the average. Perturbing to
+        # the median instead measures nothing, because the model is seeded at
+        # the median: every line but revenue growth scored exactly 0.0%.
+        move = swing.typical_move(_driver_history(acquired.history, driver))
+        if not move:
+            continue
+        base_value = getattr(seeded[0], driver).value
+        moved = list(seeded)
+        moved[0] = replace(
+            seeded[0],
+            **{driver: project.Driver(base_value + move, "held", "one sigma")},
+        )
+        try:
+            years = project.project(opening, revenue, moved)
+            perturbed[driver] = years[0].income.get("eps_diluted")
+        except ValueError:
+            perturbed[driver] = None
+
+    return swing.measure(model.ticker, base_eps, perturbed)
+
+
+def _scenarios(model, acquired, factors, distribution):
+    """Bull / base / bear around the JUDGED number, on the swing factors only.
+
+    Each case is built by moving one material driver at a time through the same
+    three-statement model, so the difference between bull and base is a list of
+    specific assumption changes each worth a stated number of cents rather than
+    a number somebody felt was about right.
+    """
+    if model is None or not model.projected or not model.projected_drivers:
+        return None
+    material = [s.driver for s in factors.swings if s.material]
+    if not material:
+        return None
+
+    seeded = model.projected_drivers
+    opening = project.opening_from(acquired.history, model.base_fiscal_year)
+    revenue = project._fy_totals(acquired.history, model.base_fiscal_year, "revenue")
+    base_eps = model.projected[0].income.get("eps_diluted")
+    if not base_eps:
+        return None
+
+    base_values = {
+        driver: getattr(seeded[0], driver).value
+        for driver in material
+        if hasattr(seeded[0], driver)
+    }
+
+    eps_for: dict[tuple[str, float], float] = {}
+    for driver, base_value in base_values.items():
+        for direction in (1.0, -1.0):
+            value = base_value * (1 + direction * scenario_mod.DEFAULT_MOVE)
+            moved = list(seeded)
+            moved[0] = replace(
+                seeded[0],
+                **{driver: project.Driver(value, "forecast", "scenario")},
+            )
+            try:
+                years = project.project(opening, revenue, moved)
+            except ValueError:
+                continue
+            eps = years[0].income.get("eps_diluted")
+            if eps is not None:
+                eps_for[(driver, value)] = eps
+
+    return scenario_mod.build(
+        model.ticker,
+        base_eps,
+        base_values,
+        eps_for,
+        material=material,
+        immaterial=[s.driver for s in factors.swings if not s.material],
+    )
+
+
+def _mechanical(model, acquired, store) -> LensOutput | None:
+    """E1 — the lens with no model in it, finally called.
+
+    174 lines of tested arithmetic that `run.py` had never invoked. It is free,
+    it is deterministic, and it is the lens most likely to still be standing at
+    18:40 when the API is throttled — which is precisely why the architecture
+    claims every stage that can hallucinate is checked by one that cannot.
+
+    Three of its four legs come straight from the model's own ratio base. The
+    fourth, FX, needed a geographic revenue split that did not exist until the
+    segment extractor was built; `geo_mix` supplies it now.
+
+    `organic_growth` deliberately does NOT come from the Drivers lens. Taking it
+    from there would make Mechanical a restatement of Drivers, the two would
+    agree by construction, and the judge would read that agreement as
+    corroboration.
+    """
+    if model is None or not model.projected_drivers or not model.projected:
+        return None
+
+    drivers = model.projected_drivers[0]
+    history = acquired.history
+    base = model.base_fiscal_year
+    if history is None or base is None:
+        return None
+
+    def at(key: str) -> float:
+        value = project._fy_totals(history, base, key)
+        if value is None:
+            closing = project._closing(history, base, key)
+            return closing or 0.0
+        return value
+
+    revenue_prior = at("revenue")
+    if not revenue_prior:
+        return None
+
+    shares = project._closing(history, base, "diluted_shares") or 0.0
+    if not shares:
+        return None
+
+    price = 0.0
+    for bar in reversed(acquired.prices or []):
+        if bar.complete():
+            price = bar.close
+            break
+    if price <= 0:
+        return None
+
+    inputs = mechanical.MechanicalInputs(
+        revenue_prior_year=revenue_prior,
+        organic_growth=drivers.revenue_growth.value,
+        # The geographic revenue split IS the translation exposure. Regions are
+        # not currencies, so without a mapping the FX leg contributes zero —
+        # which is the right failure: it degrades to no adjustment rather than
+        # to a guessed one.
+        geo_mix=[
+            mechanical.GeoMix(currency=region, share=share)
+            for region, share in (acquired.geo_mix or [])
+        ],
+        rate_start={},
+        rate_avg_quarter={},
+        gross_margin=drivers.gross_margin.value,
+        opex=revenue_prior * drivers.opex_pct_revenue.value,
+        tax_rate=drivers.tax_rate.value,
+        shares_prior=shares,
+        buyback_spend=abs(at("buyback")),
+        avg_price=price,
+        cash=project._closing(history, base, "cash") or 0.0,
+        debt=(project._closing(history, base, "long_term_debt") or 0.0),
+        rate_cash=drivers.interest_rate_cash.value,
+        rate_debt=drivers.interest_rate_debt.value,
+    )
+
+    # Every claim in the store, because the arithmetic rests on the whole ratio
+    # base rather than on any one figure. An uncited lens is dropped by V1.
+    cited = sorted(store.claims)[:12]
+    if not cited:
+        return None
+    try:
+        return mechanical.run(inputs, cited)
+    except (ValueError, ZeroDivisionError) as exc:
+        log.warning("mechanical_failed", error=f"{type(exc).__name__}: {exc}")
+        return None
+
+
+def _driver_history(history, driver: str) -> list[float]:
+    """The quarterly series behind one model driver, for measuring its volatility.
+
+    Each is reconstructed from the line items rather than stored, because the
+    drivers are ratios and the history holds the numerator and denominator
+    separately — which is also what lets a driver be measured on a company that
+    never reports the ratio itself.
+    """
+    if history is None:
+        return []
+    periods = history.periods()
+
+    def series(numerator: str, denominator: str) -> list[float]:
+        out = []
+        for period_label in periods:
+            top = history.get(numerator, period_label)
+            bottom = history.get(denominator, period_label)
+            if top is not None and bottom is not None and bottom.value:
+                out.append(top.value / bottom.value)
+        return out
+
+    if driver == "gross_margin":
+        return series("gross_profit", "revenue")
+    if driver == "opex_pct_revenue":
+        return series("opex", "revenue")
+    if driver == "tax_rate":
+        return [r for r in series("tax", "pretax_income") if 0.0 <= r <= 0.6]
+    if driver == "revenue_growth":
+        out = []
+        for i, period_label in enumerate(periods):
+            if i < 4:
+                continue
+            now = history.get("revenue", period_label)
+            ago = history.get("revenue", periods[i - 4])
+            if now is not None and ago is not None and ago.value:
+                out.append(now.value / ago.value - 1)
+        return out
+    return []
 
 
 def _working_revenue(acquired: b_acquire.Acquired, consensus: Consensus | None) -> str:

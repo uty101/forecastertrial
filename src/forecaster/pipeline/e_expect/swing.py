@@ -4,19 +4,21 @@
 assertion.** Six lenses ran on every company regardless, and the judge weighed
 them by a materiality it was told rather than one it measured.
 
-The measurement is available and cheap. Stage D already reproduces past quarters
-from their own reported revenue; extend that to hold each driver at its
-historical median *one at a time* and the EPS error attributable to each line
-falls out. A company whose misses come from gross margin gets Margins run deep
-and Macro skipped. That is both better analysis and better token allocation, and
-it is a fitted weight rather than an opinion.
+The measurement is available and cheap. Move each driver by ONE STANDARD
+DEVIATION of its own quarterly history, one at a time, re-run the projection, and
+the EPS attributable to that line falls out. A company whose quarter turns on
+gross margin gets Margins run deep and Macro skipped. That is better analysis and
+better token allocation at once, and it is a fitted weight rather than an opinion.
+
+**Why one sigma and not a return to the median.** The first version perturbed
+each driver to its trailing median, which measures exactly nothing: the model is
+SEEDED at that median, so the EPS never moved and every line but revenue growth
+scored 0.0%. A swing factor is a line that both MOVES a lot and MATTERS a lot, so
+the counterfactual has to be a realistic surprise.
 
 **Why a counterfactual and not a correlation.** Regressing EPS error on each
 driver's error across eight quarters would fit noise: eight observations, six
-drivers, and the drivers are correlated with each other. Instead each driver is
-replaced with what a naive forecaster would have assumed — its trailing median —
-and the model is re-run. The change in EPS is what getting that one line wrong
-costs, in cents, on this company's actual cost structure.
+correlated drivers.
 
 That number is directly comparable across lines, which is the property that
 makes it a weight. A 100bp gross margin error and a 200bp revenue growth error
@@ -165,11 +167,36 @@ def measure(
     return result
 
 
-def naive_value(history_values: list[float]) -> float | None:
-    """What a forecaster with no view would assume: the trailing median.
+def typical_move(history_values: list[float]) -> float | None:
+    """How much this line actually moves, quarter to quarter.
 
-    Median rather than the last observation, because one quarter with a one-off
-    would make the counterfactual measure that quarter rather than the line.
+    **Not the distance to its median.** The first version of this perturbed each
+    driver to its trailing median and measured the EPS change — which is exactly
+    zero, because the model is SEEDED at that median. Every line but revenue
+    growth scored 0.0% and the whole ranking collapsed to one driver.
+
+    A swing factor is a line that both MOVES a lot and MATTERS a lot, so the
+    counterfactual has to be a realistic surprise rather than a return to the
+    average. One standard deviation of the line's own quarterly history is that:
+    it is measured on this company, it is in the line's own units, and a line
+    that has never moved correctly scores nothing however large it is.
+
+    Standard deviation rather than a fixed percentage because a gross margin
+    that has sat between 73% and 75% for three years is not capable of the same
+    surprise as one that has swung from 40% to 62%, and treating them alike
+    would rank a stable line above a volatile one purely on size.
+    """
+    usable = [v for v in history_values if _finite(v)]
+    if len(usable) < 3:
+        return None
+    return statistics.pstdev(usable)
+
+
+def naive_value(history_values: list[float]) -> float | None:
+    """The trailing median — what a forecaster with no view would assume.
+
+    Retained for the post-mortem, where the question is "what would doing
+    nothing have produced" rather than "how much can this line surprise".
     """
     usable = [v for v in history_values if _finite(v)]
     return statistics.median(usable) if usable else None
