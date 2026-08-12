@@ -150,6 +150,15 @@ class Loader:
             ),
         )
 
+    def transcripts(self, ticker: str, as_of: date, **kwargs):
+        """The last N earnings calls. Value is in the sequence, not the call."""
+        return self.resolve(
+            f"transcripts:{ticker}",
+            lambda s: getattr(s, "get_transcripts", lambda *_, **__: None)(
+                ticker, as_of, **kwargs
+            ),
+        )
+
     def news(self, ticker: str, as_of: date, query: str, **kwargs):
         # The query is part of the key: two different questions are two
         # different answers, and collapsing them would serve one from the other.

@@ -192,6 +192,11 @@ class Profile:
     """What acquisition needs to know about a company it may never have seen."""
 
     ticker: str
+    # The company's own name. Improves a web search materially — "LLY earnings
+    # call" competes with every other three-letter string, "Eli Lilly earnings
+    # call" does not. Absent for an unprepared company, which is a smaller loss
+    # than it sounds because the ticker still appears in every headline.
+    name: str = ""
     sector: str = "unknown"
     peers: tuple[str, ...] = ()
     macro_series: tuple[str, ...] = field(default=DEFAULT_MACRO)
@@ -210,6 +215,7 @@ def profile(ticker: str) -> Profile:
         return Profile(ticker=ticker.upper())
     return Profile(
         ticker=company.ticker,
+        name=company.name,
         sector=company.sector,
         peers=company.value_chain(),
         macro_series=company.macro_series or DEFAULT_MACRO,

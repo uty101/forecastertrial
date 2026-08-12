@@ -40,6 +40,7 @@ from tenacity import (
     wait_exponential,
 )
 
+from forecaster.data import transcripts
 from forecaster.data.cache import Cache
 from forecaster.data.protocol import assert_point_in_time
 from forecaster.schemas import Claim, Source, SourceKind
@@ -186,6 +187,35 @@ class ExaSource:
             returned=len(results), kept=len(kept),
         )
         return kept
+
+    def get_transcripts(
+        self,
+        ticker: str,
+        as_of: date,
+        company: str = "",
+        quarters: int = 8,
+        lookback_days: int = 800,
+    ) -> list[transcripts.Transcript]:
+        """The last `quarters` earnings calls, newest first.
+
+        The one source in this system whose value is the SEQUENCE rather than the
+        document. One transcript tells you what was said; eight tell you what
+        stopped being said, which is a fact rather than an impression and is
+        invisible to anyone reading a single call.
+
+        A wide `limit` on purpose: four publishers carry the same call and the
+        search returns them interleaved across quarters, so asking for eight
+        results returns roughly two quarters.
+        """
+        results = self.search(
+            transcripts.search_query(ticker, company),
+            as_of,
+            category=CATEGORY_NEWS,
+            limit=max(quarters * 4, 20),
+            lookback_days=lookback_days,
+        )
+        found = transcripts.from_results(ticker, results, as_of)
+        return found[:quarters]
 
     def get_document(self, uri: str) -> str | None:
         """The article body, so `verify_citations` has something to match.

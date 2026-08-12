@@ -31,7 +31,7 @@ from datetime import date, timedelta
 import structlog
 
 from forecaster.config import settings
-from forecaster.data import segments
+from forecaster.data import segments, transcripts
 from forecaster.data.loader import Loader
 from forecaster.data.universe import profile
 from forecaster.events import EventLog
@@ -124,6 +124,10 @@ class Acquired:
     # unless the company happened to be one of twelve somebody had prepared.
     segment_lines: list = field(default_factory=list)
     segment_notes: list[str] = field(default_factory=list)
+    # The last eight earnings calls. The one source whose value is the SEQUENCE
+    # rather than the document: what stopped being said is a fact, and it is
+    # invisible to anyone reading a single call.
+    transcripts: list = field(default_factory=list)
     # (region, share of revenue). The geographic split IS the FX translation
     # exposure, which is the input the Mechanical lens could not previously get.
     geo_mix: list = field(default_factory=list)
@@ -237,6 +241,33 @@ def acquire(
             members=len(out.segment_lines),
             regions=len(out.geo_mix),
             rejected=len(out.segment_notes),
+        )
+
+    # ---- B7: the earnings calls ---------------------------------------- #
+    #
+    # Eight quarters, not one. An analyst listens to every call and forms an
+    # impression of tone and deflection — real, and the least reproducible thing
+    # they do, because it lives in one person's memory of forty hours of audio.
+    #
+    # An agent cannot be in the room. It can read forty quarters in ninety
+    # seconds and apply the identical test to every one, which no analyst can.
+    # That is a different instrument rather than a substitute, and it is the one
+    # place here where the machine is structurally better rather than faster.
+    #
+    # The bodies go into `documents` so a lens quoting a call has its quote
+    # verified against the transcript, exactly like a filing.
+    with events.node("B7_calls"):
+        calls = loader.transcripts(ticker, as_of, company=company.name) or []
+        out.transcripts = calls
+        for call in calls:
+            out.claims.append(transcripts.to_claim(call))
+            out.documents[call.url] = call.text
+        events.emit(
+            EventType.NODE_DONE,
+            "B7_calls",
+            calls=len(calls),
+            quarters=[c.period for c in calls],
+            with_qa=sum(1 for c in calls if c.has_qa()),
         )
 
     # ---- B2: filings and their text ------------------------------------ #
