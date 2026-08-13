@@ -501,6 +501,10 @@ const EDGES: Array<[string, string, "reports" | "audit"]> = [
   ["v1", "judge", "audit"],
   ["bridge", "evidence", "audit"],
   ["llm", "B5_extract", "audit"],
+  // The eval harness wraps the whole chain rather than sitting in it: it scores
+  // the forecast against the baseline on 487 recorded firm-quarters. Drawn as an
+  // audit leader for the same reason V1–V3 are — it has no estimate of its own.
+  ["eval", "forecast", "audit"],
   ["bridge", "B6_bridge", "audit"],
 ];
 

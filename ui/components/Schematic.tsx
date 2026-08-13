@@ -523,6 +523,10 @@ function buildNets(result: RunResult | null) {
     ["src_yfinance", "B1_numbers"],
     ["src_yfinance", "B1b_series"],
     ["src_exa", "B3_industry"],
+    // Exa feeds the two prose scans as well as the industry read: coverage for
+    // the perception score, transcripts for the cross-quarter call reading.
+    ["src_exa", "E6_perception"],
+    ["src_exa", "E7_calls"],
     ["src_lse", "B3_industry"],
     ["src_universe", "B3_industry"],
     ["src_fred", "B4_macro"],
@@ -543,6 +547,8 @@ function buildNets(result: RunResult | null) {
     "B1b_series",
     "B2_filings",
     "B5_extract",
+    "B6_bridge",
+    "E7_calls",
     "B3_industry",
     "B4_macro",
   ]) {
@@ -571,6 +577,32 @@ function buildNets(result: RunResult | null) {
   // than anything routed out to a lane. Drawn off-centre from the merge bus stub
   // so the two conductors on B5's outline do not appear to be one wire passing
   // through the part.
+  // The bridge reads the same EX-99 bodies B2 pulled down — five quarters of
+  // them, where the guidance extractor reads only the latest.
+  nets.push({
+    id: "B2_filings>B6_bridge",
+    d: `M${BY_ID.B2_filings.x + 76},${BY_ID.B2_filings.y + BY_ID.B2_filings.h} `
+      + `V${BY_ID.B6_bridge.y - 14} H${BY_ID.B6_bridge.x + 76} V${BY_ID.B6_bridge.y}`,
+    kind: "signal",
+    from: "B2_filings",
+    to: "B6_bridge",
+  });
+
+  // PERCEPTION IS A CONTROL LINE, NOT A SIGNAL, and it lands on the model
+  // rather than on the evidence store. That is the whole argument about where
+  // sentiment belongs: it is evidence about what is already BELIEVED, and what
+  // is already believed is already in the price. It moves the equity risk
+  // premium in the DCF and the width of the stress grid. It never touches a
+  // driver, and drawing it into the store would say that it does.
+  nets.push({
+    id: "E6_perception>D_model",
+    d: `M${right(BY_ID.E6_perception)},${cy(BY_ID.E6_perception)} `
+      + `H${BUS.structure} V${cy(BY_ID.D_model) + 26} H${X.model}`,
+    kind: "control",
+    from: "E6_perception",
+    to: "D_model",
+  });
+
   nets.push({
     id: "B2_filings>B5_extract",
     d: `M${BY_ID.B2_filings.x + 40},${BY_ID.B2_filings.y + BY_ID.B2_filings.h} V${BY_ID.B5_extract.y}`,
