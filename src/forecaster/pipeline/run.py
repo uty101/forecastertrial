@@ -36,7 +36,7 @@ from forecaster.data.loader import Loader
 from forecaster.eval import baseline as baseline_mod
 from forecaster.events import EventLog
 from forecaster.llm.client import LLMClient
-from forecaster.model import from_lenses, project
+from forecaster.model import bridge, from_lenses, project
 from forecaster.model import scenarios as scenario_mod
 from forecaster.pipeline import (
     b_acquire,
@@ -67,6 +67,11 @@ from forecaster.schemas import (
 )
 
 log = structlog.get_logger()
+
+# Five earnings releases: one more than `bridge.RECURRENCE_THRESHOLD`, so an item
+# CAN reach the recurring threshold without every quarter having to be perfect.
+# Each is a cheap-tier call over one exhibit, so the cost is small and bounded.
+BRIDGE_QUARTERS = 5
 
 
 @dataclass
@@ -155,11 +160,19 @@ def forecast(
     # perfectly and is not what the company said.
     # A dossier already carries its guidance, and re-extracting would spend a
     # model call to reproduce a result recorded on disk.
+    bridges: list = []
     if not replayed:
         with events.node("B5_extract"):
             guides, guide_claims, rejections = _extract_guidance(
                 client, config.ticker, acquired, events
             )
+            # The bridge reads the SAME documents and needs several quarters of
+            # them, because a one-off that has recurred four times is not one.
+            bridges, bridge_claims, bridge_notes = _extract_bridges(
+                client, config.ticker, acquired, events
+            )
+            guide_claims.extend(bridge_claims)
+            rejections.extend(bridge_notes)
 
     # ---- B: structure ------------------------------------------------- #
     with events.node("C_structure"):
@@ -169,6 +182,7 @@ def forecast(
             consensus=consensus,
             guidance=guides,
         )
+        store.bridge = _bridge_block(bridges)
         events.emit(EventType.CLAIM_ADDED, "C_structure", n=store.n_claims)
 
     # ---- D: model ----------------------------------------------------- #
@@ -659,6 +673,113 @@ def _extract_guidance(
         rejected=len(rejections),
     )
     return guides, guide_claims, rejections
+
+
+def _extract_bridges(
+    client: LLMClient,
+    ticker: str,
+    acquired: b_acquire.Acquired,
+    events: EventLog,
+) -> tuple[list, list, list[str]]:
+    """Read the non-GAAP reconciliation out of the last few earnings releases.
+
+    Several quarters rather than one, which is the difference between this and
+    the guidance extraction above. Guidance for a quarter already reported is
+    stale; a reconciling item from four quarters ago is the evidence that this
+    quarter's "unusual" item is neither unusual nor an item.
+
+    Only EX-99 exhibits, one per filing — the reconciliation lives in the press
+    release, and EX-99.2 (the CFO commentary) repeats it.
+    """
+    exhibits = [
+        claim
+        for claim in acquired.claims
+        if (claim.source.page_or_section or "").startswith("EX-99")
+        and claim.source.uri in acquired.documents
+    ]
+    exhibits.sort(
+        key=lambda c: (c.source.as_of, c.source.page_or_section or ""), reverse=True
+    )
+
+    seen_filings: set = set()
+    targets = []
+    for claim in exhibits:
+        if claim.source.as_of in seen_filings:
+            continue
+        seen_filings.add(claim.source.as_of)
+        targets.append(claim)
+        if len(targets) >= BRIDGE_QUARTERS:
+            break
+
+    bridges, claims, notes = [], [], []
+    for claim in targets:
+        built, item_claims, rejected = extract.extract_bridge(
+            client, ticker, acquired.documents[claim.source.uri],
+            claim.source.uri, claim.source.as_of,
+            source_kind=claim.source.kind,
+        )
+        notes.extend(rejected)
+        if built is None:
+            continue
+        bridges.append(built)
+        claims.extend(item_claims)
+
+    # Recurrence is only visible across the sequence, so it is counted once all
+    # of them are in hand rather than per release.
+    extract.count_recurrence(bridges)
+
+    log.info(
+        "bridges_extracted", ticker=ticker, releases=len(targets),
+        bridges=len(bridges), rejected=len(notes),
+    )
+    events.emit(
+        EventType.NODE_DONE, "B5_bridge",
+        releases=len(targets), bridges=len(bridges), rejected=len(notes),
+    )
+    return bridges, claims, notes
+
+
+def _bridge_block(bridges: list) -> str:
+    """The bridge, for the cached corpus. Leads with the number that matters.
+
+    That number is the non-GAAP PREMIUM and how much of it recurs. Every lens
+    needs to know which basis it is speaking in, and Forensics needs to know
+    that a third of the "adjustments" have been adjusted every quarter for two
+    years.
+    """
+    if not bridges:
+        return (
+            "GAAP / NON-GAAP: no reconciliation was extracted. Consensus is "
+            "quoted non-GAAP and the filings are GAAP, so any EPS figure below "
+            "must state its own basis — there is no bridge to convert with, and "
+            "a default ratio is not offered because the gap is company-specific "
+            "(the DJIA median was 31% in one recent quarter)."
+        )
+
+    latest = bridges[0]
+    lines = [
+        "GAAP -> NON-GAAP BRIDGE — consensus is non-GAAP, the filings are GAAP.",
+        "",
+        f"  Latest quarter: GAAP {latest.eps_gaap:.2f} "
+        f"{latest.total_adjustment:+.2f} = {latest.eps_non_gaap:.2f} per share "
+        f"({latest.gap_pct:+.1%} premium)",
+    ]
+    if latest.recurring_adjustment:
+        share = latest.recurring_adjustment / latest.total_adjustment
+        lines.append(
+            f"  Of that adjustment, {latest.recurring_adjustment:+.2f} "
+            f"({share:.0%}) comes from items excluded in at least "
+            f"{bridge.RECURRENCE_THRESHOLD} of the quarters read — these are not "
+            "unusual items, they are a permanent cost moved below the line."
+        )
+    lines.append("")
+    for item in sorted(latest.items, key=lambda i: -abs(i.per_share)):
+        mark = "  [RECURRING]" if item.is_recurring else ""
+        lines.append(f"    {item.per_share:+.3f}  {item.label}{mark}")
+    if len(bridges) > 1:
+        history = ", ".join(f"{b.gap_pct:+.0%}" for b in bridges)
+        lines += ["", f"  Premium across the quarters read (newest first): {history}"]
+    return "\n".join(lines)
 
 
 def _swing_factors(model, acquired) -> swing.SwingFactors:

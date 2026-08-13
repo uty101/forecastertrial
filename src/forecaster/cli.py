@@ -124,6 +124,7 @@ def sources(ticker: str = "NVDA") -> None:
 
 AGENT_LAYERS = {
     "extract_guidance": "B  acquire",
+    "extract_bridge": "B  acquire",
     "lens_guidance": "E  analyse",
     "lens_drivers": "E  analyse",
     "lens_margins": "E  analyse",

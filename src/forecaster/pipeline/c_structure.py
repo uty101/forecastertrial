@@ -80,6 +80,10 @@ class EvidenceStore:
     exposure: str = ""
     # What changed across eight earnings calls, and what the coverage believes.
     # Both in the cached prefix for the usual reason: identical for every lens.
+    # GAAP vs non-GAAP is the error that looks like a bad model rather
+    # than a bug, so the bridge rides in the cached prefix where every
+    # lens sees it before it quotes an EPS figure.
+    bridge: str = ""
     calls: str = ""
     perception: str = ""
 
@@ -115,6 +119,8 @@ class EvidenceStore:
         halve the cache hit rate.
         """
         lines: list[str] = []
+        if self.bridge:
+            lines += [self.bridge, "", "-" * 70, ""]
         if self.calls:
             lines += [self.calls, "", "-" * 70, ""]
         if self.perception:

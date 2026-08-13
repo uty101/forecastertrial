@@ -21,6 +21,7 @@ import structlog
 from pydantic import BaseModel, Field
 
 from forecaster.llm.client import LLMClient, LLMError
+from forecaster.model.bridge import Bridge, BridgeItem
 from forecaster.pipeline.v1_reconcile import verify_citation
 from forecaster.schemas import Basis, Claim, Guidance, Source, SourceKind
 
@@ -167,6 +168,167 @@ def extract_guidance(
         uri=source_uri,
     )
     return guides, claims, rejections
+
+
+class ExtractedItem(BaseModel):
+    label: str = Field(description="The company's own words for the line.")
+    per_share: float = Field(
+        description="Signed so GAAP + all items = non-GAAP. An excluded cost is "
+        "positive; an excluded gain is negative."
+    )
+    quote: str = Field(min_length=1, description="The verbatim line or sentence.")
+
+
+class ExtractedBridge(BaseModel):
+    found: bool = Field(description="False when the release reports GAAP only.")
+    period: str = ""
+    eps_gaap: float | None = None
+    eps_non_gaap: float | None = None
+    items: list[ExtractedItem] = Field(default_factory=list)
+    units_note: str = Field(
+        default="",
+        description="Set only when the per-share column was unavailable and the "
+        "figures are absolute.",
+    )
+
+
+def extract_bridge(
+    client: LLMClient,
+    ticker: str,
+    document: str,
+    source_uri: str,
+    filed_date,
+    source_kind: SourceKind = SourceKind.FILING_8K,
+) -> tuple[Bridge | None, list[Claim], list[str]]:
+    """The GAAP↔non-GAAP reconciliation out of one earnings release.
+
+    Returns (bridge, claims, rejections). The bridge is `None` when the release
+    reports GAAP only — which is common and correct, not a failure.
+
+    **Every item is dropped unless its quote is in the document, and the bridge
+    is checked against the company's own reported non-GAAP figure before it is
+    returned.** Both matter more here than anywhere else in the system: a bridge
+    that is missing one line is a systematic error in a single direction, which
+    is the kind that looks like a bad model rather than a bug. `Bridge.verify`
+    is what turns that from an assumption into a number, so a bridge that does
+    not tie comes back with the failure recorded rather than silently used.
+
+    The absolute-dollar case is refused outright. Dividing a $1.2bn add-back by
+    a share count we inferred is exactly the units error that stays internally
+    consistent while being wrong by six orders of magnitude.
+    """
+    if not document.strip():
+        return None, [], ["empty document"]
+
+    try:
+        result, _ = client.call(
+            "extract_bridge",
+            schema=ExtractedBridge,
+            variables={
+                "ticker": ticker,
+                "source_uri": source_uri,
+                "filed_date": str(filed_date),
+                "document": document[:MAX_DOC_CHARS],
+            },
+            max_tokens=4000,
+        )
+    except LLMError as exc:
+        log.warning("bridge_extraction_failed", uri=source_uri, error=str(exc))
+        return None, [], [f"bridge extraction failed: {exc}"]
+
+    if not result.found or result.eps_gaap is None:
+        return None, [], []
+
+    if result.units_note:
+        return None, [], [
+            f"{source_uri}: reconciliation given in absolute dollars only "
+            f"({result.units_note}) — refusing to divide by an inferred share "
+            "count, which is the units error that stays self-consistent"
+        ]
+
+    source = Source(kind=source_kind, uri=source_uri, as_of=filed_date)
+    period = result.period or "unlabelled"
+    items: list[BridgeItem] = []
+    claims: list[Claim] = []
+    rejections: list[str] = []
+
+    for i, extracted in enumerate(result.items):
+        claim = Claim(
+            id=f"bridge:{ticker}:{period}:{i}",
+            label=f"{extracted.label} ({period})",
+            value=extracted.per_share,
+            unit="USD/share",
+            period=period,
+            source=source,
+            verbatim_quote=extracted.quote,
+        )
+        if not verify_citation(claim, document):
+            rejections.append(
+                f"{extracted.label}: quote not found in source — "
+                f"{extracted.quote[:80]!r}"
+            )
+            continue
+        claims.append(claim)
+        items.append(
+            BridgeItem(label=extracted.label, per_share=extracted.per_share,
+                       claim=claim)
+        )
+
+    built = Bridge(eps_gaap=result.eps_gaap, items=items)
+
+    # The check that makes the rest of it usable. A bridge is only worth having
+    # if it reproduces the figure the company itself printed.
+    if result.eps_non_gaap is not None:
+        ties, message = built.verify(result.eps_non_gaap)
+        if not ties:
+            rejections.append(message)
+            log.warning("bridge_does_not_tie", ticker=ticker, period=period,
+                        uri=source_uri)
+
+    log.info(
+        "bridge_extracted", ticker=ticker, period=period, items=len(items),
+        rejected=len(rejections), gap_pct=round(built.gap_pct, 3),
+    )
+    return built, claims, rejections
+
+
+def count_recurrence(bridges: list[Bridge]) -> None:
+    """Mark items that keep coming back, across a sequence of quarters.
+
+    In place, oldest-to-newest irrelevant — recurrence is a count, not an order.
+
+    This is the half of the bridge that is analysis rather than bookkeeping. Four
+    consecutive quarters of the same "one-off" is not an unusual item; it is a
+    permanent cost the company has moved below its own line, and a company whose
+    non-GAAP premium is mostly recurring has quietly lowered the bar it is
+    measured against. `Bridge.recurring_adjustment` is what Forensics reads.
+
+    Matched on a normalised label because the wording drifts — "Stock-based
+    compensation expense" one quarter, "Stock-based compensation" the next.
+    """
+    counts: dict[str, int] = {}
+    for bridge in bridges:
+        for item in bridge.items:
+            counts[_normalise(item.label)] = counts.get(_normalise(item.label), 0) + 1
+
+    for bridge in bridges:
+        bridge.items = [
+            BridgeItem(
+                label=item.label, per_share=item.per_share, claim=item.claim,
+                note=item.note, quarters_recurring=counts[_normalise(item.label)],
+            )
+            for item in bridge.items
+        ]
+
+
+def _normalise(label: str) -> str:
+    """'Stock-based compensation expense' and 'Stock-Based Compensation' are one
+    line. Trailing nouns that add nothing are dropped so they match."""
+    words = [w for w in label.lower().replace("-", " ").split() if w.isalpha()]
+    drop = {"expense", "expenses", "charges", "charge", "costs", "cost", "net",
+            "of", "and", "the", "related", "items", "item"}
+    kept = [w for w in words if w not in drop]
+    return " ".join(kept or words)
 
 
 SCALES = (("trillion", 1e12), ("billion", 1e9), ("million", 1e6), ("thousand", 1e3))

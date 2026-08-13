@@ -144,6 +144,7 @@ TEST_MAP = {
     "tests/test_scenarios_monitor.py": ["scenarios", "monitor"],
     "tests/test_context.py": ["industry", "exposure", "perception"],
     "tests/test_scan.py": ["scan"],
+    "tests/test_bridge_extract.py": ["bridge"],
     "tests/test_transcripts.py": ["transcripts"],
     "tests/test_sec_acquisition.py": ["sec", "acquire"],
     "tests/test_universe.py": ["universe"],
