@@ -20,6 +20,7 @@ import typer
 
 from forecaster.config import settings
 from forecaster.data.cache import Cache
+from forecaster.data.global_source import GlobalSource
 from forecaster.data.loader import Loader
 from forecaster.data.sec_source import SECSource
 from forecaster.data.universe import UNIVERSE, profile
@@ -67,6 +68,12 @@ def build_loader(read_only: bool = False) -> Loader:
         )
     else:
         log.info("news_disabled", why="EXA_API_KEY unset — no industry or company news")
+    # LAST, deliberately. The loader takes the first non-None answer, so every
+    # US filer is served by EDGAR — which is point-in-time and as-filed, both of
+    # which this is not. It only ever answers for a company EDGAR has never
+    # heard of, which is most of the world's listed companies and was previously
+    # a hard stop rather than a degraded run.
+    sources.append(GlobalSource())
     return Loader(sources)
 
 
