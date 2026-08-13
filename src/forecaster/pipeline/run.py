@@ -207,7 +207,7 @@ def forecast(
     perception_read = None
     calls_read, call_notes = None, []
     if acquired.documents or acquired.transcripts:
-        with events.node("E_scan"):
+        with events.node("E6_perception"):
             # Coverage only: the filings are the evidence base and the
             # transcripts are read separately by `read_calls`, so both are
             # excluded here — a 60k-character transcript truncated to 2,400
@@ -230,12 +230,18 @@ def forecast(
                 client, config.ticker, articles[:14],
                 acquired.documents, config.run_index,
             )
+            events.emit(
+                EventType.NODE_DONE, "E6_perception",
+                scored=len(perception_read.reads),
+                dropped=len(perception_read.skipped),
+            )
+        with events.node("E7_calls"):
             calls_read, call_notes = scan.read_calls(
                 client, config.ticker, acquired.transcripts, config.run_index
             )
             events.emit(
-                EventType.NODE_DONE, "E_scan",
-                scored=len(perception_read.reads) if perception_read else 0,
+                EventType.NODE_DONE, "E7_calls",
+                quarters=len(acquired.transcripts),
                 changes=len(calls_read.changes) if calls_read else 0,
             )
 
@@ -733,7 +739,7 @@ def _extract_bridges(
         bridges=len(bridges), rejected=len(notes),
     )
     events.emit(
-        EventType.NODE_DONE, "B5_bridge",
+        EventType.NODE_DONE, "B6_bridge",
         releases=len(targets), bridges=len(bridges), rejected=len(notes),
     )
     return bridges, claims, notes

@@ -60,6 +60,7 @@ ui: serve
 test:
 	uv run pytest -q
 	uv run ruff check .
+	node ui/scripts/check-layout.mjs
 
 lint:
 	uv run ruff check --fix . && uv run ruff format .

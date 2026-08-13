@@ -7,9 +7,10 @@ import type { NodeStatus } from "@/lib/data";
  *
  * An org chart implies hierarchy, so the hierarchy has to be the real one. It is:
  * the forecast is the deliverable, λ decides how far from consensus to sit, the
- * judge hands λ a distribution, seven champions each hand the judge one attacked
+ * judge hands λ a distribution, nine champions each hand the judge one attacked
  * case, each champion pairs with exactly one lens, every lens draws on the same
- * evidence store, and four acquirers feed it from four data sources.
+ * evidence store, four extractors turn acquired prose into cited claims, and five
+ * acquirers feed the dossier from seven data sources.
  *
  * The three verification layers sit BESIDE the chain rather than in it, drawn
  * with dashed leaders, because that is what they are: an independent function
@@ -17,7 +18,7 @@ import type { NodeStatus } from "@/lib/data";
  * interval. None of them contributes an estimate.
  *
  * One structural fact the layout is built to make obvious: the lens row has no
- * horizontal links. Seven siblings, no peer edges. In an org chart that reads as
+ * horizontal links. Nine siblings, no peer edges. In an org chart that reads as
  * "these roles do not coordinate", which is exactly right — they are blind to
  * each other by design.
  *
@@ -26,7 +27,8 @@ import type { NodeStatus } from "@/lib/data";
  *
  * And running underneath all three overlays, always on: WHICH OF THESE ARE
  * AGENTS. Drawn as identical boxes the chart implied that everything here
- * reasons with a model, which flatters it and is false. Ten of these are agents;
+ * reasons with a model, which flatters it and is false. Fifteen of these are
+ * agents;
  * the rest is deterministic code and data plumbing. That split is the load-
  * bearing claim of the architecture — every stage that can hallucinate is
  * checked by one that cannot — so it is encoded in the boxes themselves rather
@@ -63,10 +65,14 @@ export interface OrgNode {
   unwired?: boolean;
 }
 
-const W = 1520;
-// Raised from 900 when acquisition grew from four boxes to six plus the
-// dossier: the sources row had been sitting on the frame's edge.
-const H = 1000;
+// Widened from 1520 when the lens row went from seven columns to nine. The
+// alternative was shrinking the boxes until the sub-labels truncated, and a
+// diagram whose captions are cut off is one nobody reads at a projector.
+const W = 1760;
+// Raised from 1000 when extraction became its own rank. It used to hide inside
+// the acquirer row as a single box called B5, which made four cheap-tier model
+// calls look like one step of retrieval.
+const H = 1040;
 const MID = W / 2;
 
 // The two widest rows, spread evenly about the midline. Computed rather than
@@ -80,23 +86,36 @@ const MID = W / 2;
 const rowX = (n: number, w: number, gap: number, i: number) =>
   MID - (n * w + (n - 1) * gap) / 2 + i * (w + gap);
 
+// Five retrieval boxes. It was six until extraction moved out into its own rank
+// below — B5 was never an acquirer, it was a model call that happened to run in
+// the same stage.
 const ACQUIRE_W = 206;
-const ACQUIRE_X = (i: number) => rowX(6, ACQUIRE_W, 14, i);
+const ACQUIRE_X = (i: number) => rowX(5, ACQUIRE_W, 14, i);
 const SOURCE_W = 178;
 const SOURCE_X = (i: number) => rowX(7, SOURCE_W, 12, i);
+// The four cheap-tier extractors: prose in, cited claims out.
+const EXTRACT_W = 214;
+const EXTRACT_X = (i: number) => rowX(4, EXTRACT_W, 16, i);
 
+// Nine, not seven. Market and Demand were added because two of the questions
+// that move a forecast were being asked by nobody: is this growth the market's
+// or the company's, and what have its customers said about their own budgets.
+// Ordered so the chain reads left to right — arithmetic, what the company said,
+// what it sells, who buys it, how big the market is, then the cost side.
 const LENS_NAMES = [
   ["mechanical", "Mechanical", "FX · shares · interest", "none"],
   ["guidance", "Guidance", "guide + landing CDF", "mid"],
   ["drivers", "Drivers", "units × ASP", "mid"],
+  ["demand", "Demand", "customers · suppliers", "mid"],
+  ["market", "Market", "market growth vs share", "mid"],
   ["margins", "Margins", "GM mix · opex · tax", "mid"],
   ["forensics", "Forensics", "accruals · exclusions", "mid"],
   ["peer_read", "Peer read", "who already reported", "mid"],
   ["macro", "Macro", "series vs assumed", "mid"],
 ] as const;
 
-const LENS_W = 176;
-const LENS_GAP = 16;
+const LENS_W = 162;
+const LENS_GAP = 12;
 const LENS_ROW_W = LENS_NAMES.length * LENS_W + (LENS_NAMES.length - 1) * LENS_GAP;
 const LENS_X0 = MID - LENS_ROW_W / 2;
 
@@ -215,23 +234,45 @@ export const NODES: OrgNode[] = [
   // model call in this stage, and it is on the cheap tier — reading a guide out
   // of a press release the company wrote is not a judgement call.
   ...[
-    ["B1_numbers", "B1 Numbers", "XBRL · consensus", "acquire", "none"],
-    ["B1b_series", "B1b Series", "74 quarters · daily bars", "acquire", "none"],
-    ["B2_filings", "B2 Filings", "8-K item 2.02 · EX-99 text", "acquire", "none"],
-    ["B3_industry", "B3 Industry", "peers by SIC · news", "acquire", "none"],
-    ["B4_macro", "B4 Macro", "FRED, point-in-time", "acquire", "none"],
-    ["B5_extract", "B5 Extract", "guidance → cited claims", "extract_guidance", "cheap"],
-  ].map(([liveId, label, sub, component, tier], i) => ({
+    ["B1_numbers", "B1 Numbers", "XBRL · consensus"],
+    ["B1b_series", "B1b Series", "74 quarters · daily bars"],
+    ["B2_filings", "B2 Filings", "8-K item 2.02 · EX-99 text"],
+    ["B3_industry", "B3 Industry", "peers by SIC · news"],
+    ["B4_macro", "B4 Macro", "FRED, point-in-time"],
+  ].map(([liveId, label, sub], i) => ({
+    id: liveId,
+    label,
+    sub,
+    component: "acquire",
+    liveId,
+    kind: "data" as const,
+    tier: "none" as const,
+    x: ACQUIRE_X(i),
+    y: 856,
+    w: ACQUIRE_W,
+    h: 52,
+  })),
+  // EXTRACTION — its own rank, because it is four cheap-tier model calls and
+  // not a retrieval step. Every box here turns prose into claims with verified
+  // quotes, and every one of them can be wrong in the specific way a model is
+  // wrong: a fluent sentence that was never written. Which is why each verifies
+  // its own quote against the source before the claim exists at all.
+  ...[
+    ["B5_extract", "B5 Guidance", "guided range → cited claim", "extract_guidance"],
+    ["B6_bridge", "B6 Bridge", "GAAP → non-GAAP, 5 quarters", "extract_bridge"],
+    ["E6_perception", "E6 Perception", "coverage → stance + spread", "scan_perception"],
+    ["E7_calls", "E7 Calls", "8 calls → what CHANGED", "scan_calls"],
+  ].map(([liveId, label, sub, component], i) => ({
     id: liveId,
     label,
     sub,
     component,
     liveId,
-    kind: (tier === "none" ? "data" : "agent") as "data" | "agent",
-    tier: tier as "none" | "cheap",
-    x: ACQUIRE_X(i),
-    y: 708,
-    w: ACQUIRE_W,
+    kind: "agent" as const,
+    tier: "cheap" as const,
+    x: EXTRACT_X(i),
+    y: 700,
+    w: EXTRACT_W,
     h: 52,
   })),
   // The dossier. Acquisition's output is an artifact on disk, which is what
@@ -245,7 +286,7 @@ export const NODES: OrgNode[] = [
     kind: "data",
     tier: "none",
     x: MID - 200,
-    y: 778,
+    y: 780,
     w: 400,
     h: 46,
   },
@@ -275,7 +316,7 @@ export const NODES: OrgNode[] = [
     kind: "data" as const,
     tier: "none" as const,
     x: SOURCE_X(i),
-    y: 858,
+    y: 940,
     w: SOURCE_W,
     h: 50,
   })),
@@ -291,9 +332,9 @@ export const NODES: OrgNode[] = [
     audit: true,
     kind: "code",
     tier: "none",
-    x: MID + 200,
+    x: MID + 300,
     y: 156,
-    w: 172,
+    w: 200,
     h: 58,
   },
   {
@@ -307,9 +348,9 @@ export const NODES: OrgNode[] = [
     // quarter comparable to the company's own history — needs reading prose.
     kind: "agent",
     tier: "cheap",
-    x: MID + 200,
+    x: MID + 300,
     y: 252,
-    w: 172,
+    w: 200,
     h: 58,
   },
   {
@@ -321,10 +362,10 @@ export const NODES: OrgNode[] = [
     audit: true,
     kind: "code",
     tier: "none",
-    x: MID - 396,
-    y: 446,
-    w: 172,
-    h: 56,
+    x: 103,
+    y: 526,
+    w: 200,
+    h: 58,
   },
   // Supporting functions.
   //
@@ -339,9 +380,9 @@ export const NODES: OrgNode[] = [
     component: "bridge",
     kind: "code",
     tier: "none",
-    x: MID - 396,
-    y: 556,
-    w: 172,
+    x: W - 303,
+    y: 526,
+    w: 200,
     h: 58,
   },
   {
@@ -353,9 +394,9 @@ export const NODES: OrgNode[] = [
     // It calls the models; it is not one. Schema forcing, retries, cost ceiling.
     kind: "code",
     tier: "none",
-    x: MID + 425,
-    y: 356,
-    w: 176,
+    x: MID - 500,
+    y: 252,
+    w: 200,
     h: 50,
   },
   // The guidance extractor used to stand off to one side marked `unwired` —
@@ -369,9 +410,9 @@ export const NODES: OrgNode[] = [
     role: "wraps everything",
     kind: "code",
     tier: "none",
-    x: MID - 616,
-    y: 356,
-    w: 176,
+    x: MID - 500,
+    y: 156,
+    w: 200,
     h: 50,
   },
 ];
@@ -425,7 +466,22 @@ const EDGES: Array<[string, string, "reports" | "audit"]> = [
   ["B2_filings", "dossier", "reports"],
   ["B3_industry", "dossier", "reports"],
   ["B4_macro", "dossier", "reports"],
-  ["B5_extract", "dossier", "reports"],
+  // The extractors read the dossier and write claims into the evidence store.
+  // They used to be drawn as acquirers writing into the dossier, which put four
+  // model calls inside a rank labelled "retrieval" and hid the one place in
+  // stage B where a fluent sentence can be invented.
+  ["dossier", "B5_extract", "reports"],
+  ["dossier", "B6_bridge", "reports"],
+  ["dossier", "E6_perception", "reports"],
+  ["dossier", "E7_calls", "reports"],
+  ["B5_extract", "evidence", "reports"],
+  ["B6_bridge", "evidence", "reports"],
+  ["E7_calls", "evidence", "reports"],
+  // Perception is the one extraction that does NOT reach the evidence store as
+  // a driver input. It goes to the valuation: the equity risk premium and the
+  // width of the stress grid. Sentiment is evidence about what is already
+  // believed, and what is already believed is already in the price.
+  ["E6_perception", "model", "audit"],
   ["dossier", "evidence", "reports"],
   ["evidence", "model", "reports"],
   ["src_sec", "B1_numbers", "reports"],
@@ -445,6 +501,7 @@ const EDGES: Array<[string, string, "reports" | "audit"]> = [
   ["v1", "judge", "audit"],
   ["bridge", "evidence", "audit"],
   ["llm", "B5_extract", "audit"],
+  ["bridge", "B6_bridge", "audit"],
 ];
 
 /* The state palettes are exported because the schematic view paints from the same
@@ -635,9 +692,10 @@ export default function OrgChart({
           ["E  ANALYSE", 474],
           ["D  MODEL", 555],
           ["C  STRUCTURE", 637],
-          ["B  ACQUIRE", 734],
-          ["   DOSSIER", 801],
-          ["A  SOURCES", 883],
+          ["B5 EXTRACT", 726],
+          ["   DOSSIER", 803],
+          ["B  ACQUIRE", 882],
+          ["A  SOURCES", 965],
         ].map(([label, y]) => (
           <text
             key={label as string}

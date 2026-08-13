@@ -28,10 +28,15 @@ export default function LensConstellation({
   lenses: LensOutput[];
   dropped: Record<string, string>;
 }) {
+  // Nine. Ordered so the ring reads as the chain rather than alphabetically:
+  // arithmetic, what the company said, what it sells, who buys it, how big the
+  // market is, then the cost side.
   const ALL = [
     "mechanical",
     "guidance",
     "drivers",
+    "demand",
+    "market",
     "margins",
     "forensics",
     "peer_read",

@@ -63,14 +63,34 @@ interface Part extends OrgNode {
 }
 
 const W = 1910;
-const H = 992;
+// Raised from 992 when the lens rank went from seven parts to nine. Everything
+// on the sheet is anchored to SPINE, which is derived from the rank, so the
+// whole drawing recentres rather than needing to be re-routed by hand.
+const H = 1128;
+
+/* Nine, not seven. Market and Demand were added because two of the questions
+   that move a forecast were being asked by nobody: is this growth the
+   market's or the company's, and what have its customers said about their own
+   budgets. Declared before the rank constants because the rank is derived
+   from its length. */
+export const LENSES = [
+  ["mechanical", "Mechanical", "FX · shares · interest", "none"],
+  ["guidance", "Guidance", "guide + landing CDF", "mid"],
+  ["drivers", "Drivers", "units × ASP", "mid"],
+  ["demand", "Demand", "customers · suppliers", "mid"],
+  ["market", "Market", "market growth vs share", "mid"],
+  ["margins", "Margins", "GM mix · opex · tax", "mid"],
+  ["forensics", "Forensics", "accruals · exclusions", "mid"],
+  ["peer_read", "Peer read", "who already reported", "mid"],
+  ["macro", "Macro", "series vs assumed", "mid"],
+] as const;
 
 /* The lens rank is the spine of the drawing; everything else centres on it. */
 const LY0 = 226;
 const LH = 52;
 const LPITCH = 68;
 const lensY = (i: number) => LY0 + i * LPITCH;
-const LENS_BOTTOM = lensY(6) + LH;
+const LENS_BOTTOM = lensY(LENSES.length - 1) + LH;
 const SPINE = (LY0 + LENS_BOTTOM) / 2;
 
 /* Column origins. Buses run in the gutters between them.
@@ -108,7 +128,7 @@ const BUS = {
   structure: 576, // the store hands the model its claims
   model: 782, // the model fans out to the lenses
   v1: 1112, // reconciled outputs collect into the champion
-  rail: 852, // the consensus bus, along the bottom of the sheet
+  rail: 952, // the consensus bus, along the bottom of the sheet
   lamIn: 1492, // where the rail turns up into λ's second input
   eJog: 1518, // where the judge's output steps into λ's first input
   v2Lane: 560, // V2's control line runs along here, clear of V3
@@ -116,17 +136,7 @@ const BUS = {
   v3Ctl: 1772, // V3's control line turns up into the output
 } as const;
 
-export const LENSES = [
-  ["mechanical", "Mechanical", "FX · shares · interest", "none"],
-  ["guidance", "Guidance", "guide + landing CDF", "mid"],
-  ["drivers", "Drivers", "units × ASP", "mid"],
-  ["margins", "Margins", "GM mix · opex · tax", "mid"],
-  ["forensics", "Forensics", "accruals · exclusions", "mid"],
-  ["peer_read", "Peer read", "who already reported", "mid"],
-  ["macro", "Macro", "series vs assumed", "mid"],
-] as const;
-
-export const PARTS: Part[] = [
+const RAW_PARTS: Part[] = [
   // ---- sources: terminals, not components -------------------------------- //
   ...(
     [
@@ -190,6 +200,17 @@ export const PARTS: Part[] = [
        "extract_guidance", "cheap"],
       ["B3_industry", "B3 Industry", "peers by SIC · news", 522, "acquire", "none"],
       ["B4_macro", "B4 Macro", "realtime_start pinned", 590, "acquire", "none"],
+      // Three more model calls over the same acquired prose. They are in this
+      // column rather than a rank of their own because on a schematic a column
+      // is a stage, and these run inside acquisition — but the tier overlay
+      // paints them as agents, which is the distinction that matters: five of
+      // these nine packages cannot be wrong in an interesting way, and four can.
+      ["B6_bridge", "B6 Bridge", "GAAP → non-GAAP, ×5", 658,
+       "extract_bridge", "cheap"],
+      ["E7_calls", "E7 Calls", "8 calls → what CHANGED", 726,
+       "scan_calls", "cheap"],
+      ["E6_perception", "E6 Perception", "coverage → stance + spread", 794,
+       "scan_perception", "cheap"],
     ] as const
   ).map(([id, label, sub, y, component, tier], i) => ({
     id,
@@ -406,6 +427,22 @@ export const PARTS: Part[] = [
     h: 76,
   },
 ];
+
+/**
+ * Designators, numbered in sheet order rather than typed by hand.
+ *
+ * They were hand-numbered, and adding two lenses put U16 on both the reconciler
+ * and a lens. On a real schematic a duplicate designator is a build error; here
+ * it silently mislabels two parts on the one drawing whose whole claim is that
+ * it is precise. A running counter cannot collide.
+ *
+ * Terminals keep their J numbers and the output keeps OUT — those are a
+ * different series, as on a real sheet.
+ */
+let designator = 0;
+export const PARTS: Part[] = RAW_PARTS.map((part) =>
+  part.ref.startsWith("U") ? { ...part, ref: `U${++designator}` } : part,
+);
 
 const BY_ID: Record<string, Part> = Object.fromEntries(
   PARTS.map((p) => [p.id, p]),
