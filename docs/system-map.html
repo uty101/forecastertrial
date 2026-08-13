@@ -1,0 +1,877 @@
+<title>forecaster — system map</title>
+
+<style>
+  .gate-callout{margin-top:34px;padding:22px 26px;border:1px solid var(--rule);
+    border-left:3px solid var(--code);background:#0e151d;border-radius:2px}
+  .gate-label{font:600 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;
+    color:var(--code);margin-bottom:12px}
+  .gate-callout p{margin:0 0 10px;max-width:70ch}
+  .gate-callout p.still{margin:0;color:var(--ink-2);font-size:14px}
+  .gate-callout b.hit{color:var(--code)}
+  .formula-inline{font-family:var(--mono);font-size:.92em}
+  table.mini{width:100%;border-collapse:collapse;font-size:13.5px}
+  table.mini td{padding:9px 0;border-top:1px solid var(--rule);vertical-align:top;
+    line-height:1.55}
+  table.mini td:first-child{width:210px;padding-right:20px;color:var(--ink)}
+
+  :root {
+    color-scheme: dark;
+    --paper: #080b10;
+    --paper-2: #0d1219;
+    --sheet: #0a0e15;
+    --ink: #d3dcea;
+    --ink-2: #8592a6;
+    --ink-3: #4d5a6e;
+    --rule: #1e2733;
+    --rule-2: #161d27;
+    --grid: #111a26;
+
+    --data: #38bdf8;        /* sources, fetched */
+    --code: #35d39a;        /* deterministic — cannot hallucinate */
+    --agent: #a77bff;       /* model call */
+    --deep: #ff5c7a;        /* expensive tier */
+    --gold: #d9a441;        /* consensus */
+    --warn: #ff6b7d;
+
+    --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, -apple-system, "Segoe UI", Inter, system-ui, sans-serif;
+    --cond: "Haettenschweiler", "Arial Narrow", "Roboto Condensed",
+            "Liberation Sans Narrow", ui-sans-serif, system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background:
+      linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 100% 28px,
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 28px 100%,
+      var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 20px 100px; }
+
+  .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+  .mono { font-family: var(--mono); }
+  .scroll-x { overflow-x: auto; }
+
+  .label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+
+  /* ---------- title block ---------- */
+
+  header {
+    border-bottom: 1px solid var(--rule);
+    padding: 44px 0 26px;
+    margin-bottom: 34px;
+  }
+  .eyebrow {
+    display: flex; gap: 14px; flex-wrap: wrap; align-items: baseline;
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--ink-3);
+  }
+  h1 {
+    font-family: var(--cond);
+    font-size: clamp(46px, 9vw, 96px);
+    line-height: .9;
+    letter-spacing: -.01em;
+    text-transform: uppercase;
+    margin: 14px 0 10px;
+    color: var(--ink);
+  }
+  .thesis {
+    max-width: 68ch; color: var(--ink-2); font-size: 15px;
+    border-left: 2px solid var(--agent); padding-left: 16px; margin: 22px 0 0;
+  }
+  .thesis strong { color: var(--ink); font-weight: 600; }
+  .formula {
+    font-family: var(--mono); font-size: 15px; color: var(--gold);
+    margin-top: 14px; display: block;
+  }
+
+  /* ---------- stat strip ---------- */
+
+  .stats {
+    display: grid; gap: 1px; background: var(--rule);
+    border: 1px solid var(--rule);
+    grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+    margin: 30px 0 0;
+  }
+  .stat { background: var(--paper-2); padding: 13px 15px; }
+  .stat .v {
+    font-family: var(--cond); font-size: 34px; line-height: 1;
+    letter-spacing: -.01em;
+  }
+  .stat .k { margin-top: 5px; }
+
+  /* ---------- section ---------- */
+
+  section { margin-top: 54px; scroll-margin-top: 20px; }
+  h2 {
+    font-family: var(--cond); text-transform: uppercase;
+    font-size: 30px; letter-spacing: .01em; margin: 0 0 6px;
+    display: flex; align-items: baseline; gap: 12px;
+  }
+  h2 .n { font-family: var(--mono); font-size: 12px; color: var(--ink-3); }
+  .lede { color: var(--ink-2); max-width: 76ch; margin: 0 0 22px; }
+
+  /* ---------- pipeline ---------- */
+
+  .stage {
+    display: grid;
+    grid-template-columns: 148px minmax(0, 1fr);
+    gap: 18px;
+    border-top: 1px solid var(--rule);
+    padding: 16px 0;
+  }
+  .stage:last-child { border-bottom: 1px solid var(--rule); }
+  .stage-id { position: relative; }
+  .stage-id .letter {
+    font-family: var(--cond); font-size: 40px; line-height: .85;
+    color: var(--ink);
+  }
+  .stage-id .name {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--ink-3); margin-top: 3px;
+  }
+  .stage-id .kind {
+    font-family: var(--mono); font-size: 9.5px; margin-top: 8px;
+    color: var(--ink-3);
+  }
+  .stage.verify .stage-id .letter { font-size: 26px; color: var(--code); }
+
+  .nodes { display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start; }
+  .node {
+    border: 1px solid var(--rule);
+    background: var(--paper-2);
+    padding: 8px 11px;
+    min-width: 176px;
+    flex: 1 1 176px;
+    border-left-width: 2px;
+  }
+  .node .t { font-size: 12.5px; font-weight: 600; }
+  .node .s { font-size: 11px; color: var(--ink-2); margin-top: 2px; }
+  .node .m {
+    font-family: var(--mono); font-size: 9.5px; color: var(--ink-3);
+    margin-top: 5px; letter-spacing: .04em;
+  }
+  .node.data  { border-left-color: var(--data); }
+  .node.code  { border-left-color: var(--code); }
+  .node.agent { border-left-color: var(--agent); }
+  .node.deep  { border-left-color: var(--deep); }
+  .node.gap   { border-left-color: var(--warn); border-style: dashed; opacity: .78; }
+
+  .stage-note {
+    grid-column: 2; font-size: 12px; color: var(--ink-2);
+    border-left: 2px solid var(--rule); padding-left: 12px; margin-top: 10px;
+    max-width: 82ch;
+  }
+  .stage-note b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- legend ---------- */
+
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 18px; margin: 0 0 24px;
+    font-family: var(--mono); font-size: 10.5px; color: var(--ink-2);
+  }
+  .legend i { display: inline-block; width: 22px; height: 2px; margin-right: 7px;
+    vertical-align: middle; }
+
+  /* ---------- tables ---------- */
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th {
+    text-align: left; font-family: var(--mono); font-size: 9.5px;
+    letter-spacing: .13em; text-transform: uppercase; color: var(--ink-3);
+    font-weight: 400; padding: 7px 10px 7px 0; border-bottom: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+  td { padding: 6px 10px 6px 0; border-bottom: 1px solid var(--rule-2); vertical-align: top; }
+  td.r, th.r { text-align: right; }
+  tbody tr:last-child td { border-bottom: 0; }
+  .dim { color: var(--ink-3); }
+  .pos { color: var(--code); }
+  .neg { color: var(--warn); }
+  .hi  { color: var(--data); }
+
+  /* ---------- panels ---------- */
+
+  .panel {
+    border: 1px solid var(--rule); background: var(--sheet);
+    padding: 15px 17px; margin-top: 14px;
+  }
+  .panel > .label { margin-bottom: 10px; display: block; }
+  .grid2 { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .grid3 { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+
+  pre {
+    font-family: var(--mono); font-size: 11.5px; line-height: 1.6;
+    background: var(--paper); border: 1px solid var(--rule);
+    padding: 13px 15px; overflow-x: auto; margin: 0; color: var(--ink-2);
+  }
+  pre b { color: var(--ink); font-weight: 600; }
+  pre .g { color: var(--code); }
+  pre .r { color: var(--warn); }
+  pre .b { color: var(--data); }
+  pre .y { color: var(--gold); }
+
+  .callout {
+    border-left: 2px solid var(--agent); background: rgba(167,123,255,.06);
+    padding: 12px 16px; margin-top: 16px; font-size: 13px; color: var(--ink-2);
+  }
+  .callout.warn { border-left-color: var(--warn); background: rgba(255,107,125,.06); }
+  .callout.good { border-left-color: var(--code); background: rgba(53,211,154,.05); }
+  .callout b { color: var(--ink); }
+
+  ul.tight { margin: 8px 0 0; padding-left: 18px; color: var(--ink-2); font-size: 13px; }
+  ul.tight li { margin: 5px 0; }
+  ul.tight b { color: var(--ink); font-weight: 600; }
+
+  footer {
+    margin-top: 66px; border-top: 1px solid var(--rule); padding-top: 18px;
+    font-family: var(--mono); font-size: 10.5px; color: var(--ink-3);
+    display: flex; flex-wrap: wrap; gap: 20px;
+  }
+
+  @media (max-width: 720px) {
+    .stage { grid-template-columns: 1fr; gap: 10px; }
+    .stage-id { display: flex; align-items: baseline; gap: 12px; }
+    .stage-note { grid-column: 1; }
+  }
+</style>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">
+    <span>forecaster</span>
+    <span>·</span>
+    <span>agents vs wall street</span>
+    <span>·</span>
+    <span>system map</span>
+  </div>
+  <h1>Autonomous earnings<br>forecasting</h1>
+  <p class="thesis">
+    Consensus is not a forecast. It is analysts' good analysis with a thumb on the
+    scale — estimates walked down 3–4% during the quarter, 58–63% of guiding companies
+    guiding negative, then 78% beating the bar they set. That is incentive, not error.
+    <strong>So: reproduce the analysis, strip the incentives, then ask the one question
+    no individual analyst can — where is consensus structurally weak?</strong>
+    <span class="formula">forecast = consensus + λ · (own − consensus)</span>
+  </p>
+
+  <div class="stats">
+    <div class="stat"><div class="v num">53</div><div class="k label">components</div></div>
+    <div class="stat"><div class="v num" style="color:var(--code)">38</div><div class="k label">built</div></div>
+    <div class="stat"><div class="v num" style="color:var(--gold)">15</div><div class="k label">partial</div></div>
+    <div class="stat"><div class="v num">428</div><div class="k label">tests</div></div>
+    <div class="stat"><div class="v num">9</div><div class="k label">lenses</div></div>
+    <div class="stat"><div class="v num">15</div><div class="k label">agents</div></div>
+    <div class="stat"><div class="v num">487</div><div class="k label">backtest cases</div></div>
+    <div class="stat"><div class="v num" style="color:var(--gold)">4<span style="font-size:20px">/6</span></div><div class="k label">gates passed</div></div>
+  </div>
+
+  <div class="gate-callout">
+    <div class="gate-label">The gate number now exists</div>
+    <p>
+      487 point-in-time firm-quarters across 122 tickers — adequately powered against
+      a target of 350. Naive consensus scores <b>MAE 0.2216</b>. The baseline everything
+      is measured against, <span class="formula-inline">consensus × 1.02</span>, scores
+      <b class="hit">MAE 0.1868</b>. It is not a strawman: it beats consensus by 16%,
+      and if the pipeline cannot beat it then λ should be 0 and we say so.
+    </p>
+    <p class="still">
+      Still asserted rather than measured: <b>λ</b> itself. Fitting it needs a pipeline
+      run per case to produce the <i>own</i> estimate, which at $1.07 a run is ~$520 for
+      the full set. The harness is written and tested; the number is a spend decision.
+    </p>
+  </div>
+</header>
+
+<!-- ============================================================ -->
+<section id="pipeline">
+  <h2><span class="n">01</span> The pipeline</h2>
+  <p class="lede">
+    Twelve stages, A through I with three verification layers beside the chain rather
+    than in it. Every stage emits events, so the live view is driven by running the
+    pipeline rather than by a separate animation — and replay is free, because the UI
+    reads a recorded event log through the identical code path.
+  </p>
+
+  <div class="legend">
+    <span><i style="background:var(--data)"></i>data — fetched, point-in-time</span>
+    <span><i style="background:var(--code)"></i>code — cannot hallucinate</span>
+    <span><i style="background:var(--agent)"></i>agent — one model call</span>
+    <span><i style="background:var(--deep)"></i>deep tier — the expensive one</span>
+    <span><i style="background:var(--warn)"></i>not built</span>
+  </div>
+
+  <div class="stage">
+    <div class="stage-id">
+      <div class="letter">A</div><div class="name">Sources</div>
+      <div class="kind">7 adapters</div>
+    </div>
+    <div class="nodes">
+      <div class="node data"><div class="t">SEC EDGAR</div><div class="s">XBRL · filings · SIC peers · instance docs</div><div class="m">every fact carries a filed date</div></div>
+      <div class="node data"><div class="t">yfinance</div><div class="s">consensus · prices · share counts</div><div class="m">dispersion, staleness, revisions</div></div>
+      <div class="node data"><div class="t">Exa</div><div class="s">news · transcripts, date-bounded</div><div class="m">undated results dropped</div></div>
+      <div class="node data"><div class="t">LSE</div><div class="s">options chain · insider trades</div><div class="m">implied move 11.3%</div></div>
+      <div class="node data"><div class="t">FRED</div><div class="s">macro via ALFRED</div><div class="m">10Y at 4.75% → WACC</div></div>
+      <div class="node data"><div class="t">Universe</div><div class="s">value chain, local</div><div class="m">no longer load-bearing</div></div>
+      <div class="node data"><div class="t">Sponsor feed</div><div class="s">written on the day</div><div class="m">priority 1 — beats everything</div></div>
+    </div>
+    <div class="stage-note">
+      <b>Point-in-time by construction.</b> Every method takes <span class="mono">as_of</span> and refuses
+      anything filed later, including restatements. <span class="mono">assert_point_in_time()</span> raises;
+      the loader never routes around it.
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="stage-id">
+      <div class="letter">B</div><div class="name">Acquire</div>
+      <div class="kind">retrieval · hard budgets</div>
+    </div>
+    <div class="nodes">
+      <div class="node data"><div class="t">B1 Numbers</div><div class="s">XBRL actuals + consensus</div></div>
+      <div class="node data"><div class="t">B1b Series</div><div class="s">74 quarters · 500 daily bars</div></div>
+      <div class="node data"><div class="t">B2 Filings</div><div class="s">8-K item 2.02 · EX-99 · body text</div></div>
+      <div class="node data"><div class="t">B3 Industry</div><div class="s">peers by SIC · industry news</div></div>
+      <div class="node data"><div class="t">B4 Macro</div><div class="s">FRED, point-in-time</div></div>
+      <div class="node data"><div class="t">Segments</div><div class="s">revenue decomposition, XBRL instance</div><div class="m">10 of 12 filers</div></div>
+      <div class="node data"><div class="t">Exposure</div><div class="s">geographies → economies · SIC → input costs</div><div class="m">every one names the line it moves</div></div>
+      <div class="node data"><div class="t">Sizing</div><div class="s">bottom-up market from SIC peers</div><div class="m">splits growth into market and share</div></div>
+      <div class="node data"><div class="t">Calls</div><div class="s">8 quarters of transcripts</div><div class="m">45–70k chars each, with Q&amp;A</div></div>
+    </div>
+    <div class="stage-note">
+      <b>Budgets, and what was skipped is logged.</b> "Find everything online" has no
+      termination condition. Every acquirer gets a ranked target list; silent truncation
+      reads as "we covered everything" when it didn't.
+      <br><br>
+      <b>Nothing here is name-dependent.</b> Sector comes from the SIC code on the filing,
+      peers from the same code, the driver tree from the company's own segment note. A
+      ticker nobody prepared for runs the identical path.
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="stage-id">
+      <div class="letter">B5</div><div class="name">Extract</div>
+      <div class="kind">4 agents · cheap tier · prose → cited claims</div>
+    </div>
+    <div class="nodes">
+      <div class="node agent"><div class="t">Guidance</div><div class="s">the guided range, out of the release</div><div class="m">strongest single predictor of the print</div></div>
+      <div class="node agent"><div class="t">Bridge</div><div class="s">GAAP → non-GAAP, five quarters of it</div><div class="m">the median DJIA gap was 31%</div></div>
+      <div class="node agent"><div class="t">Perception</div><div class="s">coverage → stance, conviction, spread</div><div class="m">reaches the discount rate, never a driver</div></div>
+      <div class="node agent"><div class="t">Calls</div><div class="s">8 quarters at once → what CHANGED</div><div class="m">disclosure withdrawal is a fact, not a mood</div></div>
+    </div>
+    <div class="stage-note">
+      <b>Its own rank, because it is four model calls and not retrieval.</b> Every one of
+      these can be wrong in the way a model is wrong — a fluent sentence nobody wrote — so
+      every claim carries a verbatim quote that is string-matched against its source before
+      the claim exists. A quote that cannot be found takes its finding with it.
+      <br><br>
+      <b>Five quarters of the bridge, not one.</b> Guidance for a reported quarter is stale.
+      A reconciling item from four quarters ago is the evidence that this quarter's
+      "one-off" is a permanent cost the company moved below its own line.
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="stage-id">
+      <div class="letter" style="font-size:26px">⤓</div><div class="name">Dossier</div>
+      <div class="kind">artifact on disk</div>
+    </div>
+    <div class="nodes">
+      <div class="node code"><div class="t">out/acquired/&lt;ticker&gt;/&lt;period&gt;_&lt;as_of&gt;</div><div class="s">claims · documents · history · prices · segments · guidance</div><div class="m">byte-identical on identical data</div></div>
+    </div>
+    <div class="stage-note">
+      Acquire once at 10:05, read what came back, <b>then</b> spend model tokens.
+      A corpus holding the wrong company's filings is cheap to notice here and expensive
+      to notice after nine lenses and a judge have run on it.
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="stage-id">
+      <div class="letter">C</div><div class="name">Structure</div>
+      <div class="kind">deterministic</div>
+    </div>
+    <div class="nodes">
+      <div class="node code"><div class="t">Evidence store</div><div class="s">claims renumbered to c1, c2 … </div><div class="m">the cached prefix, byte-identical</div></div>
+      <div class="node code"><div class="t">GAAP ↔ non-GAAP bridge</div><div class="s">cited, verify() ties</div><div class="m">unfed — no add-back history</div></div>
+    </div>
+    <div class="stage-note">
+      <b>The corpus is the cache breakpoint.</b> Anything identical across lenses belongs
+      here and is charged once at write rates rather than six times at read rates — the
+      model block, the segment table and the expectations block all ride in it.
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="stage-id">
+      <div class="letter">D</div><div class="name">Model</div>
+      <div class="kind">deterministic</div>
+    </div>
+    <div class="nodes">
+      <div class="node code"><div class="t">Historic statements</div><div class="s">74 quarters · 21 fiscal years, linked</div></div>
+      <div class="node code"><div class="t">Reproduction check</div><div class="s">each quarter from its own revenue</div><div class="m">median abs error 4.4%</div></div>
+      <div class="node code"><div class="t">Forecast scaffold</div><div class="s">9 years to FY2035, balance-checked</div><div class="m">every year ties to 0.00</div></div>
+      <div class="node code"><div class="t">DCF + reverse DCF</div><div class="s">what the price requires</div><div class="m">29.0% implied growth</div></div>
+    </div>
+    <div class="stage-note">
+      Sits <b>before</b> the lenses, not after the judge. Only the projection needs a
+      revenue view; the historic statements, the ratio base and the model's own measured
+      error are arithmetic on filings. A lens that can see the company's margin trajectory
+      is reasoning about a company rather than about a bag of claims.
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="stage-id">
+      <div class="letter">E</div><div class="name">Expect</div>
+      <div class="kind">what is the bar?</div>
+    </div>
+    <div class="nodes">
+      <div class="node data"><div class="t">E1 Consensus</div><div class="s">level · dispersion · staleness · revisions</div></div>
+      <div class="node code"><div class="t">E2 Landing</div><div class="s">where it lands in its own range</div><div class="m">shrunk toward the midpoint</div></div>
+      <div class="node code"><div class="t">E3 Priced in</div><div class="s">reverse DCF — the actual bar</div></div>
+      <div class="node data"><div class="t">E4 Positioning</div><div class="s">implied move · insiders</div><div class="m">no short interest or 13F</div></div>
+      <div class="node code"><div class="t">E5 Swing factors</div><div class="s">which lines decide the quarter</div><div class="m">becomes the judge's weights</div></div>
+    </div>
+    <div class="stage-note">
+      <b>Nothing here forecasts.</b> The thesis is that consensus is beatable where it is
+      structurally weak, and a weakness cannot be located without first stating precisely
+      what is already assumed.
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="stage-id">
+      <div class="letter">F</div><div class="name">Analyse</div>
+      <div class="kind">9 lenses, blind to each other</div>
+    </div>
+    <div class="nodes">
+      <div class="node code"><div class="t">Mechanical</div><div class="s">FX · shares · net interest · calendar</div><div class="m">no model — cannot hallucinate</div></div>
+      <div class="node agent"><div class="t">Guidance</div><div class="s">guide + landing distribution</div></div>
+      <div class="node agent"><div class="t">Drivers</div><div class="s">units × ASP, from the segment note</div></div>
+      <div class="node agent"><div class="t">Demand</div><div class="s">customers · suppliers · the chain</div><div class="m">a customer's capex IS this revenue</div></div>
+      <div class="node agent"><div class="t">Market</div><div class="s">market growth vs share change</div><div class="m">consensus forecasts these as one number</div></div>
+      <div class="node agent"><div class="t">Margins</div><div class="s">mix · opex · tax</div></div>
+      <div class="node agent"><div class="t">Forensics</div><div class="s">accruals · exclusion creep</div></div>
+      <div class="node agent"><div class="t">Peer read</div><div class="s">who already reported</div></div>
+      <div class="node agent"><div class="t">Macro</div><div class="s">series vs assumed</div></div>
+    </div>
+    <div class="stage-note">
+      <b>Blindness is load-bearing.</b> There is no parameter through which one lens's
+      output could reach another. Their disagreement is a <i>measurement</i> that feeds λ,
+      and it measures nothing if they saw each other's work. Converging is how you
+      accidentally rebuild consensus, and consensus scores zero.
+      <br><br>
+      <b>The first one runs alone.</b> All nine used to fire simultaneously, and a prompt
+      cache entry only exists once a request that wrote it has returned — so eight lenses
+      each wrote the 14k-token corpus at the 1.25× premium and none of them ever read one.
+      Serialising the first call costs thirty seconds and saves seven writes.
+    </div>
+  </div>
+
+  <div class="stage verify">
+    <div class="stage-id">
+      <div class="letter">V1</div><div class="name">Reconcile</div>
+      <div class="kind">series element</div>
+    </div>
+    <div class="nodes">
+      <div class="node code"><div class="t">Arithmetic + citations</div><div class="s">every quote string-matched to its source</div><div class="m">fail → the lens is dropped</div></div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="stage-id">
+      <div class="letter">G</div><div class="name">Challenge</div>
+      <div class="kind">×7 parallel</div>
+    </div>
+    <div class="nodes">
+      <div class="node agent"><div class="t">Champion</div><div class="s">argue each case, then argue against it</div></div>
+      <div class="node gap"><div class="t">Variant perception</div><div class="s">what do we believe that consensus doesn't — and why does it persist?</div><div class="m">not built</div></div>
+      <div class="node gap"><div class="t">Pre-mortem</div><div class="s">three months on and wrong — what happened?</div><div class="m">not built</div></div>
+      <div class="node gap"><div class="t">Kill criteria</div><div class="s">writing them</div><div class="m">the monitor can check, nothing writes</div></div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="stage-id">
+      <div class="letter">H</div><div class="name">Judge</div>
+      <div class="kind">one expensive call</div>
+    </div>
+    <div class="nodes">
+      <div class="node deep"><div class="t">Judge</div><div class="s">impact-weighted → a distribution</div><div class="m">deep tier · weighs by materiality, never votes</div></div>
+      <div class="node code"><div class="t">Bull / base / bear</div><div class="s">swing factors only, explicit bridge</div><div class="m">what is HELD is stated too</div></div>
+    </div>
+    <div class="stage-note">
+      Six lenses agreeing on a weak signal must lose to one carrying the company's own
+      guidance with a quote. <b>No averaging, no plurality, no vote count anywhere in
+      aggregation.</b>
+    </div>
+  </div>
+
+  <div class="stage verify">
+    <div class="stage-id">
+      <div class="letter">V2</div><div class="name">Comparable</div>
+      <div class="kind">control line</div>
+    </div>
+    <div class="nodes">
+      <div class="node agent"><div class="t">Comparability</div><div class="s">M&amp;A · accounting change · 53rd week</div><div class="m">fires → λ collapses</div></div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="stage-id">
+      <div class="letter">I</div><div class="name">Position</div>
+      <div class="kind">λ — mostly plain code</div>
+    </div>
+    <div class="nodes">
+      <div class="node code"><div class="t">λ positioning</div><div class="s">fitted, regime-conditioned</div><div class="m">FITTED_BETA still placeholder</div></div>
+      <div class="node code"><div class="t">Baseline</div><div class="s">consensus × (1 + shrunk surprise)</div><div class="m">on every chart</div></div>
+    </div>
+    <div class="stage-note">
+      <b>Shrinking to consensus on a 61-analyst mega-cap is the correct answer</b>, not a
+      failure. The system is not improved by making it deviate more.
+    </div>
+  </div>
+
+  <div class="stage verify">
+    <div class="stage-id">
+      <div class="letter">V3</div><div class="name">Calibrate</div>
+      <div class="kind">control line</div>
+    </div>
+    <div class="nodes">
+      <div class="node code"><div class="t">Bootstrap our own residuals</div><div class="s">the interval comes from measured error, not feel</div></div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="stage-id">
+      <div class="letter">J</div><div class="name">Monitor</div>
+      <div class="kind">until the print</div>
+    </div>
+    <div class="nodes">
+      <div class="node code"><div class="t">Kill criteria checks</div><div class="s">peer result · price gap · headline match</div><div class="m">deterministic — no tokens</div></div>
+      <div class="node code"><div class="t">Post-mortem</div><div class="s">error decomposed by line</div><div class="m">catches offsetting errors</div></div>
+    </div>
+    <div class="stage-note">
+      The step most analysts skip and the only one that compounds. Getting EPS right
+      because revenue was low <i>and</i> margin was high is not getting it right — and a
+      process recording only the headline error learns the opposite of what happened.
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="outputs">
+  <h2><span class="n">02</span> What it actually produces</h2>
+  <p class="lede">
+    Every figure below is from a real run against live filings — NVDA, locked at
+    2026-08-04, 74 quarters of history and 500 daily bars.
+  </p>
+
+  <div class="grid2">
+    <div class="panel">
+      <span class="label">stage D — the model checks itself</span>
+      <pre>Each past quarter modelled from its OWN
+reported revenue — the one input a forecast
+would have had to supply. What comes back is
+the model's <b>structural</b> error.
+
+  2026Q3   modelled <b>1.255</b>  reported <b>1.300</b>   <span class="r">−3.4%</span>
+  2026Q2   modelled <b>1.021</b>  reported <b>1.080</b>   <span class="r">−5.5%</span>
+
+  median absolute error   <b>4.4%</b>
+  bias                    <span class="r">−4.4%</span>
+
+Bias equal to the error means it runs
+<b>consistently cold</b> — a fixable one-directional
+error, not noise.</pre>
+    </div>
+
+    <div class="panel">
+      <span class="label">stage E — swing factors</span>
+      <pre>Each driver moved one standard deviation of
+its <b>own</b> quarterly history. Comparable across
+lines because the unit is EPS.
+
+  revenue growth      <b>2.552</b>  <span class="b">42.4%</span>
+  gross margin        <b>1.581</b>  <span class="b">26.3%</span>
+  opex ratio          <b>1.405</b>  <span class="b">23.3%</span>
+  effective tax rate  <b>0.484</b>   <span class="b">8.0%</span>
+
+These shares become the <b>judge's weights</b> —
+measured on this company, not asserted in
+a prompt.</pre>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="panel">
+      <span class="label">stage E — what the price requires</span>
+      <pre>Reverse DCF. Takes the price as given and
+inverts the model, so it claims nothing about
+fair value.
+
+  at <b>$200.75</b> the market is pricing
+  <span class="y">29.0%</span> year-one revenue growth
+  fading to 2.5% over a decade
+
+  forward DCF     <b>$249.62</b>   <span class="g">+24.3%</span>
+  WACC             10.25%
+  terminal share      58%
+
+<span class="r">⚠</span> the 64% operating margin is held flat for
+ten years — the largest untested assumption
+in the valuation, and it is flagged.</pre>
+    </div>
+
+    <div class="panel">
+      <span class="label">stage B — decomposition on an unprepared ticker</span>
+      <pre>LLY. <b>prepared: false</b> — nobody pre-loaded it.
+Read from the XBRL instance, not a list.
+
+  sector   <b>Pharmaceutical Preparations</b>
+
+  Mounjaro    8,662m  43.1%   <span class="g">+125.5%</span>
+  Oncology    2,268m  11.3%    <span class="g">+16.4%</span>
+  Verzenio    1,302m   6.5%    <span class="g">+12.3%</span>
+  Jardiance   1,114m   5.5%     <span class="g">+9.9%</span>
+  … 17 members, 5 regions
+
+Growth comes from the filing's own prior-year
+column, not from an assumption.</pre>
+    </div>
+  </div>
+
+  <div class="panel">
+    <span class="label">stage D — forecast scaffold, every year balance-checked</span>
+    <div class="scroll-x">
+      <pre>                 FY2025A  FY2026A │ FY2027E  FY2028E  FY2030E  FY2033E  FY2035E
+growth                            │  <span class="b">65.5%</span>    <span class="b">57.6%</span>    <span class="b">41.9%</span>    <span class="b">18.2%</span>     <span class="b">2.5%</span>
+Revenue              130      216 │     357      563    1,196    2,390    2,704
+Operating income      81      130 │     216      344      722    1,478    1,633
+Net income            73      120 │     185      292      631    1,276    1,508
+Free cash flow        61       97 │     157      253      566    1,226    1,533
+Total assets         112      207 │     345      563    1,359    3,685    5,826
+<b>Check</b>               <span class="g">0.00</span>     <span class="g">0.00</span> │    <span class="g">0.00</span>     <span class="g">0.00</span>     <span class="g">0.00</span>     <span class="g">0.00</span>     <span class="g">0.00</span>
+                                  ↑
+                    filings stop, assumptions start</pre>
+    </div>
+    <p style="font-size:12.5px;color:var(--ink-2);margin:12px 0 0">
+      Growth fades to long-run nominal GDP rather than compounding flat. Held flat at
+      NVDA's 65% it reached <b style="color:var(--ink)">$4.4 trillion</b> of revenue by
+      2035, which discredits every other number on the sheet — including the balance
+      check, which is real.
+    </p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="invariants">
+  <h2><span class="n">03</span> The invariants</h2>
+  <p class="lede">Breaking any of these is a bug, not a tradeoff.</p>
+
+  <div class="grid3">
+    <div class="panel">
+      <span class="label">point-in-time</span>
+      <p style="margin:0;font-size:13px;color:var(--ink-2)">
+        Every source method takes <span class="mono">as_of</span> and must not return
+        anything <i>filed</i> after it — including restatements of historical periods.
+        <b style="color:var(--ink)">Never swallowed:</b> a leak raises rather than quietly
+        flattering the backtest.
+      </p>
+    </div>
+    <div class="panel">
+      <span class="label">no number without provenance</span>
+      <p style="margin:0;font-size:13px;color:var(--ink-2)">
+        A <span class="mono">Claim</span> cannot be constructed without a source and a
+        non-empty verbatim quote. V1 string-matches every quote against its document.
+        <b style="color:var(--ink)">A lens citing evidence that does not exist is dropped.</b>
+      </p>
+    </div>
+    <div class="panel">
+      <span class="label">lenses are blind</span>
+      <p style="margin:0;font-size:13px;color:var(--ink-2)">
+        No parameter through which one lens's output reaches another. Diversity is the
+        whole point of an ensemble, and their disagreement is an input to λ that means
+        nothing if they saw each other's work.
+      </p>
+    </div>
+    <div class="panel">
+      <span class="label">materiality, never votes</span>
+      <p style="margin:0;font-size:13px;color:var(--ink-2)">
+        No averaging, plurality or majority logic anywhere in aggregation. Six lenses
+        agreeing on a weak signal lose to one carrying the company's own guidance with a
+        quote.
+      </p>
+    </div>
+    <div class="panel">
+      <span class="label">robust statistics only</span>
+      <p style="margin:0;font-size:13px;color:var(--ink-2)">
+        Medians and MAD; winsorize before any mean. Never calibrate on a cap-weighted
+        aggregate — one recent headline surprise went <span class="mono">+39.3% → +12.6%</span>
+        on excluding a single company.
+      </p>
+    </div>
+    <div class="panel">
+      <span class="label">the model must tie</span>
+      <p style="margin:0;font-size:13px;color:var(--ink-2)">
+        Assets = liabilities + equity in every projected year, with cash coming off the
+        cash flow statement rather than plugging the gap.
+        <b style="color:var(--ink)">A model that balances while being wrong is worse than one
+        that does not balance.</b>
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="tests">
+  <h2><span class="n">04</span> Where the tests are</h2>
+  <p class="lede">
+    368 tests. New behaviour needs a test that encodes the <i>failure mode</i>, not the
+    happy path — most of these exist because something plausible turned out to be wrong.
+  </p>
+  <div class="scroll-x">
+    <table>
+      <thead>
+        <tr><th>area</th><th class="r">tests</th><th>the failure it encodes</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="mono">test_llm_layer</td><td class="r num">25</td><td>schema forcing, cost ceiling, cache breakpoints</td></tr>
+        <tr><td class="mono">test_stage1</td><td class="r num">24</td><td>Wald intervals reporting zero width at p=1.0</td></tr>
+        <tr><td class="mono">test_scenarios_monitor</td><td class="r num">22</td><td>offsetting errors scored as a good forecast</td></tr>
+        <tr><td class="mono">test_expect</td><td class="r num">21</td><td>a landing distribution built from two quarters</td></tr>
+        <tr><td class="mono">test_grid</td><td class="r num">20</td><td><span class="hi">SUM(Q1:Q4) applied to a balance sheet</span></td></tr>
+        <tr><td class="mono">test_project</td><td class="r num">20</td><td>every driver moved hard, one at a time — does it still tie?</td></tr>
+        <tr><td class="mono">test_dcf</td><td class="r num">19</td><td>WACC below terminal growth returning a confident number</td></tr>
+        <tr><td class="mono">test_segments</td><td class="r num">17</td><td>a parent counted beside its own children</td></tr>
+        <tr><td class="mono">test_reconciler</td><td class="r num">17</td><td>a fabricated citation passing as verified</td></tr>
+        <tr><td class="mono">test_history</td><td class="r num">16</td><td>52/53-week drift collapsing two quarters into one</td></tr>
+        <tr><td class="mono">test_model</td><td class="r num">16</td><td>a balance sheet that ties because cash absorbed the error</td></tr>
+        <tr><td class="mono">test_d_model</td><td class="r num">15</td><td><span class="hi">one NaN price bar poisoning a 500-bar VWAP</span></td></tr>
+        <tr><td class="mono">test_sponsor_source</td><td class="r num">14</td><td>a consensus revision dated after the lock date</td></tr>
+        <tr><td class="mono">test_sec_acquisition</td><td class="r num">13</td><td>a ticker resolving to a shell company with no XBRL</td></tr>
+        <tr><td class="mono">test_from_lenses</td><td class="r num">11</td><td>a percentage where a fraction was asked for — and it still balances</td></tr>
+        <tr><td class="mono">test_model_inputs</td><td class="r num">9</td><td>an unowned EPS denominator</td></tr>
+        <tr><td class="mono">test_prices, test_transcripts, test_universe</td><td class="r num">24</td><td>split-adjusted prices; a leaked transcript; a self-peer</td></tr>
+        <tr><td class="mono">everything else</td><td class="r num">25</td><td>config, dossier round-trip, extraction, LSE, Exa, point-in-time</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="gaps">
+  <h2><span class="n">05</span> What is not done</h2>
+  <p class="lede">
+    Listed as prominently as what is. A status board that only shows green teaches
+    nothing.
+  </p>
+
+  <div class="callout warn">
+    <b>λ is still asserted, not fitted.</b> <span class="mono">FITTED_BETA</span> holds three
+    placeholder numbers where the Block-1 regression output should be.
+    <span class="mono">FITTED_BETA_MEASURED = False</span>.
+    <br><br>
+    What changed: the <i>baseline</i> it has to beat now exists — MAE 0.1868 on 487 cases.
+    What has not: fitting β needs an <i>own</i> estimate per case, which is the judge's
+    output, which is a pipeline run per case. At $1.07 a run that is roughly $520 for the
+    full set. The regression and the per-regime table are written and tested; what is
+    missing is the spend, not the code.
+  </div>
+
+  <div class="grid2" style="margin-top:16px">
+    <div class="panel">
+      <span class="label">open</span>
+      <ul class="tight">
+        <li><b>Lens abstention.</b> On the last cold run 4 of 8 lenses came back with an
+          empty citation list and were dropped after the work was done and billed. The
+          constraint now lives in the decoding schema rather than in a post-hoc check,
+          but the rate has not been re-measured across enough runs to call it fixed.</li>
+        <li><b>FX leg is inert.</b> The geographic split gives the exposure, but regions
+          are not currencies — without a mapping the adjustment degrades to zero rather
+          than to a guess.</li>
+        <li><b>Segment coverage is 10 of 12.</b> Exxon and UnitedHealth decline safely —
+          no subset of their members reconciles — which is the designed outcome, not a
+          silent failure.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <span class="label">closed since the last version of this page</span>
+      <ul class="tight">
+        <li><b>The live run happened.</b> Cold, end to end, $1.07, ~11 minutes. It found
+          six bugs the 428-test suite could not — see below.</li>
+        <li><b>Transcript analysis is built.</b> Eight quarters read at once, oldest first,
+          Q&amp;A only, reporting what changed <i>across</i> them.</li>
+        <li><b>The bridge is fed.</b> Five quarters of reconciliation per company, with
+          recurrence counted, verified against the company's own printed figure.</li>
+        <li><b>Variant perception, pre-mortem and kill criteria</b> are all in the champion
+          schema — including the harder half, <i>why the mispricing persists</i>.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout" style="margin-top:22px">
+    <b>What one live run cost, and what it was worth.</b> $3.10 across three runs, and every
+    one of these was invisible to the test suite because nothing raised — the pipeline
+    finished, produced a number, and was quietly worse.
+    <table class="mini" style="margin-top:14px">
+      <tbody>
+        <tr><td><b>The import that was never there</b></td>
+            <td><span class="mono">industry</span> was unimported in the acquirer and a local
+            variable of the same name masked it. Every cold run died. It survived because
+            every recent run was a replay — and replay is the one path that never executes
+            acquisition.</td></tr>
+        <tr><td><b>The cache, twice</b></td>
+            <td>The corpus sat behind the per-lens instructions, and caching is a prefix
+            match. Fixed — and the next run still showed <span class="mono">cached_in=0</span>,
+            because the fan-out was simultaneous and an entry only exists once a write has
+            returned. Now: written once at 14,206 tokens, read seven times.</td></tr>
+        <tr><td><b>The judge, twice</b></td>
+            <td>A free-form <span class="mono">quantiles</span> dict came back empty on two
+            consecutive runs, with the numbers written into the prose instead — so the single
+            most expensive call was discarded for a degraded fallback. Five named floats
+            fixed it.</td></tr>
+        <tr><td><b>The lens that cannot hallucinate</b></td>
+            <td>Mechanical was dropped for eight fabricated citations. It has no model in it.
+            The claims were pointers from the submissions index, string-matched against the
+            document they point at — the check was comparing the wrong two things.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout">
+    <b>Deliberately out of scope: primary research.</b> Nine items on the analyst's
+    workflow need a human in a room — management meetings, expert networks, channel
+    checks, customer calls. Approximating them produces a system that is a
+    <i>worse</i> analyst, not a differently-abled one. The compensating edge is the
+    opposite of theirs: forty quarters read in ninety seconds with the identical test
+    applied to every one, across twelve peers simultaneously. That is not a substitute
+    for being in the room. It is a different instrument.
+  </div>
+</section>
+
+<footer>
+  <span>forecaster</span>
+  <span>47 components · 34 built · 368 tests</span>
+  <span>python 3.12 · uv · pydantic v2 · next.js</span>
+  <span>no API between the pipeline and the UI — JSON on disk, polled</span>
+</footer>
+
+</div>
