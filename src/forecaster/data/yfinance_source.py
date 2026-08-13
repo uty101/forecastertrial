@@ -22,6 +22,7 @@ test from the machine you will demo on. Sleep between tickers; do not thread it.
 
 from __future__ import annotations
 
+import math
 import time
 from datetime import date, timedelta
 
@@ -101,6 +102,26 @@ class YFinanceSource:
             return self._historical_consensus(snap, ticker, as_of)
         return self._current_consensus(snap, as_of)
 
+    @staticmethod
+    def _first_usable(rows: list[dict], periods: tuple[str, ...]) -> dict | None:
+        """The first row for one of these periods that carries a real number.
+
+        `avg` is present but NaN for a period the company does not report on,
+        and NaN survives every guard written as `if not value` — `bool(nan)` is
+        True. Checked for finiteness rather than presence, the same rule the
+        price and EPS paths already follow.
+        """
+        for row in rows:
+            if str(row.get("period", "")).lower() not in periods:
+                continue
+            value = row.get("avg")
+            try:
+                if value is not None and math.isfinite(float(value)):
+                    return row
+            except (TypeError, ValueError):
+                continue
+        return None
+
     def _historical_consensus(
         self, snap: dict, ticker: str, as_of: date
     ) -> Consensus | None:
@@ -112,6 +133,23 @@ class YFinanceSource:
         company is scored against is the one standing when it prints.
         """
         rows = snap.get("earnings_history") or []
+        if not rows:
+            # No quarterly report history at all, which is what a non-US filer
+            # looks like: yfinance carries `earnings_history` for US issuers and
+            # nothing for the rest. Falling through to the current estimate is
+            # NOT point-in-time and must not be used for a backtest — but for a
+            # forecast dated within days of today it is the same number, and
+            # returning None instead loses the anchor the entire thesis is built
+            # on. The estimate carries its own `as_of`, so the staleness is
+            # visible rather than assumed away.
+            log.info(
+                "consensus_no_report_history",
+                ticker=ticker,
+                why="no quarterly earnings history — using the current estimate",
+                point_in_time=False,
+            )
+            return self._current_consensus(snap, as_of)
+
         usable = []
         for row in rows:
             quarter = row.get("quarter") or row.get("index")
@@ -136,11 +174,18 @@ class YFinanceSource:
 
     def _current_consensus(self, snap: dict, as_of: date) -> Consensus | None:
         estimates = snap.get("earnings_estimate") or []
-        current = next(
-            (r for r in estimates if str(r.get("period", "")).lower() in {"0q", "+0q"}),
-            None,
-        ) or (estimates[0] if estimates else None)
-        if not current or current.get("avg") is None:
+        # Quarter first, then YEAR. A company that reports twice a year has no
+        # quarterly consensus at all — Nestlé's `0q` row is NaN and its `0y` row
+        # carries 4.50 CHF from twenty analysts — and taking `estimates[0]`
+        # regardless would return the NaN row and then fail the None check, so
+        # the whole thesis lost its anchor for want of a period label.
+        #
+        # The period is recorded on the way through, because a consensus for a
+        # YEAR compared against a forecast for a HALF is not a comparison.
+        current = self._first_usable(estimates, ("0q", "+0q"))
+        if current is None:
+            current = self._first_usable(estimates, ("0y", "+0y"))
+        if current is None:
             return None
 
         revenue_rows = snap.get("revenue_estimate") or []

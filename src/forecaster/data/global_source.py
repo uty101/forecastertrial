@@ -261,6 +261,25 @@ class GlobalSource:
         industry = info.get("industry") or info.get("sector")
         return ("", industry) if industry else None
 
+    def get_name(self, ticker: str, as_of: date) -> str | None:
+        """The company's own name, for a ticker nobody prepared in advance.
+
+        Every text search in the acquisition layer is built from this. Without
+        it the queries are built from the SYMBOL — "NESN.SW half-year results
+        press release" — which matches nothing, while "Nestle half-year results
+        press release" returns the release. The prepared universe has names for
+        twelve companies; on the day the ticker is not one of them.
+        """
+        try:
+            import yfinance as yf
+        except ImportError:  # pragma: no cover
+            return None
+        try:
+            info = yf.Ticker(ticker).info
+        except Exception:  # noqa: BLE001
+            return None
+        return info.get("longName") or info.get("shortName")
+
     def get_website(self, ticker: str, as_of: date) -> str | None:
         """The company's own domain, for the IR-document route.
 

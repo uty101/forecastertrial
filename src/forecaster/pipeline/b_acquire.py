@@ -324,8 +324,13 @@ def acquire(
                 (s for s in loader.sources if getattr(s, "name", "") == "exa"), None
             )
             site = loader.website(ticker, as_of)
+            # The NAME, not the symbol. "NESN.SW half-year results press
+            # release" matches nothing on nestle.com; "Nestle half-year results
+            # press release" returns the release. The prepared universe carries
+            # names for twelve companies and the day's ticker is not one of them.
+            name = company.name or loader.company_name(ticker, as_of) or ticker
             ir_claims, ir_documents, ir_notes = ir_site.fetch(
-                exa, ticker, company.name or ticker, site, as_of
+                exa, ticker, name, site, as_of
             )
             out.claims.extend(ir_claims)
             out.documents.update(ir_documents)

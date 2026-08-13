@@ -58,6 +58,25 @@ class Loader:
             # Never swallow this one. A source that leaks is a bug to fix, not a
             # transient failure to route around.
             raise
+        except AttributeError as exc:
+            # A source that does not implement a method has not FAILED. The
+            # protocol is deliberately partial — yfinance has no filings, SEC has
+            # no consensus, and the global source has neither — and every adapter
+            # here answers a different subset.
+            #
+            # This was counted as a failure, and three of them trip the circuit
+            # breaker. So the moment the global source was asked for consensus,
+            # actuals and filings — none of which it claims to provide — it was
+            # removed from the loader entirely, taking with it the company
+            # website and therefore the entire non-US document route. The symptom
+            # was `site=None` for a company whose website resolves perfectly when
+            # asked directly.
+            if "object has no attribute" in str(exc):
+                return None
+            self._failures[source.name] = self._failures.get(source.name, 0) + 1
+            log.warning("source_failed", source=source.name, what=what,
+                        error=str(exc))
+            return None
         except Exception as exc:
             self._failures[source.name] = self._failures.get(source.name, 0) + 1
             tripped = self._failures[source.name] >= self.FAILURES_BEFORE_TRIP
@@ -126,6 +145,13 @@ class Loader:
             lambda s: getattr(s, "get_history", lambda *_, **__: None)(
                 ticker, as_of, keys
             ),
+        )
+
+    def company_name(self, ticker: str, as_of: date):
+        """The company's own name. Every text search is built from it."""
+        return self.resolve(
+            f"name:{ticker}",
+            lambda s: getattr(s, "get_name", lambda *_, **__: None)(ticker, as_of),
         )
 
     def website(self, ticker: str, as_of: date):
