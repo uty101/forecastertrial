@@ -17,7 +17,15 @@ LONG = "Operator: Good afternoon. " + ("Thank you for the question. " * 900)
 
 
 def _result(url: str, title: str, text: str, published: str) -> dict:
-    return {"url": url, "title": title, "text": text, "publishedDate": published}
+    # The ticker is in the URL because it is in real transcript URLs —
+    # `fool.com/.../nvidia-nvda-q1-2027-earnings-call-transcript` — and because
+    # `from_results` now checks that a transcript is actually THIS company's.
+    # A search for NESN.SW was returning NESR's and ZOZO's calls, and every
+    # quote from them verified, because the words really were in the document.
+    return {
+        "url": f"{url}-nvda", "title": title, "text": text,
+        "publishedDate": published,
+    }
 
 
 def test_the_quarter_is_read_from_the_title_not_the_publication_date():
@@ -111,3 +119,44 @@ def test_transcripts_come_back_newest_first():
     )
 
     assert [t.period for t in found] == ["2027Q1", "2026Q3"]
+
+
+def test_another_companys_call_is_not_this_companys_call():
+    """The bug this check exists for, and it is the worst kind of silent one.
+
+    A search for `NESN.SW` returned earnings calls for NESR (National Energy
+    Services Reunited), NTWK and ZOZO. Seven other companies' transcripts went
+    into the corpus as Nestlé's, and every quote lifted from them would pass
+    citation verification — because the words really are in the document. The
+    provenance chain was intact and pointed at the wrong company.
+    """
+    other = _result(
+        "insidermonkey.com/national-energy-services-reunited-nesr/q1-2026",
+        "National Energy Services Reunited Corp (NESR) Q1 2026 Earnings Call",
+        LONG,
+        "2026-05-20",
+    )
+    assert T.from_results("NESN.SW", [other], AS_OF, company="Nestle S.A.") == []
+
+
+def test_the_company_name_alone_is_enough_when_the_ticker_is_absent():
+    """Most publishers title a piece "Nestle S.A. Half Year Earnings Call" with
+    no ticker anywhere in it. Requiring both would reject almost everything."""
+    theirs = {
+        "url": "fool.com/nestle-half-year-2026-earnings-call-transcript",
+        "title": "Nestle S.A. Q2 2026 Earnings Call Transcript",
+        "text": LONG,
+        "publishedDate": "2026-07-24",
+    }
+    found = T.from_results("NESN.SW", [theirs], AS_OF, company="Nestle S.A.")
+
+    assert [t.period for t in found] == ["2026Q2"]
+
+
+def test_a_legal_suffix_is_not_evidence_of_identity():
+    """"Group", "Holdings" and "plc" match half the market. Matching on them
+    would readmit exactly the confusion this check removes."""
+    assert not T.is_this_company(
+        "NESN.SW", "Nestle Group Holdings plc",
+        "insidermonkey.com/acme-group-holdings/q1", "Acme Group Holdings plc Q1",
+    )

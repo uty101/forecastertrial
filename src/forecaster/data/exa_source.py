@@ -214,7 +214,7 @@ class ExaSource:
             limit=max(quarters * 4, 20),
             lookback_days=lookback_days,
         )
-        found = transcripts.from_results(ticker, results, as_of)
+        found = transcripts.from_results(ticker, results, as_of, company)
         return found[:quarters]
 
     def get_document(self, uri: str) -> str | None:

@@ -31,7 +31,7 @@ from datetime import date, timedelta
 import structlog
 
 from forecaster.config import settings
-from forecaster.data import exposure, industry, segments, transcripts
+from forecaster.data import exposure, industry, ir_site, segments, transcripts
 from forecaster.data.loader import Loader
 from forecaster.data.universe import profile
 from forecaster.events import EventLog
@@ -281,6 +281,12 @@ def acquire(
     # ---- B2: filings and their text ------------------------------------ #
     with events.node("B2_filings"):
         budget = Budget()
+        # Counted BEFORE the loop, because transcripts have already put bodies
+        # in `documents` and the fallback below must trigger on "no REGISTRY
+        # filing", not on "no document of any kind". Gating on the latter meant
+        # the company-site route never fired for the exact companies it exists
+        # for — a Swiss filer with eight transcripts looked well supplied.
+        before_filings = len(out.documents)
         for form, items, why in FILINGS_PRIORITY:
             if budget.exhausted():
                 budget.skip(f"{form}: {why}")
@@ -302,6 +308,40 @@ def acquire(
                 if body:
                     out.documents[claim.source.uri] = body
                     budget.spend(tokens=len(body) // 4)
+
+        # THE FALLBACK THAT MAKES THIS WORK OUTSIDE THE US.
+        #
+        # If no registry answered, go to the company's own site. Every listed
+        # company on earth publishes a results release, a half-year report and a
+        # presentation on its own domain, in the same three formats, whether or
+        # not its country has anything resembling EDGAR.
+        #
+        # Conditional on the registry having produced NOTHING, not merged with
+        # it: where a filing exists it is strictly better evidence, being signed
+        # and dated and impossible to edit after the fact.
+        if len(out.documents) == before_filings:
+            exa = next(
+                (s for s in loader.sources if getattr(s, "name", "") == "exa"), None
+            )
+            site = loader.website(ticker, as_of)
+            ir_claims, ir_documents, ir_notes = ir_site.fetch(
+                exa, ticker, company.name or ticker, site, as_of
+            )
+            out.claims.extend(ir_claims)
+            out.documents.update(ir_documents)
+            budget.spend(
+                docs=len(ir_documents),
+                tokens=sum(len(b) for b in ir_documents.values()) // 4,
+            )
+            for note in ir_notes:
+                budget.skip(note)
+            log.info(
+                "ir_fallback",
+                ticker=ticker,
+                why="no registry filings — using the company's own site",
+                site=site,
+                documents=len(ir_documents),
+            )
 
         transcript = loader.transcript(ticker, as_of)
         if transcript:

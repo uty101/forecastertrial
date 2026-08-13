@@ -137,7 +137,38 @@ def looks_like_transcript(url: str, title: str, text: str) -> bool:
     return "transcript" in low or "earnings call" in low
 
 
-def from_results(ticker: str, results: list[dict], as_of: date) -> list[Transcript]:
+def is_this_company(ticker: str, company: str, url: str, title: str) -> bool:
+    """Is this transcript actually THIS company's call?
+
+    The check that was missing, and the failure it allows is the worst kind of
+    silent one. A search for `NESN.SW` returned earnings calls for NESR
+    (National Energy Services Reunited), NTWK and ZOZO — the ticker is a string
+    and the search engine matched it as one. Seven other companies' transcripts
+    went into the corpus as Nestlé's, where every quote in them would VERIFY,
+    because the words really are in the document.
+
+    Both halves of the identity are accepted: the bare symbol (`NESN`, before
+    the exchange suffix) or the company name. Requiring both would reject the
+    many publishers who title a piece "Nestle S.A. Half Year Earnings Call"
+    without a ticker anywhere in it.
+    """
+    haystack = f"{url} {title}".lower()
+    symbol = ticker.split(".")[0].lower()
+    if len(symbol) >= 3 and symbol in haystack:
+        return True
+    # Just the distinctive part of the name: "Nestle S.A." matches "nestle",
+    # and a legal suffix is not evidence of anything.
+    words = [
+        w for w in re.findall(r"[a-z]+", company.lower())
+        if len(w) > 3 and w not in {"corp", "inc", "plc", "group", "holdings",
+                                    "company", "limited", "the"}
+    ]
+    return any(word in haystack for word in words[:2])
+
+
+def from_results(
+    ticker: str, results: list[dict], as_of: date, company: str = ""
+) -> list[Transcript]:
     """Turn Exa results into transcripts, newest first, deduplicated by quarter.
 
     One transcript per quarter. Four publishers carry the same call and reading
@@ -155,6 +186,12 @@ def from_results(ticker: str, results: list[dict], as_of: date) -> list[Transcri
         if not url or not text or not published:
             continue
         if not looks_like_transcript(url, title, text):
+            continue
+        if not is_this_company(ticker, company, url, title):
+            log.info(
+                "transcript_wrong_company", ticker=ticker, url=url[:90],
+                title=title[:80],
+            )
             continue
 
         try:

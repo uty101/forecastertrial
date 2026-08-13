@@ -626,12 +626,7 @@ def _extract_guidance(
     costs a model call per document, so it is pointed at the two documents that
     contain the answer.
     """
-    exhibits = [
-        claim
-        for claim in acquired.claims
-        if (claim.source.page_or_section or "").startswith("EX-99")
-        and claim.source.uri in acquired.documents
-    ]
+    exhibits = _release_claims(acquired)
     # Newest filing first; within it EX-99.1 before EX-99.2.
     exhibits.sort(
         key=lambda c: (c.source.as_of, c.source.page_or_section or ""), reverse=True
@@ -685,6 +680,26 @@ def _extract_guidance(
     return guides, guide_claims, rejections
 
 
+def _release_claims(acquired: b_acquire.Acquired) -> list:
+    """The documents an extractor should read: earnings releases, whatever route.
+
+    Was `page_or_section.startswith("EX-99")`, which is an EDGAR exhibit type and
+    therefore selects nothing at all for a company that does not file with the
+    SEC. Nestlé's half-year release is a PDF on nestle.com; it carries the same
+    outlook paragraph and the same reconciliation, and the extractors work on it
+    unchanged — they were simply never handed it.
+    """
+    return [
+        claim
+        for claim in acquired.claims
+        if claim.source.uri in acquired.documents
+        and (
+            (claim.source.page_or_section or "").startswith("EX-99")
+            or claim.source.kind is SourceKind.COMPANY_SITE
+        )
+    ]
+
+
 def _extract_bridges(
     client: LLMClient,
     ticker: str,
@@ -701,12 +716,7 @@ def _extract_bridges(
     Only EX-99 exhibits, one per filing — the reconciliation lives in the press
     release, and EX-99.2 (the CFO commentary) repeats it.
     """
-    exhibits = [
-        claim
-        for claim in acquired.claims
-        if (claim.source.page_or_section or "").startswith("EX-99")
-        and claim.source.uri in acquired.documents
-    ]
+    exhibits = _release_claims(acquired)
     exhibits.sort(
         key=lambda c: (c.source.as_of, c.source.page_or_section or ""), reverse=True
     )

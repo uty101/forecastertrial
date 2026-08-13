@@ -261,6 +261,25 @@ class GlobalSource:
         industry = info.get("industry") or info.get("sector")
         return ("", industry) if industry else None
 
+    def get_website(self, ticker: str, as_of: date) -> str | None:
+        """The company's own domain, for the IR-document route.
+
+        From the exchange profile rather than derived from the company name.
+        Deriving it gets Nestlé right and almost everyone else wrong — Toyota
+        publishes on global.toyota, LVMH on lvmh.com, and a wrong domain filter
+        returns nothing, which is indistinguishable from a company that files
+        nothing.
+        """
+        try:
+            import yfinance as yf
+        except ImportError:  # pragma: no cover
+            return None
+        try:
+            info = yf.Ticker(ticker).info
+        except Exception:  # noqa: BLE001
+            return None
+        return info.get("irWebsite") or info.get("website")
+
     # ---- helpers --------------------------------------------------------- #
 
     @staticmethod

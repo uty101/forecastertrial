@@ -67,6 +67,7 @@ PROSE_SOURCES = {
     SourceKind.FILING_10Q,
     SourceKind.FILING_10K,
     SourceKind.TRANSCRIPT,
+    SourceKind.COMPANY_SITE,
     # News belongs here more than anywhere else. A filing is at least a
     # document the company signed; an article is prose from an arbitrary
     # publisher, retrieved by a search engine, and it is the likeliest place for

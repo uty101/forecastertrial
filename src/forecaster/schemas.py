@@ -43,6 +43,10 @@ class SourceKind(StrEnum):
     FILING_8K = "8k"
     FILING_10Q = "10q"
     FILING_10K = "10k"
+    # The company's own website. Prose, so string-matched like any other prose —
+    # but distinct from a FILING because a web page can be edited silently and a
+    # filing cannot. Where a registry exists, the registry is used instead.
+    COMPANY_SITE = "company_site"
     TRANSCRIPT = "transcript"
     NEWS = "news"
     XBRL = "xbrl"

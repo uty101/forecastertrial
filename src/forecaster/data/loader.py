@@ -128,6 +128,13 @@ class Loader:
             ),
         )
 
+    def website(self, ticker: str, as_of: date):
+        """The company's own domain — the one publisher every issuer has."""
+        return self.resolve(
+            f"website:{ticker}",
+            lambda s: getattr(s, "get_website", lambda *_, **__: None)(ticker, as_of),
+        )
+
     def sic(self, ticker: str, as_of: date):
         """(code, description) — the industry, straight from the ticker."""
         return self.resolve(
