@@ -78,6 +78,10 @@ class EvidenceStore:
     # industry buys, each naming the model driver it moves. Macro and Margins
     # both need it, so it rides in the cached prefix rather than in two turns.
     exposure: str = ""
+    # What changed across eight earnings calls, and what the coverage believes.
+    # Both in the cached prefix for the usual reason: identical for every lens.
+    calls: str = ""
+    perception: str = ""
 
     # ---------------------------------------------------------------- #
 
@@ -111,6 +115,10 @@ class EvidenceStore:
         halve the cache hit rate.
         """
         lines: list[str] = []
+        if self.calls:
+            lines += [self.calls, "", "-" * 70, ""]
+        if self.perception:
+            lines += [self.perception, "", "-" * 70, ""]
         if self.exposure:
             lines += [self.exposure, "", "-" * 70, ""]
         if self.expectations:

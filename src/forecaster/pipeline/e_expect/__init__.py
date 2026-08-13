@@ -23,6 +23,6 @@ deep and Macro skipped, and the judge's weights come from the model rather than
 from a paragraph.
 """
 
-from forecaster.pipeline.e_expect import landing, swing
+from forecaster.pipeline.e_expect import landing, perception, scan, swing
 
-__all__ = ["landing", "swing"]
+__all__ = ["landing", "perception", "scan", "swing"]

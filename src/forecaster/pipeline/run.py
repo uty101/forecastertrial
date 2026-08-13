@@ -52,7 +52,8 @@ from forecaster.pipeline import (
     v2_comparability,
     v3_calibrate,
 )
-from forecaster.pipeline.e_expect import landing, swing
+from forecaster.pipeline.e_expect import landing, scan, swing
+from forecaster.pipeline.e_expect import perception as perception_mod
 from forecaster.pipeline.e_lenses import mechanical
 from forecaster.pipeline.e_lenses.base import LensContext
 from forecaster.schemas import (
@@ -180,13 +181,71 @@ def forecast(
     #
     # A failure here is not fatal. The lenses ran without a model until now and
     # can again; what they lose is context, not their inputs.
+    # ---- E6/E7: perception and the earnings calls ----------------------- #
+    #
+    # Both cheap-tier, both producing structure from prose no filing contains,
+    # and both run BEFORE stage D — the perception read moves the discount rate
+    # in the DCF, and the DCF is built inside stage D.
+    # Not guarded on `replayed`: a dossier restores the documents and the
+    # transcripts, so a replayed run reads exactly the same prose and should
+    # reach the same discount rate. Skipping here would make replay a different
+    # pipeline, which is the one thing replay must not be.
+    perception_read = None
+    calls_read, call_notes = None, []
+    if acquired.documents or acquired.transcripts:
+        with events.node("E_scan"):
+            # Coverage only: the filings are the evidence base and the
+            # transcripts are read separately by `read_calls`, so both are
+            # excluded here — a 60k-character transcript truncated to 2,400
+            # characters would crowd out every actual article and be scored on
+            # its opening pleasantries.
+            call_urls = {t.url for t in acquired.transcripts}
+            articles = [
+                # Dated at `as_of` rather than at publication: the acquisition
+                # layer keeps bodies, not mastheads. Staleness is therefore NOT
+                # measurable from this leg, and nothing downstream reads it as
+                # if it were — only tilt, dispersion and crowding are used.
+                {"url": uri, "title": "", "text": body,
+                 "publishedDate": config.as_of.isoformat()}
+                for uri, body in acquired.documents.items()
+                if uri.startswith("http")
+                and "sec.gov" not in uri
+                and uri not in call_urls
+            ]
+            perception_read = scan.score_articles(
+                client, config.ticker, articles[:14],
+                acquired.documents, config.run_index,
+            )
+            calls_read, call_notes = scan.read_calls(
+                client, config.ticker, acquired.transcripts, config.run_index
+            )
+            events.emit(
+                EventType.NODE_DONE, "E_scan",
+                scored=len(perception_read.reads) if perception_read else 0,
+                changes=len(calls_read.changes) if calls_read else 0,
+            )
+
+    # Perception reaches the VALUATION, never a driver. It adjusts the equity
+    # risk premium and widens the stress grid — see `perception.py` for why the
+    # direction is the opposite of what most people assume.
+    erp_adjustment, erp_note = (
+        perception_read.risk_premium_adjustment() if perception_read else (0.0, "")
+    )
+    stress, _ = (
+        perception_read.stress_multiplier() if perception_read else (1.0, "")
+    )
+
     model = None
     with events.node("D_model"):
         if acquired.history is None:
             log.info("model_skipped", why="no history in the dossier")
         else:
             try:
-                model = d_model.build(acquired.history, prices=acquired.prices)
+                model = d_model.build(
+                    acquired.history, prices=acquired.prices,
+                    erp_adjustment=erp_adjustment, erp_note=erp_note,
+                    stress=stress,
+                )
                 events.emit(
                     EventType.NODE_DONE, "D_model",
                     balanced=model.balanced,
@@ -206,6 +265,10 @@ def forecast(
         store.model = d_model.to_block(model)
     store.segments = segments.to_block(acquired.segment_lines)
     store.exposure = getattr(acquired, "exposure_block", "")
+    store.calls = scan.to_block(calls_read, call_notes)
+    store.perception = (
+        perception_mod.to_block(perception_read) if perception_read else ""
+    )
 
     # ---- E: expectations ----------------------------------------------- #
     #

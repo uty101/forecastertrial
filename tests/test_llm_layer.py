@@ -73,7 +73,7 @@ def test_agent_count_matches_every_surface_that_states_it():
     So the count is pinned here, and the UI derives its own from the same rule.
     """
     prompts = load_all()
-    assert len(prompts) == 12, (
+    assert len(prompts) == 14, (
         f"the agent roster changed: {sorted(prompts)}. Update the count on the "
         f"/agents sheet, the /system legend and the README in the same commit, "
         f"or they will disagree on a projector."
