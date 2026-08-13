@@ -191,6 +191,13 @@ class LensName(StrEnum):
     FORENSICS = "forensics"
     PEER_READ = "peer_read"
     MACRO = "macro"
+    # Market: is revenue growing because the market is, or because this company
+    # is taking share? Those decompose one top line into two different forecasts
+    # and consensus almost never separates them.
+    MARKET = "market"
+    # Demand: the value chain. A customer's capex budget IS this company's
+    # revenue, and it is disclosed a quarter earlier than ours is.
+    DEMAND = "demand"
 
 
 class LensOutput(BaseModel):

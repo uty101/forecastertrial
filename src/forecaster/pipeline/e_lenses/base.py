@@ -211,6 +211,13 @@ class LensContext:
     # Drivers rather than an independent view, and the two would agree by
     # construction.
     working_revenue: str = ""
+    # Bottom-up market size and this company's share of it, from peers' filed
+    # revenue. Feeds the Market lens, which separates riding a wave from taking
+    # share — the split consensus forecasts around rather than through.
+    industry: str = ""
+    # Named customers and suppliers, from the filing's own concentration
+    # disclosure. Feeds the Demand lens: a customer's capex IS this revenue.
+    value_chain: str = ""
 
     def missing(self) -> list[str]:
         """Which context blocks are empty. Surfaced in the run manifest so a
@@ -220,7 +227,8 @@ class LensContext:
             name
             for name in (
                 "prior_year", "drivers", "margin_history", "quality",
-                "exclusions", "peers", "macro", "working_revenue",
+                "exclusions", "peers", "macro", "working_revenue", "industry",
+                "value_chain",
             )
             if not getattr(self, name).strip()
         ]

@@ -74,6 +74,10 @@ class EvidenceStore:
     # lens where this company lands inside its own range, and the swing factors
     # tell every lens which lines are worth arguing about at all.
     expectations: str = ""
+    # Which economies the revenue is exposed to and which input costs the
+    # industry buys, each naming the model driver it moves. Macro and Margins
+    # both need it, so it rides in the cached prefix rather than in two turns.
+    exposure: str = ""
 
     # ---------------------------------------------------------------- #
 
@@ -107,6 +111,8 @@ class EvidenceStore:
         halve the cache hit rate.
         """
         lines: list[str] = []
+        if self.exposure:
+            lines += [self.exposure, "", "-" * 70, ""]
         if self.expectations:
             lines += [self.expectations, "", "-" * 70, ""]
         if self.segments:

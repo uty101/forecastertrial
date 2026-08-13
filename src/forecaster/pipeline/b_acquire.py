@@ -31,7 +31,7 @@ from datetime import date, timedelta
 import structlog
 
 from forecaster.config import settings
-from forecaster.data import segments, transcripts
+from forecaster.data import exposure, segments, transcripts
 from forecaster.data.loader import Loader
 from forecaster.data.universe import profile
 from forecaster.events import EventLog
@@ -128,6 +128,14 @@ class Acquired:
     # rather than the document: what stopped being said is a fact, and it is
     # invisible to anyone reading a single call.
     transcripts: list = field(default_factory=list)
+    # Bottom-up market size and this company's share, from peers' filed revenue.
+    industry: object | None = None
+    industry_block: str = ""
+    # Which economies its revenue is exposed to and which input costs its
+    # industry buys — each naming the model driver it moves.
+    exposure: object | None = None
+    exposure_block: str = ""
+    value_chain_block: str = ""
     # (region, share of revenue). The geographic split IS the FX translation
     # exposure, which is the input the Mechanical lens could not previously get.
     geo_mix: list = field(default_factory=list)
@@ -434,6 +442,110 @@ def acquire(
         has_peers=bool(out.peer_block),
         has_macro=bool(out.macro_block),
     )
+    # ---- B8: industry size and share ------------------------------------ #
+    #
+    # The split consensus forecasts around rather than through: is revenue
+    # growing because the market is, or because this company is taking share?
+    # Built bottom-up from the filed revenue of every SIC peer rather than from
+    # a purchased market-size number, which is a consultancy's estimate of a
+    # boundary they drew, published on a lag and unauditable.
+    with events.node("B8_industry"):
+        peer_revenues = []
+        for peer in peer_tickers[:14]:
+            peer_history = loader.history(peer, as_of)
+            if peer_history is None:
+                continue
+            latest = peer_history.latest_period()
+            if latest is None:
+                continue
+            now = peer_history.get("revenue", latest)
+            periods = peer_history.periods()
+            index = periods.index(latest)
+            ago = (
+                peer_history.get("revenue", periods[index - 4])
+                if index >= 4
+                else None
+            )
+            if now is not None:
+                peer_revenues.append(
+                    industry.PeerRevenue(
+                        ticker=peer,
+                        revenue=now.value,
+                        prior_revenue=ago.value if ago else None,
+                    )
+                )
+
+        own = None
+        if out.history is not None:
+            latest = out.history.latest_period()
+            periods = out.history.periods()
+            if latest is not None:
+                now = out.history.get("revenue", latest)
+                index = periods.index(latest)
+                ago = (
+                    out.history.get("revenue", periods[index - 4])
+                    if index >= 4
+                    else None
+                )
+                if now is not None:
+                    own = industry.PeerRevenue(
+                        ticker=ticker,
+                        revenue=now.value,
+                        prior_revenue=ago.value if ago else None,
+                    )
+
+        out.industry = industry.build(
+            ticker,
+            sic[0] if sic else None,
+            sic[1] if sic else "",
+            own,
+            peer_revenues,
+        )
+        out.industry_block = industry.to_block(out.industry)
+        events.emit(
+            EventType.NODE_DONE,
+            "B8_industry",
+            peers_priced=len(peer_revenues),
+            share=out.industry.share,
+            market_growth=out.industry.market_growth,
+        )
+
+    # ---- B9: external exposure ------------------------------------------ #
+    #
+    # Every series has to name the line it moves. "Copper is up 14%" is a fact
+    # about copper; "copper is up 14% and this company buys copper" is a
+    # forecast, and the gap between them is where macro commentary lives without
+    # ever reaching a number.
+    #
+    # Geographic exposure is only computable because the segment extractor gives
+    # the revenue split. Input costs come from the company's own SIC code, so
+    # this works on a ticker nobody prepared for.
+    with events.node("B9_exposure"):
+        out.exposure = exposure.build(
+            ticker, out.geo_mix, sic[0] if sic else None
+        )
+        wanted = exposure.series_ids(out.exposure)
+        changes: dict[str, float] = {}
+        if macro_source is not None and wanted:
+            series = macro_source.get_macro(wanted, as_of) or {}
+            for series_id, points in series.items():
+                usable = [p for p in points if p.value is not None]
+                if len(usable) >= 2 and usable[0].value:
+                    changes[series_id] = usable[-1].value / usable[0].value - 1
+            out.exposure = exposure.build(
+                ticker, out.geo_mix, sic[0] if sic else None, changes
+            )
+        out.exposure_block = exposure.to_block(out.exposure)
+        events.emit(
+            EventType.NODE_DONE,
+            "B9_exposure",
+            regions=len(out.exposure.geography),
+            inputs=len(out.exposure.inputs),
+            covered=round(out.exposure.covered, 3),
+            unmapped=out.exposure.unmapped_regions,
+        )
+
+
     return out
 
 

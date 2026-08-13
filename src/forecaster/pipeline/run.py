@@ -205,6 +205,7 @@ def forecast(
     if model is not None:
         store.model = d_model.to_block(model)
     store.segments = segments.to_block(acquired.segment_lines)
+    store.exposure = getattr(acquired, "exposure_block", "")
 
     # ---- E: expectations ----------------------------------------------- #
     #
@@ -256,6 +257,8 @@ def forecast(
         peers=acquired.peer_block,
         macro=acquired.macro_block,
         working_revenue=_working_revenue(acquired, consensus),
+        industry=getattr(acquired, "industry_block", ""),
+        value_chain=getattr(acquired, "value_chain_block", ""),
     )
 
     # ---- C: analyse --------------------------------------------------- #

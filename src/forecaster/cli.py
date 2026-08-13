@@ -130,6 +130,8 @@ AGENT_LAYERS = {
     "lens_forensics": "E  analyse",
     "lens_peer_read": "E  analyse",
     "lens_macro": "E  analyse",
+    "lens_market": "E  analyse",
+    "lens_demand": "E  analyse",
     "champion": "F  challenge",
     "judge": "G  judge",
     "comparability": "V2 comparability",

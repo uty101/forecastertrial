@@ -163,6 +163,51 @@
       "tier": "none"
     },
     {
+      "detail": "covered by test_context.py",
+      "id": "perception",
+      "label": "Scanned perception",
+      "layer": "expect",
+      "state": "built",
+      "tests": 18,
+      "tier": "none"
+    },
+    {
+      "detail": "covered by test_context.py",
+      "id": "industry",
+      "label": "Industry size + share",
+      "layer": "acquire",
+      "state": "built",
+      "tests": 18,
+      "tier": "none"
+    },
+    {
+      "detail": "covered by test_context.py",
+      "id": "exposure",
+      "label": "Economies + input costs",
+      "layer": "acquire",
+      "state": "built",
+      "tests": 18,
+      "tier": "none"
+    },
+    {
+      "detail": "no test encodes its failure modes",
+      "id": "market",
+      "label": "Market lens",
+      "layer": "lenses",
+      "state": "partial",
+      "tests": 0,
+      "tier": "mid"
+    },
+    {
+      "detail": "no test encodes its failure modes",
+      "id": "demand",
+      "label": "Demand lens",
+      "layer": "lenses",
+      "state": "partial",
+      "tests": 0,
+      "tier": "mid"
+    },
+    {
       "detail": "covered by test_model_inputs.py",
       "id": "inputs",
       "label": "History \u2192 model inputs",
@@ -469,15 +514,16 @@
     }
   ],
   "totals": {
-    "built": 34,
-    "components": 47,
+    "built": 37,
+    "components": 52,
     "gates_passed": 2,
     "gates_total": 6,
     "missing": 0,
-    "partial": 13,
-    "tests": 335,
+    "partial": 15,
+    "tests": 353,
     "tests_by_file": {
       "tests/test_config.py": 4,
+      "tests/test_context.py": 18,
       "tests/test_d_model.py": 15,
       "tests/test_dcf.py": 19,
       "tests/test_dossier.py": 5,

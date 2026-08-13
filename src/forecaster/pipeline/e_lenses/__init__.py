@@ -26,11 +26,13 @@ from forecaster.events import EventLog
 from forecaster.llm.client import LLMClient
 from forecaster.pipeline.c_structure import EvidenceStore
 from forecaster.pipeline.e_lenses import (
+    demand,
     drivers,
     forensics,
     guidance,
     macro,
     margins,
+    market,
     peer_read,
 )
 from forecaster.pipeline.e_lenses.base import LensContext, LensFailure
@@ -48,6 +50,11 @@ LLM_LENSES = [
     (LensName.FORENSICS, forensics.run),
     (LensName.PEER_READ, peer_read.run),
     (LensName.MACRO, macro.run),
+    # Two more angles of attack, both on revenue but from opposite directions:
+    # Market asks whether the growth is the sector's or this company's, Demand
+    # asks what the people who actually write the cheques have said.
+    (LensName.MARKET, market.run),
+    (LensName.DEMAND, demand.run),
 ]
 
 
