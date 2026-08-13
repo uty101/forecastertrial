@@ -32,6 +32,12 @@ from forecaster.schemas import Basis, LensName, LensOutput
 
 log = structlog.get_logger()
 
+# See run_lens. 8000 truncated Peer read; 14000 truncated it again and also cut
+# Drivers off mid-string, which surfaces as "Invalid JSON: EOF while parsing"
+# rather than as a truncation — the same bug wearing a different error. Output is
+# billed on use, so headroom costs nothing until it is taken.
+LENS_MAX_TOKENS = 20000
+
 
 class LensResponse(BaseModel):
     """What every LLM lens must return. Forced as the output schema, so a lens
@@ -120,6 +126,14 @@ def run_lens(
             variables=variables,
             corpus=store.corpus(),
             run_index=run_index,
+            # Raised from the 8000 default after a live run lost the Peer read
+            # lens to `stop_reason=max_tokens`. A lens that reasons through six
+            # peers, cites each and states a mechanism per link is genuinely
+            # long, and truncation is the worst way to lose one: the work is
+            # done and paid for, and the output is discarded for want of a few
+            # hundred tokens. Output is the expensive half, so this is a ceiling
+            # rather than a target — nothing is charged for headroom unused.
+            max_tokens=LENS_MAX_TOKENS,
         )
     except LLMError as exc:
         raise LensFailure(f"{lens.value}: {exc}") from exc

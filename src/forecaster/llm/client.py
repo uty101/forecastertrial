@@ -331,10 +331,18 @@ class LLMClient:
     ) -> tuple[T, Usage]:
         system_text, user_text = prompt.render(variables)
 
-        # Render order is tools -> system -> messages, and caching is a prefix
-        # match. Stable content first (the instructions, then the corpus), the
-        # per-lens question last and outside the breakpoint.
-        system_blocks: list[dict] = [{"type": "text", "text": system_text}]
+        # Render order is tools -> system -> messages, and caching is a PREFIX
+        # match. So the corpus goes first and the breakpoint goes after it; the
+        # per-prompt instructions follow, outside the cached region.
+        #
+        # This was the other way round — instructions first, corpus second — and
+        # the comment justifying it said "stable content first". The corpus is
+        # stable across the fan-out; the instructions are not, since each lens
+        # has its own. With a per-lens block in front of the breakpoint the
+        # prefix differed on every call, so eight lenses each WROTE the corpus at
+        # the 1.25x write rate and none of them ever read one. A live run showed
+        # cached_in=0 on every single call, which is what sent me looking.
+        system_blocks: list[dict] = []
         if corpus:
             system_blocks.append(
                 {
@@ -343,6 +351,7 @@ class LLMClient:
                     "cache_control": {"type": "ephemeral"},
                 }
             )
+        system_blocks.append({"type": "text", "text": system_text})
 
         # k>1 runs must actually differ. Sampling parameters are rejected on
         # these models, so vary the prompt instead — this is the only honest way
@@ -401,6 +410,12 @@ class LLMClient:
             run=run_index,
             in_tokens=usage.input_tokens,
             cached_in=usage.cache_read_input_tokens,
+            # Logged beside the read, because the two together are the only way
+            # to see the cache working. A run where every call writes and none
+            # reads looks identical on `cached_in` alone — it reads as "no cache
+            # configured" rather than as "the cache is being paid for and thrown
+            # away", which is the more expensive of the two.
+            cache_write=usage.cache_creation_input_tokens,
             out_tokens=usage.output_tokens,
             cost_usd=round(usage.cost_usd, 5),
             latency_ms=latency_ms,

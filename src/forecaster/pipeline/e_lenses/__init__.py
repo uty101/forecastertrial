@@ -100,23 +100,40 @@ def run_all(
         except Exception as exc:  # noqa: BLE001 — one lens must not end the run
             return name, None, f"{type(exc).__name__}: {exc}"
 
-    with ThreadPoolExecutor(max_workers=max(len(selected), 1)) as pool:
-        for name, output, error in pool.map(_one, selected):
-            if error:
-                results.dropped[name.value] = error
-                log.warning("lens_dropped", lens=name.value, why=error)
-                if events:
-                    events.emit(EventType.NODE_FAILED, f"E_{name.value}", error=error)
-            else:
-                outputs[name] = output
-                if events:
-                    events.emit(
-                        EventType.NODE_DONE,
-                        f"E_{name.value}",
-                        eps=output.eps,
-                        confidence=output.confidence,
-                        latency_ms=output.latency_ms,
-                    )
+    # The first lens runs ALONE, and the rest fan out behind it.
+    #
+    # This is the cache. A prompt cache entry exists only once a request that
+    # wrote it has come back, so eight simultaneous requests all miss, all pay
+    # the 1.25x write premium, and none of them ever reads one — which is
+    # exactly what a live run showed: `cache_write=15248, cached_in=0` on every
+    # single lens. The corpus was being written eight times and read zero.
+    #
+    # Serialising one call costs about thirty seconds of wall clock and saves
+    # seven corpus writes. On a 15k-token corpus at mid-tier rates that is most
+    # of a third of the run's cost, and the wall clock is not the binding
+    # constraint here — the budget is.
+    warmup, rest = selected[:1], selected[1:]
+    completed = [_one(item) for item in warmup]
+
+    with ThreadPoolExecutor(max_workers=max(len(rest), 1)) as pool:
+        completed.extend(pool.map(_one, rest))
+
+    for name, output, error in completed:
+        if error:
+            results.dropped[name.value] = error
+            log.warning("lens_dropped", lens=name.value, why=error)
+            if events:
+                events.emit(EventType.NODE_FAILED, f"E_{name.value}", error=error)
+        else:
+            outputs[name] = output
+            if events:
+                events.emit(
+                    EventType.NODE_DONE,
+                    f"E_{name.value}",
+                    eps=output.eps,
+                    confidence=output.confidence,
+                    latency_ms=output.latency_ms,
+                )
 
     # Deterministic order, independent of thread completion order.
     results.kept = [outputs[name] for name, _ in LLM_LENSES if name in outputs]

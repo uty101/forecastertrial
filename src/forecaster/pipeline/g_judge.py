@@ -45,10 +45,18 @@ class JudgeResponse(BaseModel):
         description="Mean EPS. Differs from the median when the evidence implies "
         "a skewed outcome — say so in the rationale when it does."
     )
-    quantiles: dict[str, float] = Field(
-        description="EPS at the 0.1, 0.25, 0.5, 0.75 and 0.9 quantiles. Keys are "
-        "the levels as strings."
-    )
+    # Five named fields rather than one dict, and the reason is measured rather
+    # than stylistic: as a dict this came back EMPTY on two consecutive live
+    # runs, with the numbers written out in the rationale prose instead
+    # ("0.75 = 2.19, 0.90 = 2.27"). A free-form mapping asks the model to invent
+    # a key format and then fill it; five required floats ask it for five
+    # numbers. The judge is the single most expensive call in the system and
+    # both runs discarded it for a degraded fallback.
+    p10: float = Field(description="EPS at the 10th percentile.")
+    p25: float = Field(description="EPS at the 25th percentile.")
+    p50: float = Field(description="EPS at the 50th percentile — the median.")
+    p75: float = Field(description="EPS at the 75th percentile.")
+    p90: float = Field(description="EPS at the 90th percentile.")
     revenue: float | None = Field(
         default=None, description="Revenue, if the evidence supports one."
     )
@@ -57,13 +65,20 @@ class JudgeResponse(BaseModel):
         "the width of the distribution."
     )
 
+    @property
+    def quantiles(self) -> dict[str, float]:
+        """The five levels, keyed the way the rest of the system reads them."""
+        return dict(
+            zip(
+                REQUIRED_QUANTILES,
+                (self.p10, self.p25, self.p50, self.p75, self.p90),
+                strict=True,
+            )
+        )
+
     @model_validator(mode="after")
     def _quantiles_are_sane(self) -> JudgeResponse:
-        missing = [q for q in REQUIRED_QUANTILES if q not in self.quantiles]
-        if missing:
-            raise ValueError(f"judge omitted quantiles {missing}")
-
-        ordered = [self.quantiles[q] for q in REQUIRED_QUANTILES]
+        ordered = [self.p10, self.p25, self.p50, self.p75, self.p90]
         if ordered != sorted(ordered):
             # A non-monotonic CDF is not a distribution. Fail closed: this would
             # otherwise flow into calibration and produce intervals that are

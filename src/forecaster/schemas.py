@@ -35,6 +35,11 @@ class Basis(StrEnum):
 
 
 class SourceKind(StrEnum):
+    # A POINTER to a filing, taken from the SEC submissions index — "8-K filed
+    # 2026-05-20, accession 0001045810-26-000051". It asserts that the document
+    # exists and where it is, and nothing about what the document says. Distinct
+    # from FILING_8K, which is a sentence quoted out of the body.
+    FILING_INDEX = "filing_index"
     FILING_8K = "8k"
     FILING_10Q = "10q"
     FILING_10K = "10k"

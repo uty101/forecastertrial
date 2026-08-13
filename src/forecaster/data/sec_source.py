@@ -742,11 +742,6 @@ class SECSource:
             filed = datetime.strptime(filed_str, "%Y-%m-%d").date()
             if filed > as_of:
                 continue  # not knowable yet
-            kind = (
-                SourceKind.FILING_8K
-                if form.startswith("8-K")
-                else SourceKind.FILING_10Q
-            )
             folder = (
                 f"https://www.sec.gov/Archives/edgar/data/{cik.lstrip('0')}/"
                 f"{accession.replace('-', '')}"
@@ -757,7 +752,11 @@ class SECSource:
                     label=f"{form} filed {filed_str}",
                     value=None,
                     source=Source(
-                        kind=kind,
+                        # FILING_INDEX, not `kind`: this claim carries the
+                        # filing's EXISTENCE, and its quote is the index entry
+                        # rather than a sentence from the document. Anything
+                        # extracted out of the body later gets the body's kind.
+                        kind=SourceKind.FILING_INDEX,
                         uri=f"{folder}/{doc}",
                         as_of=filed,
                         accession=accession,
@@ -787,7 +786,7 @@ class SECSource:
                             label=f"{form} {exhibit_type} filed {filed_str}",
                             value=None,
                             source=Source(
-                                kind=kind,
+                                kind=SourceKind.FILING_INDEX,
                                 uri=f"{folder}/{filename}",
                                 as_of=filed,
                                 accession=accession,

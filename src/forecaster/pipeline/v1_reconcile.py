@@ -88,6 +88,16 @@ PROSE_SOURCES = {
 # citation.
 STRUCTURED_SOURCES = {
     SourceKind.XBRL,
+    # The submissions index. Its claims say "this 8-K exists, filed on this date,
+    # at this URL" — a fact from a typed JSON feed, not a sentence from the body.
+    #
+    # These were classified as prose and string-matched against the document they
+    # POINT AT, which fails by construction: the descriptor was never written
+    # anywhere in the exhibit. A live run dropped the Mechanical lens over it —
+    # the one lens with no model in it, so the one place a fabricated citation is
+    # impossible. The check was not catching a fabrication; it was measuring the
+    # wrong thing against the wrong document.
+    SourceKind.FILING_INDEX,
     SourceKind.CONSENSUS,
     SourceKind.SPONSOR,
     SourceKind.MACRO,

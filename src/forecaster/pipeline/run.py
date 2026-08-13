@@ -64,6 +64,7 @@ from forecaster.schemas import (
     LambdaPreset,
     LensName,
     LensOutput,
+    SourceKind,
 )
 
 log = structlog.get_logger()
@@ -646,7 +647,10 @@ def _extract_guidance(
             acquired.documents[claim.source.uri],
             claim.source.uri,
             claim.source.as_of,
-            source_kind=claim.source.kind,
+            # The pointer claim is FILING_INDEX; what comes OUT of the document
+            # is a quoted sentence from an 8-K exhibit, and must be string-matched
+            # like one.
+            source_kind=SourceKind.FILING_8K,
         )
         guides.extend(found)
         guide_claims.extend(claims)
@@ -722,7 +726,7 @@ def _extract_bridges(
         built, item_claims, rejected = extract.extract_bridge(
             client, ticker, acquired.documents[claim.source.uri],
             claim.source.uri, claim.source.as_of,
-            source_kind=claim.source.kind,
+            source_kind=SourceKind.FILING_8K,
         )
         notes.extend(rejected)
         if built is None:

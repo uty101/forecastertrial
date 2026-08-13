@@ -31,7 +31,7 @@ from datetime import date, timedelta
 import structlog
 
 from forecaster.config import settings
-from forecaster.data import exposure, segments, transcripts
+from forecaster.data import exposure, industry, segments, transcripts
 from forecaster.data.loader import Loader
 from forecaster.data.universe import profile
 from forecaster.events import EventLog
@@ -360,7 +360,12 @@ def acquire(
         # news search returns today's internet for a historical date, which does
         # not merely add noise: it hands the model the answer.
         sic = loader.sic(ticker, as_of)
-        industry = sic[1] if sic else company.sector
+        # `industry_name`, not `industry`: the latter is the imported MODULE,
+        # and shadowing it here made every non-replay run die at B8 with
+        # "'str' object has no attribute 'PeerRevenue'". It survived because
+        # every recent run started from a dossier, which skips acquisition
+        # entirely — the one code path that a replay can never exercise.
+        industry_name = sic[1] if sic else company.sector
         # And it is the SECTOR too, not just a search term. This was fetched,
         # used to build a query, and thrown away — so every company outside the
         # prepared list reached the Macro lens with `sector="unknown"` while its
@@ -369,8 +374,8 @@ def acquire(
         if sic and out.sector == "unknown":
             out.sector = sic[1]
         searches = [
-            (f"{industry} industry demand pricing outlook", "industry"),
-            (f"{ticker} {industry} earnings outlook guidance", "company"),
+            (f"{industry_name} industry demand pricing outlook", "industry"),
+            (f"{ticker} {industry_name} earnings outlook guidance", "company"),
         ]
         # Its own budget, deliberately. Peers are ranked above narrative and
         # should be — a peer's actual print beats any article about the

@@ -202,7 +202,7 @@ def test_judge_rejects_a_non_monotonic_cdf():
         JudgeResponse(
             median_eps=2.4,
             mean_eps=2.4,
-            quantiles={"0.1": 2.6, "0.25": 2.5, "0.5": 2.4, "0.75": 2.3, "0.9": 2.2},
+            p10=2.6, p25=2.5, p50=2.4, p75=2.3, p90=2.2,
             rationale="x",
         )
     assert "monotonically increasing" in str(err.value)
@@ -219,7 +219,7 @@ def test_judge_accepts_a_well_formed_distribution():
     response = JudgeResponse(
         median_eps=2.40,
         mean_eps=2.42,
-        quantiles={"0.1": 2.1, "0.25": 2.3, "0.5": 2.4, "0.75": 2.5, "0.9": 2.8},
+        p10=2.1, p25=2.3, p50=2.4, p75=2.5, p90=2.8,
         rationale="guidance carried it",
     )
     assert response.quantiles["0.9"] > response.quantiles["0.1"]
