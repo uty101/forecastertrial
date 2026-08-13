@@ -179,3 +179,32 @@ def test_lenses_get_more_room_than_the_client_default():
 
     default = inspect.signature(client_mod.LLMClient.call).parameters["max_tokens"]
     assert default.default < LENS_MAX_TOKENS
+
+
+# ---- the abstention ------------------------------------------------------ #
+
+
+def test_a_lens_cannot_return_an_empty_citation_list():
+    """Four of eight lenses came back with `claim_ids: []` on a live run.
+
+    That was being caught after the fact, in `run_lens`, which drops the lens —
+    so the work was done, billed, and thrown away. The constraint belongs in the
+    schema the model is decoding against: `messages.parse` enforces `minItems`,
+    so an empty list becomes ungeneratable rather than merely rejected.
+
+    Abstaining on the NUMBER is still fine, and is the point of the nullable
+    `eps` — a lens with thin evidence should say so. Abstaining on the EVIDENCE
+    is not: it makes the estimate unfalsifiable, which is the failure the whole
+    provenance design exists to prevent.
+    """
+    from forecaster.pipeline.e_lenses.base import LensResponse
+
+    with pytest.raises(ValidationError):
+        LensResponse(reasoning="nothing to say", claim_ids=[], confidence=0.1)
+
+    # eps=None with a citation is a legitimate answer and must stay one.
+    abstained = LensResponse(
+        eps=None, reasoning="guidance covers a different quarter",
+        claim_ids=["c4"], confidence=0.1,
+    )
+    assert abstained.eps is None

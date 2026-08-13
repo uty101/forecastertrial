@@ -75,7 +75,9 @@ V3 CALIBRATE   bootstrap our own backtest residuals
 I  OUTPUT      forecast + model + trace
 ```
 
-**The seven lenses:** Mechanical (no LLM — FX, share count, net interest, calendar), Guidance, Drivers, Margins, Forensics, Peer read, Macro.
+**The nine lenses:** Mechanical (no LLM — FX, share count, net interest, calendar), Guidance, Drivers, Demand, Market, Margins, Forensics, Peer read, Macro.
+
+Demand reads the value chain — a customer's capex budget IS this company's revenue, disclosed on a different calendar. Market splits growth into market growth and share change, which consensus forecasts as one number and almost never separates.
 
 Model tiering: cheap for acquisition and extraction, mid for lenses and champion, **expensive for the judge — one call, highest leverage**. λ is mostly plain code.
 
@@ -83,15 +85,35 @@ Model tiering: cheap for acquisition and extraction, mid for lenses and champion
 
 ## Current status
 
-**Stage 1 complete. 50 tests passing, ~3,300 lines.**
+**End to end and running live. 427 tests, 15 agents.**
 
-Built and tested:
-`schemas.py` · `data/protocol.py` · `data/cache.py` · `data/loader.py` · `model/graph.py` · `pipeline/e_lenses/mechanical.py` · `pipeline/v1_reconcile.py` · `pipeline/h_lambda.py` · `eval/shrinkage.py` · `eval/baseline.py` · `eval/backtest.py` · `events.py` · `cli.py` · tooling, Docker, CI
+The whole chain executes: acquire → extract → structure → model → 9 lenses →
+reconcile → champion → judge → comparability → λ → output, with the UI reading
+`out/*.json`. A full live run on NVDA costs **$1.24** and takes ~9 minutes.
 
-Written but **never run against live data** — verify these first:
-`data/sec_source.py` · `data/yfinance_source.py`
+**THE GATE NUMBER EXISTS.** `forecast cases` on 122 tickers gives n=487
+firm-quarters (adequately powered; the target is 350). Scored:
 
-Not started: all six LLM lenses, `llm/client.py`, evidence-store assembly, the linked 3-statement model, champion, judge, comparability, calibration, the entire UI.
+| | MAE |
+|---|---|
+| naive consensus | 0.2216 |
+| **consensus × 1.02 — the baseline to beat** | **0.1868** |
+
+Everything the pipeline produces is measured against 0.1868. Reproduce with
+`forecast cases --tickers ... && forecast backtest`.
+
+### What is still asserted rather than measured
+
+- **λ.** `FITTED_BETA` still holds three placeholder numbers and
+  `FITTED_BETA_MEASURED = False`. Fitting it needs `(consensus, own, actual)`
+  triples, and `own` is the judge's output — so it needs a pipeline run per case.
+  At $1.24 a run that is ~$600 for the full n=487 and ~$50 for a 40-case subset.
+  This is a spend decision, not a technical one; the harness (`forecast fit`)
+  is written and tested.
+- **The lens abstention rate.** On the last live run 5 of 8 lenses returned no
+  EPS or cited nothing. Some of that is honest — a lens with no evidence should
+  abstain — but three lenses returning empty `claim_ids` is a prompt-adherence
+  problem, not an evidence problem.
 
 `docs/TASKS.md` is the live board. Update it as things land.
 
@@ -102,6 +124,14 @@ Not started: all six LLM lenses, `llm/client.py`, evidence-store assembly, the l
 **GAAP vs non-GAAP.** Consensus is non-GAAP. SEC XBRL is GAAP. The median DJIA gap was **31%** in one recent quarter. Every EPS figure must declare its `Basis`. Getting this wrong produces a systematic one-directional error that looks like bad modelling. `Forecast` carries both.
 
 **`FITTED_BETA` in `h_lambda.py` holds three placeholder numbers.** They are meant to be the output of the Block 1 regression (`actual ~ α·consensus + β·own`). Until that runs, the thesis is asserted rather than measured. Do not treat them as tuned.
+
+**Replay is not the pipeline.** `--dossier` skips acquisition entirely, so any bug in stage B is invisible to it. `industry` went unimported in `b_acquire` for as long as it did because every run during that period was a replay, and the crash only appears on a cold run. Before trusting a change to acquisition, run it once WITHOUT `--dossier`.
+
+**Prompt caching is a prefix match, and a parallel fan-out defeats it.** Two separate bugs, both silent. The corpus must come BEFORE the per-prompt system text (otherwise every lens presents a different prefix), and the first lens must COMPLETE before the others start (otherwise there is no entry to read yet). Symptom of both: `cache_write` large, `cached_in` zero. Log them together — on the read alone it looks like caching was never configured.
+
+**A free-form dict is the wrong shape to ask a model for.** `quantiles: dict[str, float]` came back empty on two consecutive live runs, with the numbers written into the rationale prose instead. Five named float fields, filled every time. Ask for named things.
+
+**A pointer to a document is not a quote from it.** `SourceKind.FILING_INDEX` exists because SEC submissions-index claims ("8-K filed 2026-05-20, accession ...") were being string-matched against the document they point at, which fails by construction and dropped the one lens with no model in it.
 
 **The Dockerfile base image digest is literally `PINME`.** Pin it.
 

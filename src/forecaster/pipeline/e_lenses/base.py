@@ -62,8 +62,11 @@ class LensResponse(BaseModel):
         "A few sentences. No preamble."
     )
     claim_ids: list[str] = Field(
+        min_length=1,
         description="Ids of every claim relied on, exactly as they appear in the "
-        "evidence block. A lens citing nothing is dropped."
+        "evidence block — at least one, always. If the evidence does not support "
+        "an EPS estimate, cite what you DID read and return eps: null; that is a "
+        "useful answer. An empty list is not, and this lens is dropped for it.",
     )
     confidence: Annotated[float, Field(ge=0, le=1)] = Field(
         description="How much this lens trusts its own estimate, given its "
