@@ -307,6 +307,16 @@ export default function ModelScreen() {
   const syntheticTrace = Boolean(result?.trace?.synthetic);
   const mixed = syntheticTrace && Boolean(model);
   const showTraceFigures = Boolean(result) && !mixed;
+
+  // What one row of these statements actually is. Everything on this page used
+  // to say "quarter" regardless, which is right for a US filer and wrong for
+  // most of the world.
+  const periodUnit =
+    model?.cadence?.frequency === "half-yearly"
+      ? "half"
+      : model?.cadence?.frequency === "annual"
+        ? "year"
+        : "quarter";
   const bridge = showTraceFigures ? rawBridge : null;
 
   const readout: [string, string] = mixed || !f
@@ -360,9 +370,15 @@ export default function ModelScreen() {
             fraction={balanced ? 1 : balanced === false ? 0.3 : 0}
             tone={balanced ? "done" : balanced === false ? "failed" : "idle"}
             rows={[
-              ["base quarter", model?.base_period ?? "—"],
+              // "base quarter" was on the page for every company, including the
+              // ones that do not have quarters. Nestlé reports twice a year;
+              // Toyota on a March year-end. The unit is read off the filer's own
+              // period ends and printed, because a half labelled as a quarter
+              // understates every flow on this page by half and says nothing.
+              [`base ${periodUnit}`, model?.base_period ?? "—"],
               ["projecting", model?.forecast_period ?? "—"],
-              ["quarters reproduced", model?.checks.length ?? "—"],
+              ["reports", model?.cadence?.label ?? "assumed quarterly"],
+              [`${periodUnit}s reproduced`, model?.checks.length ?? "—"],
               // From the run, not the model. Withheld when the run is a fixture
               // for another company — a claim count is meaningless next to
               // statements it does not describe.

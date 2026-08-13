@@ -353,10 +353,24 @@ export interface DcfPayload {
   warnings: string[];
 }
 
+/** How often this company reports, read off its own period ends rather than
+ *  assumed. A half-yearly filer labelled "quarterly" has every flow on the page
+ *  understated by half, and nothing on screen would say so. */
+export interface Cadence {
+  frequency: "quarterly" | "half-yearly" | "annual";
+  periods_per_year: number;
+  label: string;
+  observed_gap_days: number;
+  n_periods: number;
+  inferred_from: string;
+  describe: string;
+}
+
 export interface ModelPayload {
   ticker: string;
   base_period: string;
   forecast_period: string;
+  cadence?: Cadence | null;
   balanced: boolean;
   balance_detail: string;
   statements: {

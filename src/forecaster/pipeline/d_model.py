@@ -51,7 +51,7 @@ import structlog
 
 from forecaster.data.history import History
 from forecaster.data.prices import PriceBar, vwap
-from forecaster.model import dcf, project
+from forecaster.model import cadence, dcf, project
 from forecaster.model.inputs import (
     RATIO_WINDOW,
     claim_for,
@@ -64,14 +64,15 @@ from forecaster.schemas import Claim
 
 log = structlog.get_logger()
 
-# How many past quarters to reproduce. Four covers a full seasonal cycle, which
-# matters: a model that nails three quarters and misses the December one has a
-# seasonality problem, and an average over fewer than four would hide it.
+# Retained as the DEFAULT for a quarterly filer. Both are now derived per
+# company from `cadence.infer` instead of assumed: a half-yearly reporter has no
+# fourth quarter to reproduce, and demanding four prior quarters of one is how a
+# Swiss filer with five years of history ends up with "not enough history".
+#
+# Four covers a full seasonal cycle for a quarterly filer, which matters: a model
+# that nails three quarters and misses the December one has a seasonality
+# problem, and an average over fewer than a cycle would hide it.
 BACKTEST_QUARTERS = 4
-
-# A quarter is only a fair test if the model can see enough prior quarters to
-# form its ratios. Testing against a base period with two quarters behind it
-# measures the thinness of the history, not the model.
 MIN_PRIOR_QUARTERS = 4
 
 
@@ -136,6 +137,10 @@ class ModelResult:
     # about fair value. None when the history is too thin to build one honestly.
     dcf: dict[str, Any] | None = None
     dcf_note: str = ""
+    # How often this company reports, and everything that follows from it. On
+    # the result rather than recomputed by each consumer, so the number the UI
+    # prints is the number the model used.
+    cadence: Any | None = None
     # The forecast side of the model: nine linked, balance-checked fiscal years
     # with every driver held at its historical level. Articulation without a
     # view — the slot the real forecast drops into.
@@ -189,10 +194,16 @@ def _actual(history: History, key: str, period: str) -> float | None:
 
 def _trailing(history: History, key: str, base: str, quarters: int = 4
               ) -> float | None:
-    """The last N quarters of a flow, summed. None unless all N are present.
+    """The last N PERIODS of a flow, summed. None unless all N are present.
 
-    A partial trailing year understates every ratio built on it, and the DCF
-    multiplies that error by ten years and a terminal value.
+    `quarters` is a period count, and the caller passes the company's own
+    seasonal cycle — four for a quarterly filer, two for a half-yearly one. A
+    fixed four would sum two years of a half-yearly reporter's revenue and call
+    it a trailing year, which is not a small error: every margin built on it
+    halves, and the DCF multiplies that by ten years and a terminal value.
+
+    A partial window returns None rather than a smaller sum, for the same
+    reason.
     """
     periods = history.periods()
     if base not in periods:
@@ -221,11 +232,19 @@ def _dcf_assumptions(
     to build one honestly. Thin means thin — a DCF assembled from three quarters
     and four assumptions is not a cheaper DCF, it is a different number.
     """
-    revenue = _trailing(history, "revenue", base)
+    # A trailing YEAR, so the window is however many periods make this
+    # company's year. Four for a quarterly filer; two for Nestlé. A hard four
+    # here would sum two years of a half-yearly reporter and call it one, which
+    # halves every margin built on it and is then compounded for a decade.
+    cycle = cadence.infer(
+        [o.period_end for rows in history.series.values() for o in rows]
+    ).seasonal_cycle
+
+    revenue = _trailing(history, "revenue", base, cycle)
     if not revenue:
         return None
 
-    operating_income = _trailing(history, "operating_income", base)
+    operating_income = _trailing(history, "operating_income", base, cycle)
     if operating_income is None:
         return None
 
@@ -233,8 +252,14 @@ def _dcf_assumptions(
     # DCF's job here is to state what the price assumes; seeding it with someone's
     # forecast would make it state that instead.
     periods = history.periods()
-    prior_base = periods[periods.index(base) - 4] if periods.index(base) >= 4 else None
-    prior_revenue = _trailing(history, "revenue", prior_base) if prior_base else None
+    prior_base = (
+        periods[periods.index(base) - cycle]
+        if periods.index(base) >= cycle
+        else None
+    )
+    prior_revenue = (
+        _trailing(history, "revenue", prior_base, cycle) if prior_base else None
+    )
     if growth_override is not None:
         growth = dcf.Input(growth_override, "assumed", "supplied by the caller")
     elif prior_revenue:
@@ -252,8 +277,8 @@ def _dcf_assumptions(
     else:
         growth = dcf.Input(0.05, "assumed", "no prior year to measure growth from")
 
-    tax = _trailing(history, "tax", base)
-    pretax = _trailing(history, "pretax_income", base)
+    tax = _trailing(history, "tax", base, cycle)
+    pretax = _trailing(history, "pretax_income", base, cycle)
     tax_rate = (
         dcf.Input(max(0.0, min(tax / pretax, 0.45)), "measured",
                   "trailing effective rate")
@@ -261,13 +286,13 @@ def _dcf_assumptions(
         else dcf.Input(0.21, "assumed", "no trailing tax history — US statutory")
     )
 
-    da = _trailing(history, "depreciation", base)
-    capex = _trailing(history, "capex", base)
+    da = _trailing(history, "depreciation", base, cycle)
+    capex = _trailing(history, "capex", base, cycle)
     receivables = _actual(history, "receivables", base) or 0.0
     inventory = _actual(history, "inventory", base) or 0.0
     payables = _actual(history, "payables", base) or 0.0
 
-    interest = _trailing(history, "interest_expense", base)
+    interest = _trailing(history, "interest_expense", base, cycle)
     debt = (_actual(history, "long_term_debt", base) or 0.0) + (
         _actual(history, "short_term_debt", base) or 0.0
     )
@@ -339,15 +364,17 @@ def _backtest(
     periods = history.periods()
     checks: list[QuarterCheck] = []
     skipped: list[str] = []
+    beat = cadence.infer([o.period_end for rows in history.series.values()
+                          for o in rows])
 
     # Newest first, but never so far back that the base has no ratios to form.
     candidates = list(reversed(periods))[:quarters]
     for target in candidates:
         index = periods.index(target)
-        if index < MIN_PRIOR_QUARTERS:
+        if index < beat.min_prior_periods:
             skipped.append(
-                f"{target}: only {index} prior quarters, below the "
-                f"{MIN_PRIOR_QUARTERS} needed to form ratios"
+                f"{target}: only {index} prior {beat.frequency} period(s), below "
+                f"the {beat.min_prior_periods} needed to form ratios"
             )
             continue
 
@@ -493,6 +520,19 @@ def build(
     if base is None:
         raise ValueError(f"{history.ticker}: no history to build a model from")
 
+    # THE CADENCE, read off the data rather than assumed. Everything below that
+    # used to be "four" is now "the company's own seasonal cycle": the backtest
+    # window, the trailing sums, the annualisation, the minimum history. Nestlé
+    # reports twice a year, and on the quarterly assumption its five years of
+    # statements came out as "not enough prior quarters".
+    beat = cadence.infer(
+        [o.period_end for rows in history.series.values() for o in rows]
+    )
+    if backtest_quarters == BACKTEST_QUARTERS:
+        backtest_quarters = beat.seasonal_cycle
+    if window == RATIO_WINDOW:
+        window = beat.min_prior_periods
+
     price = _avg_price(prices, avg_price)
 
     # The base quarter, rebuilt from its own actuals. Using the reported top
@@ -547,6 +587,7 @@ def build(
         claims=list((inputs.claims or {}).values()),
         checks=checks,
         skipped=skipped,
+        cadence=beat,
     )
 
     # The forecast scaffold. Not fatal if it cannot be built — the statements,
@@ -594,9 +635,17 @@ def to_block(result: ModelResult) -> str:
     cell graph. The error matters as much as the ratios: a lens arguing for a
     30bp margin change should know the model it feeds cannot resolve 30bp.
     """
+    # "base quarter" was wrong for most of the world. A lens told the base is a
+    # QUARTER when it is a half will reason about three months of anything.
+    unit = "period"
+    if result.cadence is not None:
+        unit = {"quarterly": "quarter", "half-yearly": "half",
+                "annual": "year"}[result.cadence.frequency]
     lines = [
-        f"THREE-STATEMENT MODEL — {result.ticker}, base quarter {result.base_period}, "
-        f"projecting {result.forecast_period}.",
+        f"THREE-STATEMENT MODEL — {result.ticker}, base {unit} {result.base_period}, "
+        f"projecting {result.forecast_period}. Reporting cadence: "
+        f"{result.cadence.label if result.cadence else 'assumed quarterly'} — every "
+        f"flow below is one {unit}, not one quarter.",
         result.balance_detail,
         "",
         "Ratio base (each a median over prior quarters; a projection moves these):",
@@ -636,6 +685,19 @@ def to_json(result: ModelResult) -> dict[str, Any]:
         "ticker": result.ticker,
         "base_period": result.base_period,
         "forecast_period": result.forecast_period,
+        "cadence": (
+            {
+                "frequency": result.cadence.frequency,
+                "periods_per_year": result.cadence.periods_per_year,
+                "label": result.cadence.label,
+                "observed_gap_days": round(result.cadence.observed_gap_days),
+                "n_periods": result.cadence.n_periods,
+                "inferred_from": result.cadence.inferred_from,
+                "describe": result.cadence.describe(),
+            }
+            if result.cadence
+            else None
+        ),
         "balanced": result.balanced,
         "balance_detail": result.balance_detail,
         "statements": result.statements,

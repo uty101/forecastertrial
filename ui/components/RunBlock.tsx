@@ -1,5 +1,6 @@
 "use client";
 
+import { useModel } from "@/lib/data";
 import type { RunState } from "@/lib/data";
 
 /**
@@ -14,6 +15,7 @@ import type { RunState } from "@/lib/data";
  * question "is this the one you just started" needs answering in one glance.
  */
 export default function RunBlock({ run }: { run: RunState }) {
+  const model = useModel();
   const forecast = run.result?.forecast;
   const elapsed = (run.events.at(-1)?.ts_ms ?? 0) / 1000;
   const tokens =
@@ -50,8 +52,32 @@ export default function RunBlock({ run }: { run: RunState }) {
         <span className="text-ink-3">·</span>
         <span className="text-ink">{forecast?.ticker ?? "—"}</span>
         <span className="text-ink-3">·</span>
+        <span className="num text-ink">{forecast?.period ?? "—"}</span>
+        <span className="text-ink-3">·</span>
         <span className="text-ink-3">AS_OF</span>
         <span className="num text-ink">{forecast?.as_of ?? "—"}</span>
+        {/* The reporting cadence, on the first line of the run readout.
+            Everything on every screen used to say "quarter" — correct for a US
+            filer and wrong for most of the world. A half read as a quarter
+            understates every flow by half and nothing on screen would say so,
+            so the inference is stated where it cannot be missed. */}
+        {model?.cadence && (
+          <>
+            <span className="text-ink-3">·</span>
+            <span
+              className="text-ink-2"
+              title={model.cadence.describe}
+              style={{
+                color:
+                  model.cadence.frequency === "quarterly"
+                    ? "var(--color-ink-2)"
+                    : "var(--color-consensus)",
+              }}
+            >
+              {model.cadence.label.toUpperCase()}
+            </span>
+          </>
+        )}
         {run.source === "replay" && (
           <span className="text-consensus">· REPLAY, ORIGINAL PACING</span>
         )}

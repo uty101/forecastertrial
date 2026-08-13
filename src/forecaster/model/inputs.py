@@ -124,9 +124,31 @@ def _require_shares(
 
 
 def next_period(period: str) -> str:
-    """`2027Q1` -> `2027Q2`, `2026Q4` -> `2027Q1`. Fiscal labels throughout."""
-    year, quarter = int(period[:4]), int(period[-1])
-    return f"{year}Q{quarter + 1}" if quarter < 4 else f"{year + 1}Q1"
+    """The period after this one, whatever cadence the filer reports on.
+
+        2027Q1 -> 2027Q2      2026Q4 -> 2027Q1
+        2026H1 -> 2026H2      2026H2 -> 2027H1
+        2025FY -> 2026FY
+
+    It used to parse the last character as a quarter number, which raises on
+    `2025FY` — and `2025FY` is what a half-yearly or annual reporter's latest
+    period is called. The traceback read `invalid literal for int(): 'Y'`, four
+    frames below anything about reporting frequency.
+    """
+    year = int(period[:4])
+    suffix = period[4:].upper()
+
+    if suffix.startswith("Q") and suffix[1:].isdigit():
+        quarter = int(suffix[1:])
+        return f"{year}Q{quarter + 1}" if quarter < 4 else f"{year + 1}Q1"
+    if suffix.startswith("H") and suffix[1:].isdigit():
+        half = int(suffix[1:])
+        return f"{year}H2" if half < 2 else f"{year + 1}H1"
+    if suffix in ("FY", "Y", ""):
+        return f"{year + 1}FY"
+    raise ValueError(
+        f"unrecognised period label {period!r} — expected a Q, H or FY suffix"
+    )
 
 
 def _upto(history: History, key: str, period: str, window: int) -> list[Observation]:
