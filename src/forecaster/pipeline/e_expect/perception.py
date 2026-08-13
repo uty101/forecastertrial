@@ -10,7 +10,7 @@ once because a forecast built partly on optimism is not a forecast, and once
 because it would double-count, since the optimism is why the multiple is what it
 is.
 
-So perception lands in exactly two places:
+So perception lands in three places, and a driver is not one of them:
 
     lambda      crowded positioning shrinks conviction. A good quarter into a
                 consensus long is a bad outcome, and that is a POSITION-SIZING
@@ -19,6 +19,14 @@ So perception lands in exactly two places:
     the judge   as context for interpreting agreement. Seven lenses agreeing
                 with a narrative the whole internet already holds is weaker
                 evidence than seven lenses agreeing against it.
+
+    the DCF     the equity risk PREMIUM and the width of the stress grid — not
+                the risk-free rate, which is a Treasury yield and an observable.
+                What sentiment speaks to is the compensation demanded above it.
+                And the direction is the one most people get backwards: a
+                unanimous narrative means the market has stopped pricing the
+                other outcome, so the premium is too NARROW for the real spread
+                of results. The discount rate goes up when everybody agrees.
 
 **Why it is worth having at all.** The thesis of the project is that consensus
 is beatable where it is structurally weak. Perception is the most direct
@@ -138,6 +146,67 @@ class Perception:
             )
         return 1.0, "coverage is neither crowded nor especially contested"
 
+    # ---- the valuation ------------------------------------------------- #
+
+    def risk_premium_adjustment(self) -> tuple[float, str]:
+        """What perception does to the EQUITY RISK PREMIUM in the DCF.
+
+        **Not the risk-free rate.** That is a Treasury yield — an observable
+        quoted to the basis point, and nothing about how an industry is written
+        about changes what the government pays to borrow. What sentiment speaks
+        to is the compensation investors are demanding ABOVE that rate, which is
+        precisely a statement about perceived risk.
+
+        The direction is the one most people get backwards. A UNANIMOUS narrative
+        does not mean low risk; it means the market has stopped pricing the other
+        outcome, so the premium being demanded is too NARROW for the real spread
+        of results. That is when a discount rate should go up, not down — the
+        cheapest moment to be wrong is when everybody agrees.
+
+        Contested coverage is the reverse: disagreement is already being paid
+        for, so no further adjustment is warranted for it.
+
+        Sized in basis points and small on purpose. This is a soft input in a
+        model where a 100bp move in WACC swings the answer 15–25%, and letting a
+        sentiment read move it further than that would make the valuation a
+        sentiment model with arithmetic attached.
+        """
+        if self.crowded("company"):
+            return (
+                0.005,
+                "the narrative is one-sided, so the market has stopped pricing "
+                "the other outcome — the premium it is demanding is too NARROW "
+                "for the real spread of results, and 50bp is ADDED rather than "
+                "removed",
+            )
+        spread = self.dispersion("company")
+        if spread is not None and spread > 0.55:
+            return (
+                0.0,
+                "the coverage is genuinely contested, so the disagreement is "
+                "already being paid for and no adjustment is warranted",
+            )
+        return 0.0, "no perception adjustment to the discount rate"
+
+    def stress_multiplier(self) -> tuple[float, str]:
+        """How much wider the sensitivity grid should be.
+
+        A one-sided narrative is a fragile one. The grid exists to say how much
+        the answer moves when the assumptions move, and when the consensus story
+        is unanimous the assumptions can move further than usual before anyone
+        notices — so the stress test should reach further, not less far.
+
+        This widens the STEPS, never the point estimate. The centre of the grid
+        stays where the arithmetic put it.
+        """
+        if self.crowded("company") or self.crowded("industry"):
+            return (
+                1.5,
+                "the narrative is unanimous, so the assumptions have further to "
+                "travel before anyone re-prices — the grid is widened by half",
+            )
+        return 1.0, "no widening; the coverage is not one-sided"
+
 
 def to_block(result: Perception) -> str:
     """For the judge. Framed as context for weighing agreement, not as evidence.
@@ -173,9 +242,13 @@ def to_block(result: Perception) -> str:
         )
 
     multiplier, why = result.lambda_multiplier()
+    premium, premium_why = result.risk_premium_adjustment()
+    stress, stress_why = result.stress_multiplier()
     lines += [
         "",
         f"  Effect on lambda: x{multiplier:.2f} — {why}.",
+        f"  Effect on the equity risk premium: {premium:+.2%} — {premium_why}.",
+        f"  Effect on the stress grid: x{stress:.1f} — {stress_why}.",
         "",
         "  Read it this way: lenses agreeing with a narrative the whole internet "
         "already holds is WEAKER evidence than lenses agreeing against it. The "

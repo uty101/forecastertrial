@@ -1,5 +1,5 @@
 id: champion
-version: 1
+version: 2
 model_tier: mid
 description: >
   Champion development. Argue each lens's case properly, then argue against it,
@@ -57,6 +57,44 @@ user: |
   {cited_claims_block}
 
   Develop this case, then argue against it. Return the thesis, the
-  counterargument, the surviving confidence in [0,1], and the single most
+  counterargument, the variant perception and why it persists, the pre-mortem,
+  two or three kill criteria, the surviving confidence in [0,1], and the single most
   material weakness. Be specific and compact — no preamble, no restatement of
   the instructions.
+
+  Then four things that turn a surviving case into a variant view. Each is hard
+  to answer with nothing, which is the point — a case that cannot answer them is
+  a number, not a view.
+
+  VARIANT PERCEPTION. What does this case believe that consensus does not? State
+  the BELIEF, not the conclusion. "Datacentre units grow faster than the Street
+  models because the constraint moved from chips to power" is a belief. "We are
+  above consensus" is a conclusion and says nothing about why.
+
+  WHY IT PERSISTS. Why has the market not already priced this? This is the
+  harder half and most notes skip it. A variant view with no answer here is an
+  assertion that thousands of paid professionals are simply wrong, which is
+  occasionally true and usually not. Acceptable answers name a MECHANISM:
+    - a disclosure nobody aggregates (a supplier's utilisation, a customer's
+      capex footnote, a segment table that has to be read across eight quarters)
+    - a horizon nobody is paid for (a two-quarter effect in a one-quarter market)
+    - a constraint that only appears somewhere else in the value chain
+    - a structural incentive: guidance is set to be beaten, so the bar is not
+      the estimate
+  If there is no such mechanism, SAY SO. "Consensus may simply be right here" is
+  a legitimate and useful answer, and it is what should collapse conviction.
+
+  PRE-MORTEM. It is three months on and this case was wrong. What happened? Name
+  the specific assumption that failed. In practice it is almost always one of
+  two things: a driver assumption that was never evidenced, or a comparability
+  break — an acquisition, a 53rd week, an accounting change — that made the
+  year-on-year comparison meaningless. "The market moved against us" is not a
+  pre-mortem, it is a shrug.
+
+  KILL CRITERIA. Two or three observable events, BEFORE the print, that would
+  say this case is wrong. Each must name something checkable and where it would
+  be seen:
+    - "AMD guides datacentre revenue down at its 12 Aug call" — a criterion
+    - "TSMC monthly revenue falls below NT$250bn" — a criterion
+    - "the thesis breaks" — not a criterion, it is the conclusion restated
+  A case whose kill criteria cannot be checked before the print has none.

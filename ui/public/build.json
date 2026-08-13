@@ -168,7 +168,7 @@
       "label": "Scanned perception",
       "layer": "expect",
       "state": "built",
-      "tests": 18,
+      "tests": 23,
       "tier": "none"
     },
     {
@@ -177,7 +177,7 @@
       "label": "Industry size + share",
       "layer": "acquire",
       "state": "built",
-      "tests": 18,
+      "tests": 23,
       "tier": "none"
     },
     {
@@ -186,7 +186,7 @@
       "label": "Economies + input costs",
       "layer": "acquire",
       "state": "built",
-      "tests": 18,
+      "tests": 23,
       "tier": "none"
     },
     {
@@ -520,10 +520,10 @@
     "gates_total": 6,
     "missing": 0,
     "partial": 15,
-    "tests": 353,
+    "tests": 358,
     "tests_by_file": {
       "tests/test_config.py": 4,
-      "tests/test_context.py": 18,
+      "tests/test_context.py": 23,
       "tests/test_d_model.py": 15,
       "tests/test_dcf.py": 19,
       "tests/test_dossier.py": 5,

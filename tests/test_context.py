@@ -253,3 +253,81 @@ def test_the_block_frames_agreement_as_weak_evidence():
     assert "ALREADY BELIEVED" in block
     assert "WEAKER evidence" in block
     assert "never the estimate" in block
+
+
+# --------------------------------------------------------------------------- #
+# perception reaching the valuation
+# --------------------------------------------------------------------------- #
+
+
+def test_a_unanimous_narrative_RAISES_the_discount_rate():
+    """The direction most people get backwards.
+
+    Unanimity does not mean low risk. It means the market has stopped pricing
+    the other outcome, so the premium it is demanding is too NARROW for the real
+    spread of results — and the cheapest moment to be wrong is when everybody
+    agrees. The premium goes up, not down.
+    """
+    crowded = P.Perception("T", reads=[_read("bullish") for _ in range(6)])
+
+    premium, why = crowded.risk_premium_adjustment()
+
+    assert premium > 0
+    assert "too NARROW" in why
+
+
+def test_contested_coverage_leaves_the_discount_rate_alone():
+    """Disagreement is already being paid for."""
+    split = P.Perception(
+        "T",
+        reads=[_read("bullish", 1.0) for _ in range(3)]
+        + [_read("bearish", 1.0) for _ in range(3)],
+    )
+
+    assert split.risk_premium_adjustment()[0] == 0.0
+
+
+def test_the_adjustment_is_small_relative_to_what_wacc_does():
+    """A 100bp move in WACC swings a DCF 15-25%. Letting a sentiment read move
+    it further than that would make the valuation a sentiment model with
+    arithmetic attached."""
+    crowded = P.Perception("T", reads=[_read("bullish") for _ in range(6)])
+
+    assert abs(crowded.risk_premium_adjustment()[0]) <= 0.01
+
+
+def test_a_fragile_narrative_widens_the_stress_grid():
+    """The assumptions have further to travel before anyone re-prices, so the
+    stress test should reach further."""
+    crowded = P.Perception("T", reads=[_read("bearish") for _ in range(6)])
+
+    multiplier, why = crowded.stress_multiplier()
+
+    assert multiplier > 1.0
+    assert "unanimous" in why
+
+
+def test_widening_the_grid_does_not_move_the_point_estimate():
+    """The centre stays where the arithmetic put it. A stress test that moves
+    the answer is not a stress test."""
+    from forecaster.model import dcf
+
+    assumptions = dcf.Assumptions(
+        risk_free=dcf.Input(0.04, "market", "t"),
+        equity_risk_premium=dcf.Input(0.055, "assumed", "t"),
+        beta=dcf.Input(1.0, "assumed", "t"),
+        cost_of_debt=dcf.Input(0.05, "measured", "t"),
+        tax_rate=dcf.Input(0.21, "measured", "t"),
+        revenue_growth=dcf.Input(0.10, "measured", "t"),
+        ebit_margin=dcf.Input(0.20, "measured", "t"),
+        da_pct=dcf.Input(0.04, "measured", "t"),
+        capex_pct=dcf.Input(0.05, "measured", "t"),
+        nwc_pct=dcf.Input(0.10, "measured", "t"),
+        terminal_growth=dcf.Input(0.025, "assumed", "t"),
+    )
+    narrow = dcf.sensitivity("T", 1000.0, assumptions, 0.0, 100.0, 50.0)
+    wide = dcf.sensitivity("T", 1000.0, assumptions, 0.0, 100.0, 50.0, stress=1.5)
+
+    centre = len(narrow["wacc_steps"]) // 2
+    assert narrow["values"][centre][centre] == wide["values"][centre][centre]
+    assert abs(wide["wacc_steps"][0]) > abs(narrow["wacc_steps"][0])

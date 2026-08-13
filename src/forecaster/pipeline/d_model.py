@@ -211,6 +211,7 @@ def _dcf_assumptions(
     risk_free: float | None = None,
     beta: float | None = None,
     equity_risk_premium: float | None = None,
+    erp_note: str = "",
     terminal_growth: float | None = None,
     growth_override: float | None = None,
 ) -> tuple[dcf.Assumptions, float] | None:
@@ -287,7 +288,8 @@ def _dcf_assumptions(
         equity_risk_premium=dcf.Input(
             equity_risk_premium if equity_risk_premium is not None
             else dcf.DEFAULT_EQUITY_RISK_PREMIUM,
-            "assumed", "an assumption in every model ever built",
+            "assumed",
+            erp_note or "an assumption in every model ever built",
         ),
         beta=dcf.Input(
             beta if beta is not None else dcf.DEFAULT_BETA, "assumed",
@@ -401,6 +403,9 @@ def _valuation(
     prices: list[PriceBar] | None,
     shares: float | None,
     risk_free: float | None = None,
+    erp_adjustment: float = 0.0,
+    erp_note: str = "",
+    stress: float = 1.0,
 ) -> tuple[dict[str, Any] | None, str]:
     """The DCF, or a plain statement of why there isn't one.
 
@@ -415,7 +420,15 @@ def _valuation(
     if not shares or shares <= 0:
         return None, "no diluted share count, so there is no per-share value"
 
-    assembled = _dcf_assumptions(history, base, ratios, risk_free=risk_free)
+    assembled = _dcf_assumptions(
+        history, base, ratios, risk_free=risk_free,
+        equity_risk_premium=(
+            dcf.DEFAULT_EQUITY_RISK_PREMIUM + erp_adjustment
+            if erp_adjustment
+            else None
+        ),
+        erp_note=erp_note,
+    )
     if assembled is None:
         return None, (
             "not enough trailing history: a DCF built from a partial year and "
@@ -451,7 +464,8 @@ def _valuation(
         else (None, "no market price, so there is nothing to invert")
     )
     grid = dcf.sensitivity(
-        history.ticker, revenue, assumptions, net_debt, shares, market_price
+        history.ticker, revenue, assumptions, net_debt, shares, market_price,
+        stress=stress,
     )
     return dcf.to_json(valuation, implied, grid), dcf.to_block(valuation, implied)
 
@@ -464,6 +478,9 @@ def build(
     window: int = RATIO_WINDOW,
     backtest_quarters: int = BACKTEST_QUARTERS,
     risk_free: float | None = None,
+    erp_adjustment: float = 0.0,
+    erp_note: str = "",
+    stress: float = 1.0,
 ) -> ModelResult:
     """Build the model and measure it. Deterministic — no model calls.
 
@@ -554,7 +571,8 @@ def build(
                 log.warning("projection_skipped", error=str(exc))
 
     result.dcf, result.dcf_note = _valuation(
-        history, base, ratios, prices, inputs.shares_open, risk_free=risk_free
+        history, base, ratios, prices, inputs.shares_open, risk_free=risk_free,
+        erp_adjustment=erp_adjustment, erp_note=erp_note, stress=stress,
     )
 
     log.info(

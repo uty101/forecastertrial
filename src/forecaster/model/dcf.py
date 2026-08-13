@@ -465,6 +465,7 @@ def sensitivity(
     market_price: float | None,
     wacc_steps: tuple[float, ...] = (-0.01, -0.005, 0.0, 0.005, 0.01),
     growth_steps: tuple[float, ...] = (-0.01, -0.005, 0.0, 0.005, 0.01),
+    stress: float = 1.0,
 ) -> dict[str, Any]:
     """Value per share across a WACC × terminal-growth grid.
 
@@ -476,6 +477,14 @@ def sensitivity(
     build-up — moving WACC directly would leave the cost of equity and the stated
     build-up disagreeing with the number actually used.
     """
+    # A one-sided narrative is a fragile one: the assumptions have further to
+    # travel before anyone re-prices, so the stress test should reach further.
+    # This widens the STEPS and never moves the centre — the point estimate
+    # stays where the arithmetic put it.
+    if stress != 1.0:
+        wacc_steps = tuple(step * stress for step in wacc_steps)
+        growth_steps = tuple(step * stress for step in growth_steps)
+
     grid: list[list[float | None]] = []
     for wacc_delta in wacc_steps:
         row: list[float | None] = []
@@ -508,6 +517,7 @@ def sensitivity(
         "wacc_steps": list(wacc_steps),
         "growth_steps": list(growth_steps),
         "values": grid,
+        "stress": stress,
     }
 
 
