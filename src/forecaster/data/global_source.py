@@ -261,6 +261,17 @@ class GlobalSource:
         industry = info.get("industry") or info.get("sector")
         return ("", industry) if industry else None
 
+    def get_reporting_currency(self, ticker: str, as_of: date) -> str | None:
+        """What the statements are denominated in — CHF, JPY, EUR."""
+        try:
+            import yfinance as yf
+        except ImportError:  # pragma: no cover
+            return None
+        try:
+            return self._currency(yf.Ticker(ticker))
+        except Exception:  # noqa: BLE001
+            return None
+
     def get_name(self, ticker: str, as_of: date) -> str | None:
         """The company's own name, for a ticker nobody prepared in advance.
 

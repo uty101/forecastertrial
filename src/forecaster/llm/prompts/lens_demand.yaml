@@ -1,5 +1,5 @@
 id: lens_demand
-version: 1
+version: 2
 model_tier: mid
 description: >
   The value chain one link up and one link down. A customer's capital budget IS
@@ -7,6 +7,8 @@ description: >
   order book leads its shipments.
 
 system: |
+  {period_note}
+
   You are a sell-side analyst reading this company through the people who buy
   from it and the people who sell to it, rather than through the company itself.
 

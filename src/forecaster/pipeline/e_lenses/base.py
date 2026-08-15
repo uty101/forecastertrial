@@ -190,9 +190,49 @@ def run_lens(
     )
 
 
+# What one reporting period IS, read off the period label. Every lens prompt in
+# this repo was written for a US filer and says "quarter" throughout — perfectly
+# correct for NVDA and a straightforward contradiction for Nestlé, which is
+# handed a period called `2026FY` and asked what it will earn "this quarter".
+#
+# The lenses did the honest thing with that: all eight cited their evidence and
+# then declined to state a number, because the question did not match the
+# evidence. Nothing failed, nothing raised, and the run died at V1 with every
+# lens abstaining — which reads as a model problem and is a vocabulary problem.
+PERIOD_KINDS = {"Q": "quarter", "H": "half", "F": "financial year"}
+
+
+def period_kind(period: str) -> str:
+    """`2027Q2` -> quarter, `2026H1` -> half, `2025FY` -> financial year."""
+    suffix = period[4:5].upper() if len(period) > 4 else "Q"
+    return PERIOD_KINDS.get(suffix, "period")
+
+
 def common_vars(ticker: str, period: str, basis: Basis) -> dict:
-    """The three variables every lens prompt takes."""
-    return {"ticker": ticker, "period": period, "basis": basis.value}
+    """The variables every lens prompt takes.
+
+    `period_kind` is the one that makes a prompt written for quarterly US filers
+    work on a company that reports twice a year, and it is passed to every lens
+    rather than to the two that obviously need it — a Macro lens reasoning about
+    "the quarter" when the period is a year is wrong in exactly the same way.
+    """
+    kind = period_kind(period)
+    return {
+        "ticker": ticker,
+        "period": period,
+        "basis": basis.value,
+        "period_kind": kind,
+        "period_note": (
+            f"THIS COMPANY REPORTS BY {kind.upper()}. The forecast period "
+            f"{period} is one {kind}, not one quarter. Wherever the instructions "
+            f"below say \"quarter\", read \"{kind}\" — including in every "
+            f"comparison, every year-on-year figure and every annualisation. A "
+            f"{kind} of revenue compared against a quarter of it is not a "
+            f"comparison."
+            if kind != "quarter"
+            else "This company reports quarterly."
+        ),
+    }
 
 
 @dataclass

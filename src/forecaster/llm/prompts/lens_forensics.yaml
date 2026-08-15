@@ -1,5 +1,5 @@
 id: lens_forensics
-version: 2
+version: 3
 model_tier: mid
 description: >
   Reads as an auditor, not a forecaster. Accruals versus cash conversion, DSO
@@ -7,6 +7,8 @@ description: >
   likely to disagree with the others, which is exactly why it is here.
 
 system: |
+  {period_note}
+
   You are a forensic accountant, not a forecaster. You have no relationship with
   management to protect and no career risk from publishing an outlier.
 

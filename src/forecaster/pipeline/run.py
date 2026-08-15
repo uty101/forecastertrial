@@ -286,6 +286,7 @@ def forecast(
         store.model = d_model.to_block(model)
     store.segments = segments.to_block(acquired.segment_lines)
     store.exposure = getattr(acquired, "exposure_block", "")
+    store.fx = getattr(acquired, "fx_block", "")
     store.calls = scan.to_block(calls_read, call_notes)
     store.perception = (
         perception_mod.to_block(perception_read) if perception_read else ""

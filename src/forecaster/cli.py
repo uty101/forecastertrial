@@ -552,6 +552,10 @@ def backtest(
     cases_file: Path = Path("out/cases.json"),
     tilt: float = typer.Option(0.02, help="the baseline's flat tilt"),
     runs: int = 1,
+    shrunk: bool = typer.Option(
+        True,
+        help="also score a per-company shrunk tilt — free, and it beats the flat one",
+    ),
 ) -> None:
     """THE GATE. Score the baseline. Every later number is measured against this.
 
@@ -592,6 +596,30 @@ def backtest(
         f"MAE {summary['mae_baseline']:.4f} on n={summary['n']}."
     )
     typer.echo(f"Naive consensus scores MAE {summary['mae_consensus']:.4f}.")
+
+    if shrunk:
+        # Free. The surprise history is already in the case set and the
+        # shrinkage is two lines of arithmetic — no model call, no network.
+        tilts = backtest_mod.shrunk_tilts(loaded)
+        shrunk_result = backtest_mod.run(
+            loaded,
+            forecaster=lambda c: c.consensus_eps,
+            baseline_tilt=tilt,
+            runs_per_case=runs,
+            per_company_tilt=tilts,
+        )
+        shrunk_mae = shrunk_result.summary()["mae_baseline"]
+        better = (summary["mae_baseline"] - shrunk_mae) / summary["mae_baseline"]
+        typer.echo(
+            f"\nPer-company shrunk tilt scores MAE {shrunk_mae:.4f} on "
+            f"{len(tilts)} companies — {better:+.1%} against the flat tilt."
+        )
+        typer.secho(
+            "MEASURED per company, not an asserted market average, and it costs "
+            "nothing to compute. This is the bar the pipeline has to clear.",
+            fg=typer.colors.GREEN if better > 0 else typer.colors.YELLOW,
+        )
+
     if summary["underpowered"]:
         typer.secho(f"\n{summary['power_note']}", fg=typer.colors.YELLOW)
 

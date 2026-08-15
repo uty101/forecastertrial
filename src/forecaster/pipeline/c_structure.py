@@ -78,6 +78,7 @@ class EvidenceStore:
     # industry buys, each naming the model driver it moves. Macro and Margins
     # both need it, so it rides in the cached prefix rather than in two turns.
     exposure: str = ""
+    fx: str = ""
     # What changed across eight earnings calls, and what the coverage believes.
     # Both in the cached prefix for the usual reason: identical for every lens.
     # GAAP vs non-GAAP is the error that looks like a bad model rather
@@ -125,6 +126,8 @@ class EvidenceStore:
             lines += [self.calls, "", "-" * 70, ""]
         if self.perception:
             lines += [self.perception, "", "-" * 70, ""]
+        if self.fx:
+            lines += [self.fx, "", "-" * 70, ""]
         if self.exposure:
             lines += [self.exposure, "", "-" * 70, ""]
         if self.expectations:

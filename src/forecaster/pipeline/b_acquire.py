@@ -31,7 +31,14 @@ from datetime import date, timedelta
 import structlog
 
 from forecaster.config import settings
-from forecaster.data import exposure, industry, ir_site, segments, transcripts
+from forecaster.data import (
+    exposure,
+    fx,
+    industry,
+    ir_site,
+    segments,
+    transcripts,
+)
 from forecaster.data.loader import Loader
 from forecaster.data.universe import profile
 from forecaster.events import EventLog
@@ -135,6 +142,13 @@ class Acquired:
     # industry buys — each naming the model driver it moves.
     exposure: object | None = None
     exposure_block: str = ""
+    # Currency: revenue by currency, and the three different things a move in
+    # one of them means. See `data/fx.py`.
+    fx: object | None = None
+    fx_block: str = ""
+    # What the statements are denominated in. CHF for Nestlé; the default is
+    # only right for a US filer.
+    reporting_currency: str = "USD"
     value_chain_block: str = ""
     # (region, share of revenue). The geographic split IS the FX translation
     # exposure, which is the input the Mechanical lens could not previously get.
@@ -571,6 +585,13 @@ def acquire(
     # the revenue split. Input costs come from the company's own SIC code, so
     # this works on a ticker nobody prepared for.
     with events.node("B9_exposure"):
+        # The statements' own currency. Defaulting to USD is right for a US
+        # filer and silently wrong for everyone else, and it is `home_share`
+        # that depends on it — a Swiss company whose reporting currency is
+        # recorded as USD looks like it earns nothing at home.
+        out.reporting_currency = (
+            loader.reporting_currency(ticker, as_of) or "USD"
+        )
         out.exposure = exposure.build(
             ticker, out.geo_mix, sic[0] if sic else None
         )
@@ -586,6 +607,36 @@ def acquire(
                 ticker, out.geo_mix, sic[0] if sic else None, changes
             )
         out.exposure_block = exposure.to_block(out.exposure)
+
+        # CURRENCY, from the same revenue split. The FX leg was inert because
+        # regions are not currencies — "Americas" is not a rate — so it degraded
+        # to zero and sat in the Mechanical lens doing nothing. Mapping the
+        # regions is the piece that was missing.
+        #
+        # Kept separate from `exposure` because a currency move is THREE claims,
+        # not one: translation (arithmetic, Mechanical), competitive position (a
+        # strong home currency against a domestic cost base, Market) and demand
+        # (a currency falling hard is often an economy under pressure, weakly,
+        # Demand). Collapsing them into one adjustment is what made the old leg
+        # both wrong and uncomputable.
+        fx_rates = dict(changes)
+        if macro_source is not None:
+            fx_wanted = [
+                e.series_id
+                for e in fx.build(ticker, out.geo_mix).exposures
+                if e.series_id and e.series_id not in fx_rates
+            ]
+            if fx_wanted:
+                for series_id, points in (
+                    macro_source.get_macro(fx_wanted, as_of) or {}
+                ).items():
+                    usable = [p for p in points if p.value is not None]
+                    if len(usable) >= 2 and usable[0].value:
+                        fx_rates[series_id] = usable[-1].value / usable[0].value - 1
+        out.fx = fx.build(
+            ticker, out.geo_mix, out.reporting_currency, fx_rates
+        )
+        out.fx_block = fx.to_block(out.fx)
         events.emit(
             EventType.NODE_DONE,
             "B9_exposure",

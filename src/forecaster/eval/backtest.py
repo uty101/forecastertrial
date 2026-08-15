@@ -227,11 +227,47 @@ class Result:
 Forecaster = Callable[[Case], float]
 
 
+def shrunk_tilts(cases: list[Case]) -> dict[str, float]:
+    """Per-company surprise tilt, shrunk toward the peer group. Costs nothing.
+
+    The flat 2% baseline applies the market's average tilt to every company. But
+    the surprise history is per company and already on disk, and at n≈4 the raw
+    median is mostly sampling noise — Boeing's raw median surprise in the case
+    set is +141%, which is one quarter of a near-zero denominator and not a
+    property of the company.
+
+    James-Stein handles exactly that: a company with a long, consistent record
+    keeps its own number, one with a few erratic quarters is pulled to the group.
+    Boeing's +141% shrinks to +5.6%; Cigna's steady +2.4% survives untouched.
+
+    Every company is shrunk against the OTHERS, never against a group containing
+    itself — including itself would let a wild company pull the mean it is then
+    measured against, which flatters it exactly where the shrinkage is needed.
+    """
+    from forecaster.eval.baseline import company_tilt
+
+    by_ticker: dict[str, list[float]] = {}
+    for case in cases:
+        if case.consensus_eps and abs(case.consensus_eps) > 0.01:
+            by_ticker.setdefault(case.ticker, []).append(
+                case.actual_eps / case.consensus_eps - 1
+            )
+
+    usable = {t: v for t, v in by_ticker.items() if len(v) >= 2}
+    return {
+        ticker: company_tilt(
+            ticker, own, {t: v for t, v in usable.items() if t != ticker}
+        ).shrunk
+        for ticker, own in usable.items()
+    }
+
+
 def run(
     cases: list[Case],
     forecaster: Forecaster,
     baseline_tilt: float = 0.02,
     runs_per_case: int = 1,
+    per_company_tilt: dict[str, float] | None = None,
 ) -> Result:
     """Score a forecaster against actuals, consensus and the baseline.
 
@@ -259,7 +295,15 @@ def run(
             Scored(
                 case=case,
                 forecast=forecast,
-                baseline=case.consensus_eps * (1 + baseline_tilt),
+                baseline=case.consensus_eps
+                * (
+                    1
+                    + (
+                        per_company_tilt.get(case.ticker, baseline_tilt)
+                        if per_company_tilt
+                        else baseline_tilt
+                    )
+                ),
             )
         )
 

@@ -147,6 +147,15 @@ class Loader:
             ),
         )
 
+    def reporting_currency(self, ticker: str, as_of: date):
+        """What the statements are denominated in. CHF for Nestlé."""
+        return self.resolve(
+            f"currency:{ticker}",
+            lambda s: getattr(s, "get_reporting_currency", lambda *_, **__: None)(
+                ticker, as_of
+            ),
+        )
+
     def company_name(self, ticker: str, as_of: date):
         """The company's own name. Every text search is built from it."""
         return self.resolve(

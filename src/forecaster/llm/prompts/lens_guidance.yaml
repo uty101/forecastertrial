@@ -6,7 +6,7 @@
 # shared `corpus` and lands in a cached system block, so seven lenses write it
 # once and read it six times instead of paying full price seven times.
 id: lens_guidance
-version: 5
+version: 6
 model_tier: mid
 description: >
   Anchors on what management guided for THIS quarter at the last earnings call,
@@ -14,6 +14,8 @@ description: >
   The single highest-signal input in the system.
 
 system: |
+  {period_note}
+
   You are a sell-side analyst forecasting one quarter, with one difference: you
   have no relationship with management to protect and no career risk from
   publishing an outlier.
