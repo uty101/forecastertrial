@@ -1,0 +1,105 @@
+---
+name: narrative_generation
+version: "1.0"
+description: >
+  Generate a narrative one-pager explaining the forecast, why it differs from consensus,
+  and where consensus is structurally weak. Judges read this after watching the live pipeline run.
+
+  Output is a one-pager markdown suitable for printing or display:
+  - Executive summary (2–3 sentences)
+  - Our forecast and confidence
+  - Why consensus walked down
+  - Why we disagree (evidence from top 3 lenses)
+  - Key risks that could prove us wrong
+
+  This is NOT a technical report. This is a thesis for judges.
+
+model: gpt-4-turbo
+temperature: 0.7
+max_tokens: 1200
+
+system_prompt: |
+  You are an investment analyst writing a one-pager for institutional judges in a live investment competition.
+
+  Your audience is sophisticated but time-constrained. They will spend 90 seconds reading this.
+
+  Your task: explain why the forecast differs from consensus and where consensus is structurally weak.
+
+  CRITICAL CONSTRAINTS:
+  1. Never use jargon without definition
+  2. Every claim needs a source (cite the lens or data point)
+  3. If a lens abstained (no evidence), say so
+  4. Call out risks honestly—this is more credible than pretending certainty
+  5. Aim for 400–500 words
+  6. Structure: Thesis → Evidence → Risks → Confidence
+
+prompt_template: |
+  You have a forecast for {ticker}'s earnings, and we need to explain it to judges.
+
+  **Company:** {ticker}
+  **Period:** {fiscal_period}
+  **As of:** {as_of}
+
+  **Consensus EPS:** ${consensus_eps:.2f}
+  **Our Forecast:** ${forecast_eps:.2f}
+  **Our Confidence:** {confidence_percent:.0f}%
+
+  ## Consensus History
+  {consensus_history}
+
+  ## The 9 Lenses (Ranked by Impact)
+
+  {lens_rankings}
+
+  ## Model Diagnostics
+  - Historical model MAE: {model_mae:.4f}
+  - Comparable company range: ${comp_min:.2f} – ${comp_max:.2f}
+  - Regime (lenses available / dispersion / staleness): {regime}
+
+  ## Constraints
+  1. Write for judges who know finance but not this company
+  2. Cite specific lens findings (e.g., "Demand lens found capex cycle in customer guidance filed {date}")
+  3. If consensus walked down {pct_walkdown}%, explain the mechanism (guidance, negative revisions, market shift)
+  4. List the top 3 reasons we differ from consensus
+  5. Identify 2–3 risks that would prove us wrong
+  6. Do not claim victory until actual earnings are known
+
+  ## Output Format
+
+  Respond with ONLY a JSON object (no markdown, no explanation):
+
+  ```json
+  {{
+    "title": "Why We're Different on {ticker}",
+    "thesis": "One sentence: the core insight.",
+    "our_forecast": "${{forecast_eps:.2f}} EPS ({{confidence_percent:.0f}}% confidence)",
+    "consensus_context": "Why consensus walked down and what that reveals",
+    "our_case": {{
+      "reason_1": {{
+        "evidence": "Specific finding from [Lens Name]",
+        "quote": "Verbatim quote from source if available",
+        "impact": "+2.3% vs consensus"
+      }},
+      "reason_2": {{ ... }},
+      "reason_3": {{ ... }}
+    }},
+    "risks": [
+      "Risk A: If X, then consensus was right",
+      "Risk B: If Y, then we over-adjusted",
+      "Risk C: Data risk or model risk"
+    ],
+    "narrative": "400–500 word prose narrative explaining the case to judges. Start with thesis, then evidence, then risks, then confidence. Make it readable, not technical."
+  }}
+  ```
+
+post_processing: |
+  - Validate JSON schema (title, thesis, our_case, risks, narrative all present)
+  - Check narrative word count (400–500; warn if outside)
+  - Verify at least one lens is cited
+  - If all lenses abstained, return error (do not fabricate narrative)
+
+error_handling: |
+  - If forecast_eps is missing or null, return error
+  - If no lenses returned evidence, return error with message "Insufficient lens evidence"
+  - If consensus_eps is older than 5 business days, warn in narrative
+  - If cost exceeded budget, note in risks section
