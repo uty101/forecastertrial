@@ -6,7 +6,7 @@
 
 // ---- enums ----------------------------------------------------
 export type Basis = "gaap" | "non_gaap";
-export type SourceKind = "8k" | "10q" | "10k" | "transcript" | "news" | "xbrl" | "consensus" | "macro" | "peer" | "sponsor" | "derived";
+export type SourceKind = "filing_index" | "8k" | "10q" | "10k" | "company_site" | "transcript" | "news" | "xbrl" | "consensus" | "macro" | "peer" | "sponsor" | "derived";
 export type LensName = "mechanical" | "guidance" | "drivers" | "margins" | "forensics" | "peer_read" | "macro" | "market" | "demand";
 export type LambdaPreset = "shrink" | "barbell" | "calibrated";
 export type EventType = "run_start" | "node_start" | "node_done" | "node_failed" | "claim_added" | "run_done";
